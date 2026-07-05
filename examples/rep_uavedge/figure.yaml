@@ -1,0 +1,110 @@
+# 复现 goodcase 图2：UAV 边缘计算系统总览（无人机-基站-GPU 服务器 + 故障恢复流水线）
+# 看点：弧线无线链路 + wifi/cross 标记 + 编号 badge 步骤条 + 图例框 + 云面板
+figure: {width: 220, height: 128, dpi: 600, background: "#F7FAFD", assets_dir: ../_paper_assets}
+theme: sci
+
+assets:
+  - {id: drone, prompt: 一架黑红色四旋翼无人机，扁平插画风格，斜上方视角, candidates: 3}
+  - {id: server_building, prompt: 一栋深灰色现代数据中心小楼房，正面有多层服务器机架窗口，扁平插画风格，等轴视角, candidates: 3}
+  - {id: llama_head, prompt: 一个可爱的白色羊驼头像图标，简洁线条，扁平插画风格, candidates: 2}
+  - {id: city_block, prompt: 几栋蓝灰色城市高楼建筑群，扁平插画风格，等轴视角, candidates: 2}
+  - {id: pine_tree, prompt: 两棵绿色松树和一小片草地，扁平插画风格, candidates: 2}
+
+elements:
+  # ── 左列：三架 UAV（场景卡在左，无人机在右）─────────────────
+  - {type: badge, at: [7, 8], text: "1", size: 4.6, color: "#2B6CB0"}
+  - {type: text, at: [11, 5.5], text: "UAV 1 (F450)", size: 7, bold: true, anchor: start}
+  - {type: text, at: [11, 10], text: "Urban Logistics", size: 5.8, italic: true, color: "#52606D", anchor: start}
+  - {type: box, id: chip1, rect: [3, 14, 15, 18], variant: plain, valign: top, title: " "}
+  - {type: asset, id: city, rect: [4, 15.5, 13, 9], src: city_block}
+  - {type: text, at: [10.5, 25.5], text: "Urban\nLogistics", size: 5.6, color: "#52606D"}
+  - {type: asset, id: uav1, rect: [21, 13, 26, 19], src: drone}
+  - {type: box, id: jn1, rect: [26, 33, 28, 6], title: "Jetson Nano 4GB", title_size: 5.6,
+     fill: "#FFFFFF", stroke: "#2B6CB0"}
+
+  - {type: badge, at: [7, 47], text: "2", size: 4.6, color: "#2B6CB0"}
+  - {type: text, at: [11, 44.5], text: "UAV 2 (F450)", size: 7, bold: true, anchor: start}
+  - {type: text, at: [11, 49], text: "Infrastructure Inspection", size: 5.8, italic: true, color: "#52606D", anchor: start}
+  - {type: box, id: chip2, rect: [3, 53, 15, 19], variant: plain, valign: top, title: " "}
+  - {type: asset, id: pylon, rect: [4, 54.5, 13, 10], src: power_tower}
+  - {type: text, at: [10.5, 65.5], text: "Infrastructure\nInspection", size: 5.6, color: "#52606D"}
+  - {type: asset, id: uav2, rect: [21, 52, 26, 19], src: drone}
+  - {type: box, id: jn2, rect: [26, 72, 28, 6], title: "Jetson Nano 4GB", title_size: 5.6,
+     fill: "#FFFFFF", stroke: "#2B6CB0"}
+
+  - {type: badge, at: [7, 86], text: "3", size: 4.6, color: "#2E9E44"}
+  - {type: text, at: [11, 83.5], text: "UAV 3 (F450)", size: 7, bold: true, anchor: start}
+  - {type: text, at: [11, 88], text: "Environmental Monitoring", size: 5.8, italic: true, color: "#52606D", anchor: start}
+  - {type: box, id: chip3, rect: [3, 92, 15, 18], variant: plain, valign: top, title: " "}
+  - {type: asset, id: tree, rect: [4, 93.5, 13, 8.5], src: pine_tree}
+  - {type: text, at: [10.5, 103], text: "Environmental\nMonitoring", size: 5.6, color: "#52606D"}
+  - {type: asset, id: uav3, rect: [21, 91, 24, 17], src: drone}
+
+  # ── 中部：基站 + GPU 服务器 ───────────────────────────────
+  - {type: asset, id: bs, rect: [96, 18, 26, 46], src: cell_tower}
+  - {type: asset, id: srv, rect: [118, 52, 40, 32], src: server_building}
+  - {type: box, id: gpuchip, rect: [138, 60, 17, 9], fill: "#1A202C", stroke: "#2E9E44",
+     title: "RTX 4070Ti\nGPU", title_size: 5.6, text_color: "#7BE38A"}
+  - {type: text, at: [127, 87], text: "Base Station (Edge Server)", size: 7, bold: true}
+  - {type: text, at: [127, 92], text: "RTX 4070Ti GPU Server", size: 6, color: "#52606D"}
+
+  # ── 右上：VLM 云面板 ─────────────────────────────────────
+  - {type: box, id: cloud, rect: [158, 4, 58, 34], shape: ellipse, fill: "#FFFFFF", stroke: "#7FC4E8", valign: top}
+  - {type: text, at: [187, 9.5], text: "VLM Inference Fallback", size: 6.8, bold: true}
+  - {type: network, id: vnet, rect: [166, 15, 13, 11], layers: [2, 3, 2], direction: h, color: "#5E9ED0"}
+  - {type: asset, id: llama, rect: [182, 14, 12, 12], src: llama_head}
+  - {type: tokens, id: vgrid, rect: [198, 16, 10, 3], n: 3, gap: 0.6, colors: ["#5E9ED0"]}
+  - {type: tokens, id: vgrid2, rect: [198, 20, 10, 3], n: 3, gap: 0.6, colors: ["#9CC4E4"]}
+  - {type: text, at: [188, 28.5], text: "LLaVA-7B", size: 7, bold: true, color: "#2B6CB0"}
+
+  # 云能力列表
+  - {type: box, id: cap1, rect: [186, 44, 30, 7], variant: plain, title: "Vision Encoding", title_size: 5.6}
+  - {type: box, id: cap2, rect: [186, 53, 30, 7], variant: plain, title: "Language Understanding", title_size: 5.6}
+  - {type: box, id: cap3, rect: [186, 62, 30, 7], variant: plain, title: "Multimodal Reasoning", title_size: 5.6}
+  - {type: box, id: cap4, rect: [186, 71, 30, 7], variant: plain, title: "Response Generation", title_size: 5.6}
+  - {type: arrow, from: cloud.bottom@0.7, to: cap1.top, style: dashed, color: "#3FB8AF", width: 0.4}
+  - {type: arrow, from: [201, 78], to: [162, 60], via: [[201, 80], [162, 80]], style: dashed, color: "#3FB8AF", width: 0.4, head: none}
+
+  # ── 无线链路（弧线 + wifi + 标签）─────────────────────────
+  - {type: arrow, from: [48, 20], to: [98, 32], route: arc, bend: -0.18, style: dashed, color: "#2B6CB0", width: 0.45}
+  - {type: marker, at: [68, 18], icon: wifi, size: 5}
+  - {type: text, at: [68, 24], text: "802.11ac", size: 5.6, color: "#2B6CB0"}
+  - {type: arrow, from: [32, 52], to: [30, 34], style: dashed, color: "#2B6CB0", width: 0.45, bidir: true}
+  - {type: text, at: [46, 41.5], text: "UAV-to-UAV\nLink", size: 5.6, bold: true}
+  - {type: marker, at: [35, 44], icon: wifi, size: 4.2}
+  - {type: arrow, from: [48, 58], to: [98, 42], route: arc, bend: -0.12, style: dashed, color: "#2B6CB0", width: 0.45}
+  - {type: marker, at: [72, 46], icon: cross, size: 5.5}
+  - {type: text, at: [72, 52.5], text: "Node Failure", size: 5.6, bold: true, color: "#C0392B"}
+  - {type: arrow, from: [48, 66], to: [112, 62], route: arc, bend: 0.15, style: dashed, color: "#E8590C", width: 0.5}
+  - {type: text, at: [78, 73], text: "Wasm ~8MB\nmigration", size: 5.6, bold: true, color: "#E8590C"}
+  - {type: arrow, from: [46, 96], to: [100, 58], route: arc, bend: 0.22, style: dashed, color: "#2B6CB0", width: 0.45}
+  - {type: marker, at: [74, 90], icon: wifi, size: 5}
+  - {type: text, at: [74, 96], text: "802.11ac", size: 5.6, color: "#2B6CB0"}
+  - {type: arrow, from: [120, 28], to: [158, 20], route: arc, bend: -0.2, style: dashed, color: "#7FC4E8", width: 0.45}
+
+  # ── 底部：故障恢复流水线 ───────────────────────────────────
+  - {type: text, at: [110, 96.5], text: "Bounded Fault Recovery Pipeline", size: 7.2, bold: true, color: "#1A365D"}
+  - {type: group, id: pipe, rect: [44, 101, 132, 24], style: solid, color: "#1A365D", lw: 0.6}
+  - {type: box, id: st1, rect: [48, 105, 26, 16], variant: plain, title: "Failure\nDetected", title_size: 6}
+  - {type: badge, at: [51, 108], text: "1", size: 4.2, color: "#C0392B"}
+  - {type: marker, at: [70, 108.5], icon: cross, size: 3.6}
+  - {type: box, id: st2, rect: [80, 105, 26, 16], variant: plain, title: "Policy Lookup\nO(1)", title_size: 6}
+  - {type: badge, at: [83, 108], text: "2", size: 4.2, color: "#2B6CB0"}
+  - {type: box, id: st3, rect: [112, 105, 26, 16], variant: plain, title: "Wasm Transfer\n~8MB", title_size: 6}
+  - {type: badge, at: [115, 108], text: "3", size: 4.2, color: "#E8590C"}
+  - {type: box, id: st4, rect: [144, 105, 26, 16], variant: plain, title: "Recovery\n< 2.1s", title_size: 6}
+  - {type: badge, at: [147, 108], text: "4", size: 4.2, color: "#2E9E44"}
+  - {type: marker, at: [166, 108.5], icon: check, size: 3.8}
+  - {type: arrow, from: st1.right, to: st2.left, width: 0.8}
+  - {type: arrow, from: st2.right, to: st3.left, width: 0.8}
+  - {type: arrow, from: st3.right, to: st4.left, width: 0.8}
+
+  # ── 图例 ─────────────────────────────────────────────────
+  - {type: group, id: legend, rect: [180, 100, 38, 25], style: dashed, color: "#8492A6", lw: 0.35}
+  - {type: arrow, from: [182, 104.5], to: [190, 104.5], style: dashed, color: "#2B6CB0", width: 0.4, head: none}
+  - {type: marker, at: [186, 102.6], icon: wifi, size: 2.6}
+  - {type: text, at: [191.5, 102.5], text: "Wireless Link (802.11ac)", size: 5.6, anchor: start}
+  - {type: arrow, from: [182, 112], to: [190, 112], style: dashed, color: "#E8590C", width: 0.4, head: none}
+  - {type: text, at: [191.5, 110], text: "Wasm Migration (~8MB)", size: 5.6, anchor: start}
+  - {type: marker, at: [186, 119], icon: cross, size: 2.8}
+  - {type: text, at: [191.5, 117], text: "Failed Link (Node Failure)", size: 5.6, anchor: start}

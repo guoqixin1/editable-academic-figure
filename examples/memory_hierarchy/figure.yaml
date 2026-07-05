@@ -1,0 +1,15 @@
+figure: {width: 130, height: 120, dpi: 300}
+theme: warm
+elements:
+  - {type: text, at: [65, 3], text: 存储层次结构, size: 8, bold: true}
+  - {type: box, id: reg, rect: [50, 14, 30, 12], title: 寄存器, variant: highlight}
+  - {type: box, id: l1, rect: [43, 30, 44, 13], title: L1 Cache, variant: accent}
+  - {type: box, id: l2, rect: [36, 47, 58, 14], title: L2 Cache, variant: accent}
+  - {type: box, id: dram, rect: [27, 65, 76, 15], title: 主存 DRAM, variant: primary}
+  - {type: box, id: disk, rect: [16, 84, 98, 16], title: 磁盘 / SSD, variant: secondary}
+  - {type: text, at: [10, 20], text: 快, size: 6, color: "#8A7A5E"}
+  - {type: text, at: [10, 92], text: 慢, size: 6, color: "#8A7A5E"}
+  - {type: text, at: [120, 20], text: 小, size: 6, color: "#8A7A5E"}
+  - {type: text, at: [120, 92], text: 大, size: 6, color: "#8A7A5E"}
+  - {type: arrow, from: [8, 24], to: [8, 90], head: arrow, color: "#8A7A5E"}
+  - {type: arrow, from: [122, 24], to: [122, 90], head: arrow, color: "#8A7A5E"}

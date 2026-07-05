@@ -1,0 +1,46 @@
+# 复现 goodcase 图5：D3PG 集成训练（聚类数据 → K 个 D3PG → 策略中心）
+# 看点：同款元素渐变色重复排列 + box.fill 逐个指定 + 空心 block 箭头 + 叠影文档
+figure: {width: 150, height: 118, dpi: 600, assets_dir: ../_paper_assets}
+theme: sci
+
+assets:
+  - {id: robot_line, prompt: 一个极简方头机器人图标，黑色细线稿风格，白色填充，正面视角，头部有两个圆形眼睛和天线, candidates: 3}
+
+elements:
+  # 顶排：渐变蓝椭圆（Clustered data ×4）
+  - {type: box, id: c1, rect: [8, 6, 26, 14], shape: ellipse, title: "Clustered\ndata",
+     fill: "#D6E4F5", stroke: "#7A94B8", title_size: 6.5}
+  - {type: box, id: c2, rect: [40, 6, 26, 14], shape: ellipse, title: "Clustered\ndata",
+     fill: "#A8C4E5", stroke: "#5E7FA8", title_size: 6.5}
+  - {type: box, id: c3, rect: [84, 6, 26, 14], shape: ellipse, title: "Clustered\ndata",
+     fill: "#6E9CCB", stroke: "#436690", title_size: 6.5}
+  - {type: box, id: c4, rect: [116, 6, 26, 14], shape: ellipse, title: "Clustered\ndata",
+     fill: "#3E6595", stroke: "#28425F", title_size: 6.5, text_color: "#FFFFFF"}
+
+  # 空心下箭头 ×4 + Training 标注
+  - {type: arrow, from: [21, 22], to: [21, 32], style: block, width: 3, color: "#4A5568"}
+  - {type: arrow, from: [53, 22], to: [53, 32], style: block, width: 3, color: "#4A5568"}
+  - {type: arrow, from: [97, 22], to: [97, 32], style: block, width: 3, color: "#4A5568"}
+  - {type: arrow, from: [129, 22], to: [129, 32], style: block, width: 3, color: "#4A5568"}
+  - {type: text, at: [75, 25], text: Training, size: 7.5}
+
+  # K 个 D3PG 机器人 + 省略号
+  - {type: asset, id: r1, rect: [11, 34, 20, 18], src: robot_line}
+  - {type: asset, id: r2, rect: [43, 34, 20, 18], src: robot_line}
+  - {type: text, at: [75, 40], text: "● ● ●", size: 7, bold: true}
+  - {type: asset, id: r3, rect: [87, 34, 20, 18], src: robot_line}
+  - {type: asset, id: r4, rect: [119, 34, 20, 18], src: robot_line}
+  - {type: text, at: [21, 56], text: "D3PG 1", size: 7}
+  - {type: text, at: [53, 56], text: "D3PG 2", size: 7}
+  - {type: text, at: [97, 56], text: "D3PG K-1", size: 7}
+  - {type: text, at: [129, 56], text: "D3PG K", size: 7}
+
+  # 汇聚：Strategy Generation
+  - {type: arrow, from: [75, 63], to: [75, 76], style: block, width: 3.6, color: "#4A5568"}
+  - {type: text, at: [92, 67], text: "Strategy\nGeneration", size: 7, anchor: middle}
+
+  # 策略中心：叠影文档 + 内嵌表格 tokens
+  - {type: box, id: doc, rect: [56, 79, 34, 26], variant: plain, stack: 2, stroke: "#2D3748"}
+  - {type: tokens, id: sheet, rect: [62, 88, 22, 4.5], n: 4, gap: 0.5, colors: ["#8FB3D9"]}
+  - {type: tokens, id: sheet2, rect: [62, 94, 22, 4.5], n: 4, gap: 0.5, colors: ["#D9E5F2"]}
+  - {type: text, at: [73, 108], text: "Strategy Center", size: 7.5}

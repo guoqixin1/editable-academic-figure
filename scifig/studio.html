@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>scifig studio</title>
+<style>
+  :root {
+    --ink: #1f2933; --muted: #52606d; --line: #d5dbe3;
+    --accent: #2b6cb0; --err: #c0392b; --warn: #b26b00; --ok: #2e9e44;
+    --bg: #eef1f5; --panel: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.5 system-ui, "Segoe UI", "Noto Sans CJK SC", sans-serif;
+    color: var(--ink); background: var(--bg);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── 工具栏 ─────────────────────────── */
+  #bar {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    background: var(--ink); color: #e5eaf0; flex: none; flex-wrap: wrap;
+  }
+  #bar .logo { font-weight: 700; letter-spacing: .5px; }
+  #bar .path { color: #9aa5b1; font-family: ui-monospace, monospace; font-size: 12px;
+               max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bar .sp { flex: 1; }
+  button, select {
+    font: inherit; border: 1px solid #46525f; border-radius: 5px;
+    background: #323e4b; color: #e5eaf0; padding: 3px 10px; cursor: pointer;
+  }
+  button:hover { background: #3d4b5a; }
+  button.primary { background: var(--accent); border-color: var(--accent); }
+  button.primary:hover { filter: brightness(1.1); }
+  label.chk { display: inline-flex; align-items: center; gap: 4px; color: #cbd5e0; cursor: pointer; }
+  #zoom { width: 90px; accent-color: var(--accent); }
+
+  /* ── 主区 ──────────────────────────── */
+  #main { flex: 1; display: flex; min-height: 0; }
+
+  /* 编辑器 */
+  #edwrap { display: flex; min-width: 260px; width: 42%; background: var(--panel);
+            border-right: 1px solid var(--line); position: relative; }
+  #gut {
+    margin: 0; padding: 10px 6px 10px 0; text-align: right; user-select: none;
+    background: #f4f6f8; color: #9aa5b1; border-right: 1px solid var(--line);
+    font: 12px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+    min-width: 3.6ch; overflow: hidden; flex: none;
+  }
+  #gut .el { color: var(--err); font-weight: 700; }
+  #gut .sel { color: var(--accent); font-weight: 700; }
+  #ed {
+    flex: 1; border: 0; outline: none; resize: none; padding: 10px;
+    font: 12px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+    white-space: pre; overflow: auto; color: var(--ink); background: var(--panel);
+    tab-size: 2;
+  }
+
+  #split { width: 5px; cursor: col-resize; background: var(--bg); flex: none; }
+  #split:hover { background: var(--accent); }
+
+  /* 预览 */
+  #right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #inspector {
+    flex: none; display: none; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 5px 10px; background: #e7eef7; border-bottom: 1px solid var(--line);
+    font-size: 12px;
+  }
+  #inspector.on { display: flex; }
+  #inspector b { color: var(--accent); font-family: ui-monospace, monospace; }
+  #inspector .t { color: var(--muted); }
+  #inspector button { background: #fff; color: var(--ink); border-color: var(--line); padding: 1px 8px; }
+  #inspector .pad button { min-width: 26px; }
+  #viewwrap { flex: 1; overflow: auto; position: relative; background:
+    repeating-conic-gradient(#e9edf2 0 25%, #f4f6f9 0 50%) 0 0/22px 22px; }
+  #canvas { padding: 22px; width: max-content; min-width: 100%; min-height: 100%; }
+  #canvas svg { display: block; background: #fff; box-shadow: 0 2px 14px rgba(31,41,51,.18); }
+  #canvas svg [data-el] { cursor: pointer; }
+  #canvas svg [data-el].movable { cursor: move; }
+  #overlaymsg {
+    position: absolute; inset: auto 12px 12px 12px; display: none;
+    background: #fdecea; color: var(--err); border: 1px solid #f2b8b1;
+    border-radius: 6px; padding: 8px 12px; font-size: 12px; white-space: pre-wrap;
+  }
+  #overlaymsg.on { display: block; }
+
+  /* 体检面板 */
+  #lint {
+    flex: none; max-height: 132px; overflow: auto; background: var(--panel);
+    border-top: 1px solid var(--line); padding: 4px 0;
+  }
+  #lint .it { padding: 2px 12px; cursor: pointer; display: flex; gap: 8px; }
+  #lint .it:hover { background: #f0f4f8; }
+  #lint .tag { flex: none; width: 14px; text-align: center; font-weight: 700; border-radius: 3px; font-size: 11px; }
+  #lint .E .tag { color: #fff; background: var(--err); }
+  #lint .W .tag { color: #fff; background: var(--warn); }
+  #lint .code { color: var(--muted); font-family: ui-monospace, monospace; flex: none; }
+  #lint .ok { padding: 3px 12px; color: var(--ok); }
+
+  /* 状态栏 */
+  #status {
+    flex: none; display: flex; gap: 16px; padding: 3px 12px;
+    background: var(--ink); color: #9aa5b1; font-size: 12px;
+  }
+  #status .dirty { color: #f6c344; }
+  #status .saved { color: #7be38a; }
+  #status .sp { flex: 1; }
+
+  /* 帮助 */
+  #help {
+    position: fixed; right: 14px; top: 44px; z-index: 9; display: none;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(31,41,51,.25); padding: 12px 16px; font-size: 12px;
+    max-width: 380px;
+  }
+  #help.on { display: block; }
+  #help kbd {
+    background: #f0f2f5; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 5px; font-family: ui-monospace, monospace; font-size: 11px;
+  }
+  #help td { padding: 2px 8px 2px 0; vertical-align: top; }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <span class="logo">scifig studio</span>
+  <span class="path" id="specpath"></span>
+  <span class="sp"></span>
+  <select id="tpl" title="在光标处插入元素模板">
+    <option value="">+ 插入元素…</option>
+    <option value="box">box 盒子</option>
+    <option value="asset">asset 素材图</option>
+    <option value="arrow">arrow 连线</option>
+    <option value="text">text 文字</option>
+    <option value="group">group 分区框</option>
+    <option value="panel">panel 面板</option>
+    <option value="tokens">tokens 序列</option>
+    <option value="marker">marker 角标</option>
+    <option value="network">network 小网络</option>
+    <option value="scatter">scatter 散点</option>
+    <option value="badge">badge 编号</option>
+    <option value="panel_label">panel_label 面板号</option>
+  </select>
+  <label class="chk"><input type="checkbox" id="grid"> 网格</label>
+  <input type="range" id="zoom" min="0.2" max="4" step="0.05" value="1" title="缩放">
+  <button id="fit" title="适配窗口宽度">适配</button>
+  <select id="dpi" title="导出 DPI">
+    <option value="">spec 默认 DPI</option>
+    <option>150</option><option>220</option><option selected>300</option><option>600</option>
+  </select>
+  <button id="export" title="保存 YAML 并导出 PNG + SVG">导出</button>
+  <button id="save" class="primary" title="Ctrl+S">保存</button>
+  <button id="helpbtn" title="快捷键">?</button>
+</div>
+
+<div id="help">
+  <b>快捷键 / 操作</b>
+  <table>
+    <tr><td>点击预览元素</td><td>选中 + 定位到 YAML 行</td></tr>
+    <tr><td>拖拽元素</td><td>移动（写回 rect/at，0.5mm 吸附；按 <kbd>Alt</kbd> 0.1mm）</td></tr>
+    <tr><td><kbd>↑↓←→</kbd>（选中后）</td><td>微调 0.5mm；<kbd>Shift</kbd>=2mm，<kbd>Alt</kbd>=0.1mm</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>取消选中</td></tr>
+    <tr><td>编辑器内 <kbd>Alt</kbd>+<kbd>↑↓</kbd></td><td>光标处数字 ±0.5；加 <kbd>Shift</kbd>=±2，加 <kbd>Ctrl</kbd>=±0.1</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>保存 YAML</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+滚轮（预览区）</td><td>缩放</td></tr>
+    <tr><td>点击体检条目</td><td>定位到相关元素</td></tr>
+  </table>
+</div>
+
+<div id="main">
+  <div id="edwrap">
+    <pre id="gut"></pre>
+    <textarea id="ed" spellcheck="false" wrap="off"></textarea>
+  </div>
+  <div id="split"></div>
+  <div id="right">
+    <div id="inspector">
+      <b id="insid"></b><span class="t" id="instype"></span>
+      <span class="t" id="insline"></span>
+      <button id="goline">定位源码</button>
+      <span class="pad">
+        <button data-n="-1,0">←</button><button data-n="0,-1">↑</button>
+        <button data-n="0,1">↓</button><button data-n="1,0">→</button>
+      </span>
+      <select id="step"><option value="0.1">0.1mm</option><option value="0.5" selected>0.5mm</option><option value="2">2mm</option></select>
+      <button id="deselect">✕</button>
+    </div>
+    <div id="viewwrap">
+      <div id="canvas"></div>
+      <div id="overlaymsg"></div>
+    </div>
+    <div id="lint"></div>
+  </div>
+</div>
+
+<div id="status">
+  <span id="st-render"></span>
+  <span id="st-issues"></span>
+  <span id="st-sel"></span>
+  <span class="sp"></span>
+  <span id="st-save" class="saved">已加载</span>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const ed = $("ed"), gut = $("gut"), canvas = $("canvas"), viewwrap = $("viewwrap");
+const PXMM = 96 / 25.4;              // zoom=1 时 1mm 显示为多少 px
+let els = [];                        // [{id,type,line0,line1,drag}]
+let elMap = {};
+let sel = null;                      // 选中元素 id
+let dims = { w: 100, h: 100 };
+let zoom = 1, fitted = false;
+let dirty = false;
+let renderSeq = 0, renderBusy = false, renderQueued = false;
+
+/* ── API ─────────────────────────────── */
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+/* ── 渲染循环 ─────────────────────────── */
+let renderTimer = null;
+function scheduleRender(ms = 450) {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(doRender, ms);
+}
+async function doRender() {
+  if (renderBusy) { renderQueued = true; return; }
+  renderBusy = true;
+  const t0 = performance.now();
+  const resp = await api("/api/render", { text: ed.value, grid: $("grid").checked });
+  renderBusy = false;
+  if (renderQueued) { renderQueued = false; scheduleRender(30); }
+
+  if (resp.error) {
+    $("overlaymsg").textContent = resp.error.msg;
+    $("overlaymsg").classList.add("on");
+    markErrLine(resp.error.line);
+    $("st-render").textContent = "渲染失败";
+    return;
+  }
+  $("overlaymsg").classList.remove("on");
+  markErrLine(null);
+
+  dims = { w: resp.width, h: resp.height };
+  els = resp.elements; elMap = {};
+  els.forEach(e => elMap[e.id] = e);
+
+  canvas.innerHTML = resp.svg;
+  applyZoom();
+  markMovables();
+  if (sel && elMap[sel]) drawSel(); else { sel = null; updInspector(); }
+
+  const nE = resp.issues.filter(i => i.level === "E").length;
+  const nW = resp.issues.length - nE;
+  $("st-render").textContent = `渲染 ${Math.round(performance.now() - t0)}ms`;
+  $("st-issues").textContent = `${nE} E / ${nW} W`;
+  $("st-issues").style.color = nE ? "var(--err)" : (nW ? "#f6c344" : "#7be38a");
+  renderLint(resp.issues);
+}
+
+function renderLint(issues) {
+  const box = $("lint");
+  if (!issues.length) { box.innerHTML = '<div class="ok">✓ 体检通过，无问题</div>'; return; }
+  box.innerHTML = issues.map((i, k) =>
+    `<div class="it ${i.level}" data-k="${k}"><span class="tag">${i.level}</span>` +
+    `<span class="code">${i.code}</span><span>${esc(i.msg)}</span></div>`).join("");
+  box.querySelectorAll(".it").forEach((n, k) => n.onclick = () => {
+    const m = issues[k].msg.match(/[''‘]([A-Za-z0-9_\-]+)['']/) || issues[k].msg.match(/'([A-Za-z0-9_\-]+)'/);
+    if (m && elMap[m[1]]) { select(m[1]); jumpToLine(elMap[m[1]].line0); }
+  });
+}
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+/* ── 缩放 ────────────────────────────── */
+function applyZoom() {
+  const svg = canvas.querySelector("svg");
+  if (!svg) return;
+  svg.style.width = (dims.w * PXMM * zoom) + "px";
+  svg.style.height = "auto";
+}
+$("zoom").oninput = e => { zoom = +e.target.value; fitted = false; applyZoom(); };
+$("fit").onclick = fit;
+function fit() {
+  zoom = Math.max(0.2, Math.min(4, (viewwrap.clientWidth - 48) / (dims.w * PXMM)));
+  $("zoom").value = zoom; fitted = true; applyZoom();
+}
+viewwrap.addEventListener("wheel", e => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  zoom = Math.max(0.2, Math.min(4, zoom * (e.deltaY < 0 ? 1.1 : 0.9)));
+  $("zoom").value = zoom; applyZoom();
+}, { passive: false });
+
+/* ── 选中 / 高亮 ─────────────────────── */
+function markMovables() {
+  canvas.querySelectorAll("[data-el]").forEach(g => {
+    const m = elMap[g.getAttribute("data-el")];
+    if (m && m.drag) g.classList.add("movable");
+  });
+}
+function select(id, opts = {}) {
+  sel = id;
+  drawSel();
+  updInspector();
+  updGutter();
+  if (!opts.keepEditor && elMap[id]) jumpToLine(elMap[id].line0, { noFocus: true });
+}
+function deselect() { sel = null; drawSel(); updInspector(); updGutter(); }
+$("deselect").onclick = deselect;
+
+function drawSel() {
+  const svg = canvas.querySelector("svg");
+  if (!svg) return;
+  const old = svg.querySelector("#studio-selbox");
+  if (old) old.remove();
+  if (!sel) return;
+  const g = svg.querySelector(`[data-el="${CSS.escape(sel)}"]`);
+  if (!g) return;
+  let bb;
+  try { bb = g.getBBox(); } catch { return; }
+  const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  r.id = "studio-selbox";
+  r.setAttribute("x", bb.x - 1); r.setAttribute("y", bb.y - 1);
+  r.setAttribute("width", bb.width + 2); r.setAttribute("height", bb.height + 2);
+  r.setAttribute("fill", "none"); r.setAttribute("stroke", "#2B6CB0");
+  r.setAttribute("stroke-width", "0.45"); r.setAttribute("stroke-dasharray", "1.6,1");
+  r.setAttribute("pointer-events", "none");
+  svg.appendChild(r);
+}
+function updInspector() {
+  const bar = $("inspector");
+  if (!sel || !elMap[sel]) { bar.classList.remove("on"); $("st-sel").textContent = ""; return; }
+  const m = elMap[sel];
+  bar.classList.add("on");
+  $("insid").textContent = m.id;
+  $("instype").textContent = m.type + (m.drag ? "" : "（不可拖动）");
+  $("insline").textContent = `第 ${m.line0 + 1}${m.line1 > m.line0 ? "–" + (m.line1 + 1) : ""} 行`;
+  $("st-sel").textContent = `选中: ${m.id} (${m.type})`;
+}
+$("goline").onclick = () => { if (sel && elMap[sel]) jumpToLine(elMap[sel].line0); };
+
+/* ── 预览交互：点选 + 拖拽 ─────────────── */
+let drag = null;
+viewwrap.addEventListener("pointerdown", e => {
+  const g = e.target.closest && e.target.closest("[data-el]");
+  if (!g) { if (e.target.closest("svg")) deselect(); return; }
+  const id = g.getAttribute("data-el");
+  select(id);
+  const m = elMap[id];
+  if (!m || !m.drag) return;
+  const svg = canvas.querySelector("svg");
+  const mmPerPx = svg.viewBox.baseVal.width / svg.getBoundingClientRect().width;
+  drag = { g, m, x0: e.clientX, y0: e.clientY, mmPerPx, dx: 0, dy: 0, alt: false };
+  e.preventDefault();
+});
+window.addEventListener("pointermove", e => {
+  if (!drag) return;
+  drag.dx = (e.clientX - drag.x0) * drag.mmPerPx;
+  drag.dy = (e.clientY - drag.y0) * drag.mmPerPx;
+  drag.alt = e.altKey;
+  drag.g.setAttribute("transform", `translate(${drag.dx},${drag.dy})`);
+  const sb = canvas.querySelector("#studio-selbox");
+  if (sb) sb.setAttribute("transform", `translate(${drag.dx},${drag.dy})`);
+});
+window.addEventListener("pointerup", () => {
+  if (!drag) return;
+  const { m, dx, dy, alt } = drag;
+  drag.g.removeAttribute("transform");
+  drag = null;
+  const q = alt ? 10 : 2;   // Alt=0.1mm，否则 0.5mm 吸附
+  const sx = Math.round(dx * q) / q, sy = Math.round(dy * q) / q;
+  if (Math.abs(sx) >= 0.05 || Math.abs(sy) >= 0.05) moveElement(m, sx, sy);
+});
+
+/* 方向键微调（焦点不在编辑器时） */
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") { deselect(); return; }
+  if (document.activeElement === ed || !sel || !elMap[sel] || !elMap[sel].drag) return;
+  const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (!dir) return;
+  e.preventDefault();
+  const step = e.shiftKey ? 2 : (e.altKey ? 0.1 : parseFloat($("step").value));
+  moveElement(elMap[sel], dir[0] * step, dir[1] * step);
+});
+$("inspector").querySelectorAll(".pad button").forEach(b => b.onclick = () => {
+  if (!sel || !elMap[sel]) return;
+  const [x, y] = b.dataset.n.split(",").map(Number);
+  const step = parseFloat($("step").value);
+  moveElement(elMap[sel], x * step, y * step);
+});
+
+/* ── YAML 数值改写 ────────────────────── */
+const fmt = v => {
+  const s = (Math.round(v * 10) / 10).toFixed(1);
+  return s.endsWith(".0") ? s.slice(0, -2) : s;
+};
+function spanOffsets(m) {
+  const lines = ed.value.split("\n");
+  let off = 0;
+  for (let i = 0; i < m.line0; i++) off += lines[i].length + 1;
+  const span = lines.slice(m.line0, m.line1 + 1).join("\n");
+  return { off, span };
+}
+function replaceRange(start, end, insert) {
+  ed.focus();
+  ed.setSelectionRange(start, end);
+  let done = false;
+  try { done = document.execCommand("insertText", false, insert); } catch { /* older */ }
+  if (!done) ed.setRangeText(insert, start, end, "end");
+}
+function moveElement(m, dx, dy) {
+  const { off, span } = spanOffsets(m);
+  const key = m.drag === "rect" ? "rect" : "at";
+  const re = new RegExp("(" + key + "\\s*:\\s*\\[\\s*)(-?[\\d.]+)(\\s*,\\s*)(-?[\\d.]+)");
+  const mt = span.match(re);
+  if (!mt) return;
+  const nx = fmt(parseFloat(mt[2]) + dx), ny = fmt(parseFloat(mt[4]) + dy);
+  const start = off + mt.index + mt[1].length;
+  const end = start + mt[2].length + mt[3].length + mt[4].length;
+  replaceRange(start, end, nx + mt[3] + ny);
+  markDirty();
+  scheduleRender(80);
+}
+
+/* ── 编辑器 ──────────────────────────── */
+ed.addEventListener("input", () => { markDirty(); updGutter(); scheduleRender(); });
+ed.addEventListener("scroll", () => { gut.scrollTop = ed.scrollTop; });
+ed.addEventListener("keydown", e => {
+  if (e.key === "Tab") {          // 插入两空格
+    e.preventDefault();
+    replaceRange(ed.selectionStart, ed.selectionEnd, "  ");
+    markDirty(); scheduleRender();
+    return;
+  }
+  if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {   // 数字步进
+    const t = numberTokenAtCursor();
+    if (!t) return;
+    e.preventDefault();
+    const step = (e.shiftKey ? 2 : e.ctrlKey ? 0.1 : 0.5) * (e.key === "ArrowUp" ? -1 : 1) * -1;
+    // 屏幕直觉：↑ 增大（对 y 坐标即上移取决于语义，此处统一 ↑=+）
+    const v = fmt(parseFloat(t.text) + step);
+    replaceRange(t.start, t.end, v);
+    ed.setSelectionRange(t.start, t.start + v.length);
+    markDirty(); scheduleRender(120);
+  }
+});
+ed.addEventListener("click", cursorTrack);
+ed.addEventListener("keyup", e => {
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) cursorTrack();
+});
+function cursorTrack() {   // 光标所在行 → 软选中对应元素
+  const line = ed.value.slice(0, ed.selectionStart).split("\n").length - 1;
+  const hit = els.find(m => line >= m.line0 && line <= m.line1);
+  if (hit && hit.id !== sel) select(hit.id, { keepEditor: true });
+}
+function numberTokenAtCursor() {
+  const v = ed.value; let i = ed.selectionStart;
+  const isNum = c => /[0-9.\-]/.test(c);
+  if (i > 0 && !isNum(v[i] || "") && isNum(v[i - 1])) i--;
+  if (!isNum(v[i] || "")) return null;
+  let a = i, b = i;
+  while (a > 0 && isNum(v[a - 1])) a--;
+  while (b < v.length && isNum(v[b])) b++;
+  const text = v.slice(a, b);
+  if (!/^-?\d+(\.\d+)?$/.test(text)) return null;
+  return { start: a, end: b, text };
+}
+function jumpToLine(line, opts = {}) {
+  const lines = ed.value.split("\n");
+  let start = 0;
+  for (let i = 0; i < line; i++) start += lines[i].length + 1;
+  const end = start + (lines[line] || "").length;
+  if (!opts.noFocus) ed.focus();
+  ed.setSelectionRange(start, end);
+  const lh = parseFloat(getComputedStyle(ed).lineHeight) || 18;
+  ed.scrollTop = Math.max(0, line * lh - ed.clientHeight / 2);
+  updGutter();
+}
+
+/* 行号栏（含错误行/选中元素行标记） */
+let errLine = null;
+function markErrLine(l) { errLine = l; updGutter(); }
+function updGutter() {
+  const n = ed.value.split("\n").length;
+  const m = sel && elMap[sel];
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    let cls = "";
+    if (i === errLine) cls = "el";
+    else if (m && i >= m.line0 && i <= m.line1) cls = "sel";
+    html += cls ? `<span class="${cls}">${i + 1}</span>\n` : (i + 1) + "\n";
+  }
+  gut.innerHTML = html;
+  gut.scrollTop = ed.scrollTop;
+}
+
+/* ── 模板插入 ─────────────────────────── */
+const TPL = {
+  box: '- {type: box, id: nb1, rect: [10, 10, 32, 14], title: 标题, variant: primary}',
+  asset: '- {type: asset, id: na1, rect: [10, 10, 24, 18], src: 素材id, caption: ""}',
+  arrow: '- {type: arrow, from: a.right, to: b.left, route: auto, label: ""}',
+  text: '- {type: text, at: [20, 10], text: 注释, size: 6.5}',
+  group: '- {type: group, rect: [8, 8, 60, 40], label: 分区, color: "#C0392B", label_pos: inside-bottom}',
+  panel: '- {type: panel, rect: [8, 8, 80, 50], title: "Stage 1", variant: primary}',
+  tokens: '- {type: tokens, rect: [10, 10, 30, 5], n: 7, label: "Z"}',
+  marker: '- {type: marker, at: [20, 10], icon: fire, size: 4.5}',
+  network: '- {type: network, rect: [10, 10, 28, 20], layers: [3, 4, 3]}',
+  scatter: '- {type: scatter, rect: [10, 10, 44, 36], seed: 7, clusters: [{at: [0.5, 0.5], rx: 0.3, ry: 0.2, n: 25, color: "#3B6EA5"}]}',
+  badge: '- {type: badge, at: [15, 10], text: "1", size: 4.5}',
+  panel_label: '- {type: panel_label, at: [6, 6], text: a}',
+};
+$("tpl").onchange = e => {
+  const t = TPL[e.target.value];
+  e.target.value = "";
+  if (!t) return;
+  const v = ed.value;
+  let pos = ed.selectionStart;
+  while (pos < v.length && v[pos] !== "\n") pos++;   // 光标行末
+  const indent = (v.match(/^([ \t]+)- \{type:/m) || [, "  "])[1];
+  replaceRange(pos, pos, "\n" + indent + t);
+  markDirty(); scheduleRender();
+};
+
+/* ── 保存 / 导出 ─────────────────────── */
+function markDirty() { dirty = true; $("st-save").textContent = "未保存*"; $("st-save").className = "dirty"; }
+async function saveNow() {
+  const r = await api("/api/save", { text: ed.value });
+  if (r.ok) {
+    dirty = false;
+    $("st-save").textContent = "已保存 " + new Date().toLocaleTimeString();
+    $("st-save").className = "saved";
+  }
+}
+$("save").onclick = saveNow;
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); saveNow(); }
+});
+$("export").onclick = async () => {
+  $("export").disabled = true;
+  const r = await api("/api/export", { text: ed.value, dpi: $("dpi").value || null });
+  $("export").disabled = false;
+  if (r.error) { alert("导出失败: " + r.error.msg); return; }
+  dirty = false;
+  $("st-save").textContent = `已导出 ${r.png.split("/").pop()} + .svg（${r.errors} E / ${r.warnings} W）`;
+  $("st-save").className = "saved";
+};
+window.addEventListener("beforeunload", e => { if (dirty) e.preventDefault(); });
+
+/* ── 其它 UI ─────────────────────────── */
+$("grid").onchange = () => scheduleRender(30);
+$("helpbtn").onclick = () => $("help").classList.toggle("on");
+document.addEventListener("click", e => {
+  if (!$("help").contains(e.target) && e.target !== $("helpbtn")) $("help").classList.remove("on");
+});
+
+/* 分栏拖拽 */
+(() => {
+  const split = $("split"), edwrap = $("edwrap");
+  let on = false;
+  split.addEventListener("pointerdown", e => { on = true; split.setPointerCapture(e.pointerId); });
+  split.addEventListener("pointermove", e => {
+    if (!on) return;
+    const w = Math.max(240, Math.min(window.innerWidth - 320, e.clientX));
+    edwrap.style.width = w + "px";
+  });
+  split.addEventListener("pointerup", () => { on = false; if (fitted) fit(); });
+})();
+window.addEventListener("resize", () => { if (fitted) fit(); });
+
+/* ── 启动 ────────────────────────────── */
+(async () => {
+  const info = await api("/api/load");
+  $("specpath").textContent = info.path;
+  document.title = "scifig studio — " + info.path.split("/").pop();
+  ed.value = info.text;
+  updGutter();
+  await doRender();
+  fit();
+})();
+</script>
+</body>
+</html>

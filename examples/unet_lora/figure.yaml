@@ -1,0 +1,52 @@
+# 论文级示例：扩散模型 U-Net + LoRA 微调结构图
+# 展示：tokens.sizes 画 U-Net 特征图条组、trapezoid 形状、
+#       ℝ^{...} 张量记号、雪花/火焰冻结标记、group 虚线容器
+
+figure: {width: 190, height: 100, dpi: 600}
+theme: sci
+
+elements:
+  # 左：VAE 编码器（冻结）
+  - {type: box, id: vae_e, rect: [6, 38, 26, 20], title: "VAE 编码器", body: "(冻结)",
+     variant: secondary, title_size: 6.8}
+  - {type: marker, at: [30, 40], icon: snow, size: 4.5}
+
+  # U-Net 主干：下采样条组 → 中间块 → 上采样条组
+  - {type: tokens, id: down_bars, rect: [42, 28, 16, 40], n: 4, direction: h, gap: 1.4,
+     variant: primary, sizes: [40, 30, 22, 14]}
+  - {type: box, id: mid, rect: [62, 40, 22, 16], title: U-Net, body: 中间块, variant: accent,
+     title_size: 6.8}
+  - {type: marker, at: [82, 42], icon: fire, size: 4.5}
+  - {type: tokens, id: up_bars, rect: [88, 28, 16, 40], n: 4, direction: h, gap: 1.4,
+     variant: primary, sizes: [14, 22, 30, 40]}
+
+  # 参考混合层（虚线容器 + 张量记号）
+  - {type: group, id: mixer, rect: [112, 8, 72, 58], label: "", style: dashed, fill: "#FBFCFE"}
+  - {type: text, at: [148, 12], text: "z ∈ ℝ^{(B V) H W C}", size: 7.0, bold: true}
+  - {type: box, id: resblock, rect: [124, 21, 48, 10], title: ResBlock, variant: plain,
+     title_size: 6.5}
+  - {type: box, id: mixlayer, rect: [124, 37, 48, 14], title: 参考混合层,
+     body: "(B V) H W C → B (V H W) C", variant: accent, title_size: 6.5, body_size: 6.0}
+  - {type: text, at: [148, 57], text: "z' ∈ ℝ^{(B V) H W C}", size: 7.0, bold: true}
+  - {type: arrow, from: [148, 16.5], to: resblock.top}
+  - {type: arrow, from: resblock.bottom, to: mixlayer.top}
+  - {type: arrow, from: mixlayer.bottom, to: [148, 55]}
+
+  # 右：VAE 解码器（LoRA 微调）
+  - {type: box, id: vae_d, rect: [158, 74, 26, 18], title: "VAE 解码器", body: "(LoRA 微调)",
+     variant: highlight, title_size: 6.8}
+  - {type: marker, at: [182, 76], icon: fire, size: 4.5}
+  - {type: text, at: [171, 66.5], text: "+ LoRA 权重", size: 6.0, color: "#3B6EA5", bold: true}
+
+  # 零卷积残差旁路
+  - {type: box, id: zconv, rect: [66, 80, 30, 10], title: zero conv, variant: dark, title_size: 6.5}
+
+  # 主数据流
+  - {type: arrow, from: vae_e.right, to: down_bars.left, label: ""}
+  - {type: arrow, from: down_bars.right, to: mid.left, head: none}
+  - {type: arrow, from: mid.right, to: up_bars.left, head: none}
+  - {type: arrow, from: up_bars.right, to: [112, 48]}
+  - {type: arrow, from: [148, 66], to: vae_d.top, via: [[148, 70], [171, 70]]}
+  - {type: arrow, from: vae_e.bottom, to: zconv.left, route: vh}
+  - {type: arrow, from: zconv.right, to: vae_d.left, label: 残差}
+  - {type: text, at: [95, 20], text: 展开的 U-Net 特征分辨率, size: 6.0, color: "#52606D"}

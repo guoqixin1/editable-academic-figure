@@ -1,0 +1,100 @@
+# 复现 goodcase 图1：EV 电力调度框架（微电网 → 数据聚类 → LLM-D3PG → WOA 优化）
+# 看点：彩色虚线分区框 + scatter 聚类 + 竖排文字 + AI 素材 + 底部回环反馈线
+figure: {width: 245, height: 110, dpi: 600, assets_dir: ../_paper_assets}
+theme: sci
+
+assets:
+  - {id: power_tower, prompt: 一座高压输电铁塔，深灰蓝色扁平插画风格，正面视角, candidates: 2}
+  - {id: cell_tower, prompt: 一座通信信号发射塔，顶部有天线和发射信号弧线，深蓝灰色扁平插画风格, candidates: 2}
+  - {id: solar_panel, prompt: 一块倾斜安装的太阳能光伏板，深蓝色面板，扁平插画风格，侧面视角, candidates: 2}
+  - {id: wind_turbine, prompt: 一台三叶片白色风力发电机，蓝灰色调扁平插画风格，正面视角, candidates: 2}
+  - {id: ev_car, prompt: 一辆青绿色电动小汽车带充电插头标志，扁平插画风格，侧面视角, candidates: 2}
+  - {id: battery, prompt: 一个大型储能电池组，黑色外壳带绿色电量条，扁平插画风格，正面视角, candidates: 2}
+  - {id: plug, prompt: 一个黑色电源插头带弯曲电线，扁平插画风格, candidates: 2}
+  - {id: brain_chip, prompt: 一颗发光的大脑与电路板芯片结合的科技插画，蓝紫色调，扁平插画风格, candidates: 3}
+  - {id: whale_a, prompt: 一头深蓝色座头鲸向左游动的俯视插画，扁平风格, candidates: 2}
+  - {id: whale_b, prompt: 一头深蓝色座头鲸向右上方游动的俯视插画，扁平风格, candidates: 2}
+
+elements:
+  # ── 左：微电网系统（外框 + 双目标函数 + 星型拓扑）─────────
+  - {type: group, id: ogrp, rect: [3, 6, 64, 90], style: solid, color: "#4A5568", lw: 0.45}
+  - {type: box, id: of1, rect: [7, 10, 56, 9], shape: stadium, title: Object Function 1,
+     fill: "#E6DEF2", stroke: "#9080B8", title_size: 6.5}
+  - {type: group, id: mgrid, rect: [6, 23, 58, 57], style: solid, color: "#718096", lw: 0.35}
+  - {type: asset, id: grid, rect: [26, 25, 18, 15], src: power_tower, caption: Utility Grid}
+  - {type: asset, id: hub, rect: [29, 44, 12, 13], src: cell_tower}
+  - {type: asset, id: solar, rect: [9, 28, 12, 9], src: solar_panel}
+  - {type: asset, id: wind, rect: [9, 39, 12, 10], src: wind_turbine}
+  - {type: text, at: [15, 50.5], text: "Renewable\nEnergy", size: 6}
+  - {type: asset, id: load, rect: [49, 28, 12, 12], src: plug, caption: Load}
+  - {type: asset, id: ess, rect: [49, 48, 12, 12], src: battery, caption: ESS}
+  - {type: asset, id: evs, rect: [26, 62, 16, 14], src: ev_car, caption: EVs}
+  - {type: arrow, from: hub.top, to: grid.bottom, bidir: true, width: 0.35}
+  - {type: arrow, from: hub.left, to: wind.right, bidir: true, width: 0.35}
+  - {type: arrow, from: hub.right, to: ess.left, bidir: true, width: 0.35}
+  - {type: arrow, from: grid.right, to: load.left, route: z, bidir: true, width: 0.35}
+  - {type: arrow, from: hub.bottom, to: evs.top, bidir: true, width: 0.35}
+  - {type: box, id: of2, rect: [7, 84, 56, 9], shape: stadium, title: Object Function 2,
+     fill: "#E7EFDC", stroke: "#8FAF6A", title_size: 6.5}
+
+  # ── A：数据聚类（红虚线框 + 散点椭圆）─────────────────────
+  - {type: group, id: agrp, rect: [76, 12, 54, 68], color: "#C0392B", lw: 0.5,
+     label: "A: Data Clustering", label_pos: inside-bottom, label_size: 7}
+  - {type: scatter, id: clus, rect: [79, 15, 48, 54], seed: 11, dot_r: 0.42, clusters: [
+      {at: [0.38, 0.28], rx: 0.30, ry: 0.20, rot: -14, n: 42, color: "#C4622D"},
+      {at: [0.62, 0.52], rx: 0.32, ry: 0.22, rot: 18, n: 46, color: "#C05A9E"},
+      {at: [0.36, 0.74], rx: 0.26, ry: 0.17, rot: -8, n: 36, color: "#4A5FA5"}]}
+
+  # ── B：LLM-D3PG（蓝虚线框，两条子流水线 + 省略号）──────────
+  - {type: group, id: bgrp, rect: [136, 8, 62, 76], color: "#2B4C9B", lw: 0.55}
+  - {type: text, at: [141, 46], text: "B: LLM-D3PG", size: 7, bold: true, rotate: -90}
+  - {type: asset, id: s1, rect: [146, 13, 9, 8], src: solar_panel}
+  - {type: asset, id: w1, rect: [146, 22, 9, 8], src: wind_turbine}
+  - {type: text, at: [158, 21], text: "Power Data", size: 6, rotate: -90}
+  - {type: asset, id: b1, rect: [161, 12, 17, 14], src: brain_chip}
+  - {type: arrow, from: [159.5, 17], to: [162, 17], width: 0.3, head: none}
+  - {type: text, at: [180, 20], text: "D3PG\n+LLM", size: 6, bold: true, anchor: start}
+  - {type: text, at: [163, 28.5], text: EV Load, size: 6, anchor: start}
+  - {type: asset, id: e1, rect: [180, 27.5, 11, 8], src: ev_car}
+  - {type: text, at: [167, 44], text: "⋮", size: 11, bold: true}
+  - {type: asset, id: s2, rect: [146, 52, 9, 8], src: solar_panel}
+  - {type: asset, id: w2, rect: [146, 61, 9, 8], src: wind_turbine}
+  - {type: text, at: [158, 60], text: "Power Data", size: 6, rotate: -90}
+  - {type: asset, id: b2, rect: [161, 51, 17, 14], src: brain_chip}
+  - {type: text, at: [180, 59], text: "D3PG\n+LLM", size: 6, bold: true, anchor: start}
+  - {type: text, at: [163, 67.5], text: EV Load, size: 6, anchor: start}
+  - {type: asset, id: e2, rect: [180, 66.5, 11, 8], src: ev_car}
+
+  # ── C：WOA 鲸鱼优化（橙虚线框）────────────────────────────
+  - {type: group, id: cgrp, rect: [206, 8, 32, 76], color: "#D97C2B", lw: 0.55}
+  - {type: text, at: [222, 11.5], text: "C: WOA-based strategy optimization", size: 6, bold: true, max_w: 27}
+  - {type: asset, id: wh1, rect: [210, 24, 13, 11], src: whale_a}
+  - {type: asset, id: wh2, rect: [221, 37, 13, 11], src: whale_b}
+  - {type: asset, id: wh3, rect: [210, 50, 13, 11], src: whale_a}
+  - {type: asset, id: wh4, rect: [220, 62, 13, 11], src: whale_b}
+  - {type: arrow, from: [226, 23], to: [232, 34], route: arc, bend: -0.5, color: "#8492A6", width: 0.3}
+  - {type: arrow, from: [220, 49], to: [214, 38], route: arc, bend: -0.5, color: "#8492A6", width: 0.3}
+  - {type: arrow, from: [231, 51], to: [226, 61], route: arc, bend: -0.5, color: "#8492A6", width: 0.3}
+
+  # ── 主流程连线 ───────────────────────────────────────────
+  - {type: arrow, from: ogrp.right@0.45, to: agrp.left@0.5, width: 0.4}
+  - {type: text, at: [71, 38], text: "Historical Data", size: 6, rotate: -90}
+  - {type: arrow, from: agrp.right@0.5, to: bgrp.left@0.5, width: 0.4}
+  - {type: arrow, from: of1.right, to: bgrp.top@0.12, style: dashed, label: Guidance for Optimization}
+  - {type: arrow, from: of2.right, to: bgrp.bottom@0.12, style: dashed, label: Guidance for Optimization, label_offset: 2.2}
+  - {type: arrow, from: bgrp.right@0.13, to: cgrp.left@0.13, label: Strategy 1, label_offset: 1.2}
+  - {type: arrow, from: bgrp.right@0.30, to: cgrp.left@0.30, label: Strategy 2, label_offset: 1.2}
+  - {type: text, at: [202, 44], text: "⋮", size: 9, bold: true}
+  - {type: arrow, from: bgrp.right@0.63, to: cgrp.left@0.63, label: "Strategy K-1", label_offset: 1.2}
+  - {type: arrow, from: bgrp.right@0.80, to: cgrp.left@0.80, label: "Strategy K", label_offset: 1.2}
+
+  # 输出与反馈回环
+  - {type: arrow, from: cgrp.right@0.1, to: [242.5, 78], via: [[242.5, 15.5]], width: 0.4}
+  - {type: text, at: [240.5, 46], text: "Final dispatching strategy", size: 6, rotate: -90}
+  - {type: arrow, from: bgrp.bottom@0.5, to: ogrp.right@0.9, via: [[167, 92], [70, 92]],
+     label: Evaluate dispatching strategy, label_offset: 1.6}
+  - {type: arrow, from: cgrp.bottom@0.5, to: ogrp.bottom@0.5, via: [[222, 100], [35, 100]],
+     label: Output dispatching strategy, label_offset: 1.6}
+
+  # 图注
+  - {type: text, at: [4, 105], text: "Fig. 2.  Flow diagram of the proposed power dispatching framework for connected EVs in SAGVNs.", size: 6.2, anchor: start}

@@ -1,0 +1,100 @@
+# 复现 goodcase 图4：LLM-guided D3PG Power Dispatching Model
+# 看点：外层粗框+标题条、彩色虚线分组、图标阵列、network 迷你网络、
+#       block 粗箭头、token 盒序列、oplus 拼接符
+figure: {width: 190, height: 160, dpi: 600, assets_dir: ../_paper_assets}
+theme: sci
+
+assets:
+  - {id: hourglass, prompt: 一个棕色木框沙漏，扁平插画风格，正面视角, candidates: 2}
+  - {id: price_doc, prompt: 一张带金色美元符号和价格标签的票据文档，扁平插画风格, candidates: 2}
+  - {id: soc_monitor, prompt: 一台显示电池电量百分比的蓝色电脑显示器，扁平插画风格，正面视角, candidates: 2}
+  - {id: scales, prompt: 一架金色天平秤两端不平衡倾斜，扁平插画风格，正面视角, candidates: 2}
+  - {id: lightning, prompt: 一道金黄色闪电符号，扁平插画风格, candidates: 2}
+  - {id: diesel_pump, prompt: 一台黄色柴油加油机带油枪，扁平插画风格，正面视角, candidates: 2}
+
+elements:
+  # ── 外框 + 标题条 ─────────────────────────────────────────
+  - {type: group, id: frame, rect: [3, 3, 184, 152], style: solid, color: "#2D3748", lw: 0.8}
+  - {type: box, id: titlebar, rect: [3, 3, 184, 12], fill: "#C6D9A3", stroke: "#2D3748",
+     title: LLM-guided D3PG Power Dispatching Model, title_size: 10.5}
+
+  # ── 输入组：左（蓝虚线，DDPG1 的状态）──────────────────────
+  - {type: group, id: in1, rect: [7, 19, 106, 27], color: "#4169C9", lw: 0.5}
+  - {type: text, at: [14.5, 21], text: Time, size: 6, bold: true}
+  - {type: asset, id: i_time, rect: [10, 29, 9, 13], src: hourglass}
+  - {type: text, at: [29.5, 21], text: EV, size: 6, bold: true}
+  - {type: asset, id: i_ev, rect: [24, 30, 11, 12], src: ev_car}
+  - {type: text, at: [44.5, 21], text: "PV\npower", size: 6, bold: true}
+  - {type: asset, id: i_pv, rect: [39, 31, 11, 10], src: solar_panel}
+  - {type: text, at: [59.5, 21], text: "Wind\npower", size: 6, bold: true}
+  - {type: asset, id: i_wind, rect: [54, 30, 11, 12], src: wind_turbine}
+  - {type: text, at: [74.5, 21], text: "Transmission\nloss", size: 6, bold: true}
+  - {type: asset, id: i_loss, rect: [69, 30, 11, 12], src: power_tower}
+  - {type: text, at: [89.5, 21], text: "Electricity\nprice", size: 6, bold: true}
+  - {type: asset, id: i_price, rect: [84, 30, 11, 11], src: price_doc}
+  - {type: text, at: [104.5, 21], text: SoC, size: 6, bold: true}
+  - {type: asset, id: i_soc, rect: [99, 30, 11, 11], src: soc_monitor}
+
+  # ── 输入组：右（红虚线，DDPG2 的状态）──────────────────────
+  - {type: group, id: in2, rect: [117, 19, 66, 27], color: "#C0392B", lw: 0.5}
+  - {type: text, at: [125, 21], text: "Unbalanced\npower", size: 6, bold: true}
+  - {type: asset, id: i_unb, rect: [119.5, 30, 11, 11], src: scales}
+  - {type: text, at: [141.5, 21], text: Electricity, size: 6, bold: true}
+  - {type: asset, id: i_ele, rect: [136, 29, 11, 12], src: lightning}
+  - {type: text, at: [158, 21], text: "Diesel\npower", size: 6, bold: true}
+  - {type: asset, id: i_die, rect: [152.5, 30, 11, 11], src: diesel_pump}
+  - {type: text, at: [174.5, 21], text: "Load+EV", size: 6, bold: true}
+  - {type: asset, id: i_lev, rect: [169, 30, 11, 12], src: ev_car}
+
+  # ── 输入 → DDPG 粗箭头 ───────────────────────────────────
+  - {type: arrow, from: [35, 46.5], to: [35, 56], style: block, width: 2.6, fill: "#7FA8DC", color: "#4169C9"}
+  - {type: arrow, from: [60, 46.5], to: [60, 56], style: block, width: 2.6, fill: "#7FA8DC", color: "#4169C9"}
+  - {type: arrow, from: [85, 46.5], to: [85, 56], style: block, width: 2.6, fill: "#7FA8DC", color: "#4169C9"}
+  - {type: arrow, from: [133, 46.5], to: [133, 56], style: block, width: 2.6, fill: "#EE9C9C", color: "#C0392B"}
+  - {type: arrow, from: [150, 46.5], to: [150, 56], style: block, width: 2.6, fill: "#EE9C9C", color: "#C0392B"}
+  - {type: arrow, from: [167, 46.5], to: [167, 56], style: block, width: 2.6, fill: "#EE9C9C", color: "#C0392B"}
+
+  # ── 双 DDPG（紫虚线框 + 标题面板 + 迷你网络）────────────────
+  - {type: group, id: dg1, rect: [10, 57, 100, 38], color: "#7C3AAD", lw: 0.55}
+  - {type: panel, id: ddpg1, rect: [38, 60, 44, 32], title: DDPG1, header_h: 6,
+     header_fill: "#7FB3D5", fill: "#EAF2FA", title_size: 7}
+  - {type: network, id: net1, rect: [44, 69, 32, 20], layers: [3, 4, 3], color: "#4A6FA0"}
+  - {type: group, id: dg2, rect: [114, 57, 72, 38], color: "#7C3AAD", lw: 0.55}
+  - {type: panel, id: ddpg2, rect: [128, 60, 44, 32], title: DDPG2, header_h: 6,
+     header_fill: "#E08A8A", fill: "#FBEBEB", title_size: 7}
+  - {type: network, id: net2, rect: [134, 69, 32, 20], layers: [3, 4, 3], color: "#B05252"}
+
+  # ── DDPG → 策略 ──────────────────────────────────────────
+  - {type: text, at: [30, 97.5], text: "Dispatching strategy for\nrenewable power plants", size: 6.5, bold: true}
+  - {type: arrow, from: [60, 94], to: [60, 106], style: block, width: 3, fill: "#B9A6D9", color: "#7C5CBF"}
+  - {type: text, at: [122, 97.5], text: "Dispatching strategy\nfor diesel generators", size: 6.5, bold: true}
+  - {type: arrow, from: [150, 94], to: [150, 106], style: block, width: 3, fill: "#B9A6D9", color: "#7C5CBF"}
+
+  # ── 策略拼接（青虚线框 + token 盒 + ⊕）────────────────────
+  - {type: group, id: strat, rect: [8, 108, 174, 26], color: "#2F9E8A", lw: 0.55}
+  - {type: box, id: pv1, rect: [12, 111, 15, 8], title: "PV(1)", fill: "#D9E5F2", stroke: "#5E7FA8", title_size: 6.5}
+  - {type: text, at: [30.5, 113.5], text: "•••", size: 6, bold: true}
+  - {type: box, id: pvn, rect: [34, 111, 15, 8], title: "PV(n)", fill: "#D9E5F2", stroke: "#5E7FA8", title_size: 6.5}
+  - {type: box, id: wd1, rect: [52, 111, 16, 8], title: "Wind(1)", fill: "#D9E5F2", stroke: "#5E7FA8", title_size: 6.5}
+  - {type: text, at: [71.5, 113.5], text: "•••", size: 6, bold: true}
+  - {type: box, id: wdn, rect: [75, 111, 16, 8], title: "Wind(n)", fill: "#D9E5F2", stroke: "#5E7FA8", title_size: 6.5}
+  - {type: box, id: ds1, rect: [116, 111, 17, 8], title: "Diesel(1)", fill: "#F2C994", stroke: "#B8863E", title_size: 6.5}
+  - {type: text, at: [137.5, 113.5], text: "•••", size: 6, bold: true}
+  - {type: box, id: dsn, rect: [142, 111, 17, 8], title: "Diesel(n)", fill: "#F2C994", stroke: "#B8863E", title_size: 6.5}
+  - {type: arrow, from: [51, 121], to: [90, 125], via: [[51, 125]], width: 0.35}
+  - {type: arrow, from: [137, 121], to: [100, 125], via: [[137, 125]], width: 0.35}
+  - {type: marker, id: sum, at: [95, 125], icon: oplus, size: 6, color: "#1F2933"}
+  - {type: text, at: [104, 122.5], text: Concatenate, size: 6.5, anchor: start}
+
+  # ── 拼接 → 最终动作序列（粉 token，蓝虚线框）────────────────
+  - {type: arrow, from: [95, 134], to: [95, 140], style: block, width: 3, fill: "#8FD4C8", color: "#2F9E8A"}
+  - {type: group, id: final, rect: [8, 141, 174, 13], color: "#4169C9", lw: 0.55}
+  - {type: box, id: f1, rect: [13, 143.5, 15, 8], title: "PV(1)", shape: stadium, fill: "#F6D5F0", stroke: "#B77BAD", title_size: 6.5}
+  - {type: text, at: [32.5, 146], text: "•••", size: 6, bold: true}
+  - {type: box, id: f2, rect: [37, 143.5, 15, 8], title: "PV(n)", shape: stadium, fill: "#F6D5F0", stroke: "#B77BAD", title_size: 6.5}
+  - {type: box, id: f3, rect: [66, 143.5, 16, 8], title: "Wind(1)", shape: stadium, fill: "#F6D5F0", stroke: "#B77BAD", title_size: 6.5}
+  - {type: text, at: [86.5, 146], text: "•••", size: 6, bold: true}
+  - {type: box, id: f4, rect: [90, 143.5, 16, 8], title: "Wind(n)", shape: stadium, fill: "#F6D5F0", stroke: "#B77BAD", title_size: 6.5}
+  - {type: box, id: f5, rect: [120, 143.5, 17, 8], title: "Diesel(1)", shape: stadium, fill: "#F6D5F0", stroke: "#B77BAD", title_size: 6.5}
+  - {type: text, at: [141.5, 146], text: "•••", size: 6, bold: true}
+  - {type: box, id: f6, rect: [145, 143.5, 17, 8], title: "Diesel(n)", shape: stadium, fill: "#F6D5F0", stroke: "#B77BAD", title_size: 6.5}

@@ -1,0 +1,19 @@
+figure: {width: 90, height: 160, dpi: 300}
+theme: sci
+elements:
+  - {type: text, at: [45, 4], text: Transformer Encoder Block, size: 7.5, bold: true}
+  - {type: box, id: inp, rect: [25, 16, 40, 12], title: 输入嵌入, variant: plain}
+  - {type: box, id: pe, rect: [25, 34, 40, 12], title: + 位置编码, variant: secondary}
+  - {type: box, id: mha, rect: [20, 54, 50, 18], title: 多头自注意力, body: Multi-Head Attention, variant: primary}
+  - {type: box, id: an1, rect: [25, 80, 40, 11], title: Add & Norm, variant: accent}
+  - {type: box, id: ffn, rect: [20, 101, 50, 16], title: 前馈网络, body: FFN, variant: primary}
+  - {type: box, id: an2, rect: [25, 125, 40, 11], title: Add & Norm, variant: accent}
+  - {type: box, id: out, rect: [25, 145, 40, 11], title: 输出表示, variant: plain}
+  - {type: arrow, from: inp.bottom, to: pe.top}
+  - {type: arrow, from: pe.bottom, to: mha.top}
+  - {type: arrow, from: mha.bottom, to: an1.top}
+  - {type: arrow, from: an1.bottom, to: ffn.top}
+  - {type: arrow, from: ffn.bottom, to: an2.top}
+  - {type: arrow, from: an2.bottom, to: out.top}
+  - {type: arrow, from: mha.left, to: an1.left, via: [[12, 63], [12, 85.5]], style: dashed, label: 残差, color: "#B5493A"}
+  - {type: arrow, from: ffn.right, to: an2.right, via: [[78, 109], [78, 130.5]], style: dashed, label: 残差, color: "#B5493A"}

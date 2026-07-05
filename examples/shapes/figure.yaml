@@ -1,0 +1,11 @@
+figure: {width: 180, height: 60, dpi: 300}
+theme: sci
+elements:
+  - {type: text, at: [90, 4], text: 形状库, size: 8, bold: true}
+  - {type: box, id: s1, rect: [6, 18, 22, 22], title: rect, shape: rect}
+  - {type: box, id: s2, rect: [32, 18, 22, 22], title: stadium, shape: stadium}
+  - {type: box, id: s3, rect: [58, 16, 26, 26], title: diamond, shape: diamond, variant: highlight}
+  - {type: box, id: s4, rect: [88, 18, 24, 22], title: cylinder, shape: cylinder, variant: accent}
+  - {type: box, id: s5, rect: [116, 18, 24, 22], title: parallel, shape: parallelogram, variant: secondary}
+  - {type: box, id: s6, rect: [144, 18, 14, 22], title: hex, shape: hexagon}
+  - {type: box, id: s7, rect: [160, 18, 16, 22], title: ellipse, shape: ellipse, variant: secondary}

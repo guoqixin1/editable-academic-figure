@@ -1,0 +1,17 @@
+figure: {width: 132, height: 150, dpi: 300}
+theme: sci
+elements:
+  - {type: box, id: start, rect: [40, 6, 40, 14], title: 开始训练, shape: stadium}
+  - {type: box, id: load, rect: [40, 28, 40, 16], title: 加载批数据, body: batch B, shape: parallelogram}
+  - {type: box, id: fwd, rect: [40, 50, 40, 16], title: 前向传播, body: 计算 loss}
+  - {type: box, id: check, rect: [30, 72, 60, 24], title: "loss 收敛?", shape: diamond, variant: highlight}
+  - {type: box, id: bwd, rect: [100, 76, 28, 16], title: 反向更新, variant: secondary}
+  - {type: box, id: eval, rect: [40, 104, 40, 16], title: 验证集评估, variant: accent}
+  - {type: box, id: stop, rect: [40, 128, 40, 14], title: 保存模型, shape: stadium}
+  - {type: arrow, from: start.bottom, to: load.top}
+  - {type: arrow, from: load.bottom, to: fwd.top}
+  - {type: arrow, from: fwd.bottom, to: check.top}
+  - {type: arrow, from: check.right, to: bwd.left, label: 否}
+  - {type: arrow, from: bwd.top, to: load.right, route: vh}
+  - {type: arrow, from: check.bottom, to: eval.top, label: 是}
+  - {type: arrow, from: eval.bottom, to: stop.top}

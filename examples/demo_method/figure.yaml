@@ -1,0 +1,120 @@
+# 演示 spec：多模态检索增强诊断框架 · 方法总览图
+# 布局坐标全部为 mm；改任何数值后重跑 render 即可精确微调（这就是"可控"）。
+
+figure:
+  width: 180        # 期刊双栏图宽度
+  height: 96
+  dpi: 600
+  background: "#FFFFFF"
+  assets_dir: assets
+
+theme:
+  preset: sci
+
+# ── AI 素材请求（抽卡）────────────────────────────────
+assets:
+  - id: microscope
+    prompt: 一台简洁的光学显微镜，蓝灰色调扁平插画，侧面视角
+    aspect: "1:1"
+    candidates: 3
+  - id: report_doc
+    prompt: 一份带有折线图和印章的医疗报告文档，蓝灰配色扁平插画，微微倾斜
+    aspect: "1:1"
+    candidates: 3
+
+# ── 版面元素 ─────────────────────────────────────────
+elements:
+  # (a) 输入
+  - type: panel_label
+    at: [6, 6]
+    text: a
+
+  - type: box
+    id: input_img
+    rect: [8, 16, 33, 30]
+    title: 病理切片
+    body: "H&E 染色\n40× 视野"
+    icon: microscope
+    icon_h: 12
+    variant: primary
+
+  - type: box
+    id: input_text
+    rect: [8, 52, 33, 26]
+    title: 临床文本
+    body: "主诉 / 病史\n实验室指标"
+    variant: primary
+
+  - type: group
+    members: [input_img, input_text]
+    label: 多模态输入
+    style: dashed
+
+  # (b) 编码 + 检索
+  - type: panel_label
+    at: [58, 6]
+    text: b
+
+  - type: box
+    id: encoder
+    rect: [62, 22, 34, 22]
+    title: 跨模态编码器
+    body: 对齐到共享表示空间
+    variant: secondary
+
+  - type: box
+    id: retriever
+    rect: [62, 54, 34, 22]
+    title: 知识库检索
+    body: 召回相似病例证据
+    variant: accent
+
+  # (c) 融合 + 输出
+  - type: panel_label
+    at: [118, 6]
+    text: c
+
+  - type: box
+    id: fusion
+    rect: [120, 34, 34, 28]
+    title: 证据融合推理
+    body: 交叉注意力聚合
+    variant: highlight
+
+  - type: asset
+    id: out_report
+    rect: [160, 30, 16, 36]
+    src: report_doc
+    caption: 诊断报告
+
+  # 连线
+  - type: arrow
+    from: input_img.right
+    to: encoder.left
+    route: auto
+    label: 图像
+  - type: arrow
+    from: input_text.right
+    to: retriever.left
+    route: auto
+    label: 文本
+  - type: arrow
+    from: encoder.bottom
+    to: retriever.top
+    route: straight
+    style: dashed
+    label: 查询
+    bidir: true
+  - type: arrow
+    from: encoder.right
+    to: fusion.left
+    route: auto
+  - type: arrow
+    from: retriever.right
+    to: fusion.left
+    route: auto
+    label: 证据
+  - type: arrow
+    from: fusion.right
+    to: out_report.left
+    route: straight

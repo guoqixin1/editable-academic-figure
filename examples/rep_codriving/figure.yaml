@@ -1,0 +1,98 @@
+# 复现 goodcase 图3：CoDrivingLLM 协同驾驶框架
+# 看点：四列彩色圆角面板 + 面板内白色子卡 + 双色语义箭头（红实/蓝虚）+ 顶部图例
+#       + 斜体流程标注 + 叠影卡片（VEH #1/#2）
+figure: {width: 240, height: 112, dpi: 600, assets_dir: ../_paper_assets}
+theme: sci
+
+assets:
+  - {id: road_cross, prompt: 十字交叉路口的俯视示意插画，深灰色路面白色标线，扁平风格, aspect: "4:3", candidates: 2}
+  - {id: road_highway, prompt: 双向多车道高速公路俯视插画带几辆小汽车，深灰色路面，扁平风格, aspect: "4:3", candidates: 2}
+  - {id: road_merge, prompt: 高速公路匝道汇流俯视插画，Y形道路深灰色路面白色标线，扁平风格, aspect: "4:3", candidates: 2}
+  - {id: clipboard, prompt: 一块带勾选清单的写字夹板，扁平插画风格, candidates: 2}
+  - {id: speedometer, prompt: 一个蓝色指针速度仪表盘，扁平插画风格, candidates: 2}
+  - {id: globe_doc, prompt: 一个蓝绿色地球仪，扁平插画风格, candidates: 2}
+
+elements:
+  # ── 顶部图例 ─────────────────────────────────────────────
+  - {type: arrow, from: [52, 7], to: [64, 7], color: "#C0392B", width: 0.5}
+  - {type: text, at: [66, 5.2], text: Forward, size: 6.2, italic: true, bold: true, color: "#C0392B", anchor: start}
+  - {type: arrow, from: [88, 7], to: [100, 7], style: dashed, color: "#3B82C4", width: 0.5}
+  - {type: text, at: [102, 5.2], text: Feedback, size: 6.2, italic: true, bold: true, color: "#3B82C4", anchor: start}
+
+  # ── 列 1：Environment Module（浅青面板）───────────────────
+  - {type: panel, id: env, rect: [4, 12, 34, 92], header_fill: "#D5EBE4", fill: "#D5EBE4", header_h: 13}
+  - {type: text, at: [21, 15], text: "Environment\nModule", size: 7.5, bold: true}
+  - {type: asset, id: rd1, rect: [8, 28, 26, 17], src: road_cross, frame: true}
+  - {type: text, at: [21, 46.5], text: Intersection, size: 6}
+  - {type: asset, id: rd2, rect: [8, 53, 26, 17], src: road_highway, frame: true}
+  - {type: text, at: [21, 71.5], text: Highway, size: 6}
+  - {type: asset, id: rd3, rect: [8, 78, 26, 17], src: road_merge, frame: true}
+  - {type: text, at: [21, 96.5], text: Merging, size: 6}
+
+  # ── 列 2：Reasoning Module（灰面板 + 两张白子卡）────────────
+  - {type: panel, id: reason, rect: [42, 16, 76, 76], header_fill: "#E4E4E0", fill: "#E4E4E0", header_h: 11}
+  - {type: text, at: [80, 19.5], text: "Reasoning Module", size: 8, bold: true}
+  - {type: box, id: state, rect: [46, 30, 68, 26], variant: plain, title: State-Sharing, title_size: 7,
+     valign: top}
+  - {type: asset, id: lane1, rect: [52, 40, 14, 13], src: road_highway, frame: true}
+  - {type: text, at: [73, 44], text: "Lane\ninfo", size: 6}
+  - {type: asset, id: clip1, rect: [84, 40, 12, 13], src: clipboard}
+  - {type: text, at: [103, 44], text: "Vehicle\ninfo", size: 6}
+  - {type: box, id: intent, rect: [46, 61, 68, 26], variant: plain, title: Intent-Sharing, title_size: 7,
+     valign: top}
+  - {type: asset, id: glb1, rect: [50, 71, 12, 13], src: globe_doc}
+  - {type: text, at: [70, 75], text: "Expect\ndestination", size: 6}
+  - {type: asset, id: spd1, rect: [88, 71, 12, 13], src: speedometer}
+  - {type: text, at: [106, 75], text: "Expect\nspeed", size: 6}
+
+  # ── 列 3：Conflict Coordinator（橙面板 + Negotiation 子卡）──
+  - {type: panel, id: conflict, rect: [122, 12, 28, 92], header_fill: "#EFC29B", fill: "#EFC29B", header_h: 13}
+  - {type: text, at: [136, 14.5], text: "Conflict\nCoordinator", size: 7, bold: true}
+  - {type: box, id: nego, rect: [125, 28, 22, 72], variant: plain, title: Negotiation, title_size: 6.8, valign: top}
+  - {type: asset, id: rules, rect: [128, 38, 16, 15], src: clipboard}
+  - {type: text, at: [136, 54.5], text: "Traffic rules", size: 5.8, color: "#52606D"}
+  - {type: text, at: [136, 60], text: "+", size: 8, bold: true}
+  - {type: asset, id: scn, rect: [128, 65, 16, 15], src: road_cross, frame: true}
+  - {type: text, at: [136, 81.5], text: "Scenario\ndescription", size: 5.8, color: "#52606D"}
+
+  # ── 列 4：Decision（灰叠影卡）────────────────────────────
+  - {type: box, id: dec_panel, rect: [154, 20, 42, 72], fill: "#E4E4E0", stroke: "#B8BEC4", stack: 2}
+  - {type: box, id: dec, rect: [158, 26, 34, 58], variant: plain, title: Decision, title_size: 7, valign: top}
+  - {type: asset, id: glb2, rect: [164, 36, 12, 12], src: globe_doc}
+  - {type: text, at: [175, 51.5], text: "Scenario prompt\ngeneration", size: 6, color: "#52606D"}
+  - {type: asset, id: chk, rect: [164, 60, 12, 12], src: clipboard}
+  - {type: text, at: [175, 74], text: "Action safety\nassessment", size: 6, color: "#52606D"}
+  - {type: text, at: [190, 87.5], text: "VEH #1", size: 5.6, color: "#52606D", anchor: end}
+  - {type: text, at: [197, 94], text: "VEH #2", size: 5.6, color: "#52606D", anchor: end}
+  - {type: text, at: [204, 100], text: "· · ·", size: 8, bold: true}
+
+  # ── 列 5：Memory Module（浅黄面板）─────────────────────────
+  - {type: panel, id: mem, rect: [202, 12, 34, 92], header_fill: "#F5E2B8", fill: "#F5E2B8", header_h: 13}
+  - {type: text, at: [219, 15], text: "Memory\nModule", size: 7.5, bold: true}
+  - {type: box, id: aug, rect: [205, 28, 28, 34], variant: plain, title: Augment, title_size: 6.8, valign: top}
+  - {type: tokens, id: aug1, rect: [208, 38, 18, 5], n: 3, gap: 1, colors: ["#D5EBE4", "#D9E5F2", "#F0D9D9"]}
+  - {type: marker, at: [230, 40.5], icon: cross, size: 3.6}
+  - {type: tokens, id: aug2, rect: [208, 46, 18, 5], n: 3, gap: 1, colors: ["#D5EBE4", "#D9E5F2", "#D9EDD9"]}
+  - {type: marker, at: [230, 48.5], icon: check, size: 3.6}
+  - {type: text, at: [219, 54], text: "Action result\ncomment", size: 5.8, color: "#52606D"}
+  - {type: box, id: retr, rect: [205, 68, 28, 28], variant: plain, title: Retrieval, title_size: 6.8, valign: top}
+  - {type: network, id: retnet, rect: [209, 78, 20, 13], layers: [3, 3], direction: h, color: "#5E7FA8"}
+  - {type: text, at: [219, 92.5], text: "Sort similar memory", size: 5.6, color: "#52606D"}
+
+  # ── 红色 Forward 流 ──────────────────────────────────────
+  - {type: arrow, from: env.right@0.42, to: reason.left@0.42, color: "#C0392B", width: 0.45}
+  - {type: text, at: [40, 44.2], text: Obs, size: 6, italic: true, bold: true, color: "#C0392B"}
+  - {type: arrow, from: state.right, to: nego.left@0.22, color: "#C0392B", width: 0.45}
+  - {type: arrow, from: intent.right, to: nego.left@0.62, color: "#C0392B", width: 0.45}
+  - {type: text, at: [118, 58.5], text: "Scenario\ndescription", size: 5.8, italic: true, bold: true, color: "#C0392B"}
+  - {type: arrow, from: nego.right@0.3, to: dec_panel.left@0.3, color: "#C0392B", width: 0.45}
+  - {type: text, at: [151, 36.5], text: "Conflict\ndescription", size: 5.8, italic: true, bold: true, color: "#C0392B"}
+  - {type: arrow, from: dec.right@0.5, to: mem.left@0.5, color: "#C0392B", width: 0.45}
+  - {type: text, at: [198, 51.5], text: Exp, size: 6, italic: true, bold: true, color: "#C0392B"}
+  # Action 回环（红线绕底部回环境）
+  - {type: arrow, from: dec.bottom@0.5, to: env.bottom@0.5, via: [[175, 108], [21, 108]], color: "#C0392B", width: 0.45}
+  - {type: text, at: [100, 105.4], text: Action, size: 6, italic: true, bold: true, color: "#C0392B"}
+
+  # ── 蓝色 Feedback 流 ─────────────────────────────────────
+  - {type: arrow, from: mem.top@0.5, to: dec_panel.top@0.5, via: [[219, 8], [175, 8]], style: dashed, color: "#3B82C4", width: 0.45}
+  - {type: text, at: [196, 9.5], text: "Few-shot exp\nguidance", size: 5.6, italic: true, bold: true, color: "#3B82C4"}

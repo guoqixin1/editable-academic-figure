@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 抽卡的原始白底图（体积大，可由 --force 重新生成；抠好的候选保留）
+*.raw.png
+
+# 抽卡运行记录：含机器绝对路径，属于运行时产物
+gacha_report.json
+
+# 个人 API key 若写进本地 spec 覆盖文件
+*.local.yaml

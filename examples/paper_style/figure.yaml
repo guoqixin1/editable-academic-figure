@@ -1,0 +1,98 @@
+# 论文级示例：两阶段多模态表征学习总览图
+# 复刻现代 ML 论文图的常见要素：
+#   - panel 色条标题分区（Stage 1 / Stage 2）
+#   - tokens 序列条（Z_{s}/Z_{v}/Z_{m}，含 masked 黑格）
+#   - marker 火焰/雪花标注可训练/冻结
+#   - _{} 下标损失记号（L_{InfoNCE}/L_{MAE}）
+#   - placeholder 占位槽：频谱图/人脸帧/3D mesh 属真实实验结果，
+#     完稿时把真实图片放到 assets/ 对应路径即自动嵌入（避免生成=学术不端）
+
+figure: {width: 200, height: 112, dpi: 600, assets_dir: assets}
+theme: sci
+
+elements:
+  # ═══ Stage 1：音画自监督预训练（左面板）═══
+  - {type: panel, id: p1, rect: [4, 4, 94, 104], title: "Stage 1. 音画语音表征预训练",
+     variant: highlight, fill: "#FDF6F5", header_h: 8}
+
+  # 输入占位（真实频谱图/视频帧，待手动插入）
+  - {type: asset, id: spec_in, rect: [10, 17, 30, 20], src: assets/masked_spec.png,
+     placeholder: true, caption: "掩码语音 tokens"}
+  - {type: asset, id: video_in, rect: [58, 17, 30, 20], src: assets/masked_video.png,
+     placeholder: true, caption: "掩码视频 tokens"}
+
+  # 编码器 + 可训练标记
+  - {type: box, id: enc_s, rect: [10, 46, 30, 12], title: "语音编码器 E_{s}", variant: secondary,
+     title_size: 6.5}
+  - {type: box, id: enc_v, rect: [58, 46, 30, 12], title: "视频编码器 E_{v}", variant: accent,
+     title_size: 6.5}
+  - {type: marker, at: [42.5, 48], icon: fire, size: 4.5}
+  - {type: marker, at: [90.5, 48], icon: fire, size: 4.5}
+
+  # token 序列条
+  - {type: tokens, id: zs, rect: [12, 63, 26, 4.5], n: 7, variant: secondary, label: "Z_{s}"}
+  - {type: tokens, id: zv, rect: [60, 63, 26, 4.5], n: 7, variant: accent, label: "Z_{v}"}
+
+  # 融合编码器（双色渐变 = 双模态融合）
+  - {type: box, id: fusion, rect: [24, 74, 50, 11], title: "融合编码器 E_{sv}",
+     gradient: ["#B7CDE8", "#F3C89D"], title_size: 6.8}
+  - {type: marker, at: [76.5, 76], icon: fire, size: 4.2}
+
+  # 重建解码器 + 重建目标占位
+  - {type: box, id: dec, rect: [24, 91, 50, 9], title: "语音 / 视频解码器 D_{s}, D_{v}",
+     variant: plain, title_size: 6.2}
+
+  # Stage 1 连线与损失
+  - {type: arrow, from: spec_in.bottom, to: enc_s.top}
+  - {type: arrow, from: video_in.bottom, to: enc_v.top}
+  - {type: arrow, from: enc_s.bottom, to: zs.top, head: none}
+  - {type: arrow, from: enc_v.bottom, to: zv.top, head: none}
+  - {type: arrow, from: zs.bottom, to: fusion.top@0.25}
+  - {type: arrow, from: zv.bottom, to: fusion.top@0.75}
+  - {type: arrow, from: fusion.bottom, to: dec.top}
+  - {type: arrow, from: enc_s.right, to: enc_v.left, bidir: true, style: dashed, color: "#B5493A"}
+  - {type: text, at: [49, 41.5], text: "L_{InfoNCE}", size: 6.2, color: "#B5493A", bold: true}
+  - {type: text, at: [49, 103], text: "L_{MAE} 重建损失", size: 6.0, color: "#B5493A"}
+
+  # ═══ Stage 2：语音-网格同步表征（右面板）═══
+  - {type: panel, id: p2, rect: [102, 4, 94, 62], title: "Stage 2. 语音-网格同步表征",
+     variant: primary, fill: "#F5F9FD", header_h: 8}
+
+  - {type: asset, id: spec2, rect: [108, 17, 28, 16], src: assets/speech_tokens.png,
+     placeholder: true, caption: "语音 tokens"}
+  - {type: asset, id: mesh2, rect: [160, 17, 30, 16], src: assets/mesh_tokens.png,
+     placeholder: true, caption: "3D 网格 tokens"}
+
+  - {type: box, id: enc_s2, rect: [108, 40, 28, 11], title: "语音编码器 E_{s}", variant: secondary,
+     title_size: 6.2}
+  - {type: box, id: enc_m, rect: [162, 40, 28, 11], title: "网格编码器 E_{m}", variant: primary,
+     title_size: 6.2}
+  - {type: marker, at: [138.5, 42], icon: snow, size: 4.5}
+  - {type: marker, at: [192.5, 42], icon: fire, size: 4.5}
+
+  - {type: tokens, id: zs2, rect: [110, 56, 24, 4.2], n: 6, variant: secondary, label: "Z_{s}"}
+  - {type: tokens, id: zm, rect: [164, 56, 24, 4.2], n: 6, variant: primary, label: "Z_{m}"}
+
+  - {type: arrow, from: spec2.bottom, to: enc_s2.top}
+  - {type: arrow, from: mesh2.bottom, to: enc_m.top}
+  - {type: arrow, from: enc_s2.bottom, to: zs2.top, head: none}
+  - {type: arrow, from: enc_m.bottom, to: zm.top, head: none}
+  - {type: arrow, from: enc_s2.right, to: enc_m.left, bidir: true, style: dashed, color: "#B5493A"}
+  - {type: text, at: [149, 35.5], text: "L_{InfoNCE}", size: 6.2, color: "#B5493A", bold: true}
+
+  # ═══ 下游接入（右下面板）═══
+  - {type: panel, id: p3, rect: [102, 70, 94, 38], title: "下游：3D 数字人驱动",
+     variant: dark, fill: "#F7F7F9", header_h: 7}
+
+  - {type: asset, id: wave, rect: [107, 82, 24, 14], src: assets/waveform.png,
+     placeholder: true, caption: "输入语音"}
+  - {type: box, id: th_model, rect: [138, 83, 26, 12], title: 数字人模型, variant: highlight,
+     title_size: 6.5}
+  - {type: marker, at: [166.5, 85], icon: fire, size: 4.2}
+  - {type: asset, id: mesh_out, rect: [170, 81, 22, 16], src: assets/generated_mesh.png,
+     placeholder: true, caption: "生成网格"}
+
+  - {type: arrow, from: wave.right, to: th_model.left}
+  - {type: arrow, from: th_model.right, to: mesh_out.left}
+  - {type: text, at: [149, 101.5], text: "感知损失 L_{percp} 由冻结的 E_{s}, E_{m} 提供", size: 6.0,
+     color: "#52606D"}

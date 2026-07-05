@@ -1,0 +1,22 @@
+figure: {width: 175, height: 105, dpi: 300}
+theme: sci
+elements:
+  - {type: text, at: [87, 4], text: MapReduce 数据流, size: 8, bold: true}
+  - {type: box, id: input, rect: [8, 42, 24, 20], title: 输入分片, body: HDFS, shape: cylinder, variant: accent}
+  - {type: box, id: m1, rect: [48, 14, 26, 14], title: Map 1}
+  - {type: box, id: m2, rect: [48, 44, 26, 14], title: Map 2}
+  - {type: box, id: m3, rect: [48, 74, 26, 14], title: Map 3}
+  - {type: box, id: shuffle, rect: [88, 30, 24, 42], title: Shuffle, body: 按 key 分组, variant: secondary}
+  - {type: box, id: r1, rect: [126, 30, 26, 14], title: Reduce 1, variant: primary}
+  - {type: box, id: r2, rect: [126, 58, 26, 14], title: Reduce 2, variant: primary}
+  - {type: box, id: out, rect: [162, 44, 12, 20], title: 输出, shape: cylinder, variant: accent}
+  - {type: arrow, from: input.right, to: m1.left}
+  - {type: arrow, from: input.right, to: m2.left}
+  - {type: arrow, from: input.right, to: m3.left}
+  - {type: arrow, from: m1.right, to: shuffle.left}
+  - {type: arrow, from: m2.right, to: shuffle.left}
+  - {type: arrow, from: m3.right, to: shuffle.left}
+  - {type: arrow, from: shuffle.right, to: r1.left}
+  - {type: arrow, from: shuffle.right, to: r2.left}
+  - {type: arrow, from: r1.right, to: out.left}
+  - {type: arrow, from: r2.right, to: out.left}

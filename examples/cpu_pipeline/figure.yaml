@@ -1,0 +1,14 @@
+figure: {width: 200, height: 70, dpi: 300}
+theme: mono
+elements:
+  - {type: text, at: [100, 3], text: 经典五级流水线 (MIPS), size: 8, bold: true}
+  - {type: box, id: if, rect: [8, 22, 32, 22], title: IF, body: 取指}
+  - {type: box, id: id, rect: [46, 22, 32, 22], title: ID, body: 译码/读寄存器}
+  - {type: box, id: ex, rect: [84, 22, 32, 22], title: EX, body: 执行/ALU}
+  - {type: box, id: mem, rect: [122, 22, 32, 22], title: MEM, body: 访存}
+  - {type: box, id: wb, rect: [160, 22, 32, 22], title: WB, body: 写回}
+  - {type: arrow, from: if.right, to: id.left}
+  - {type: arrow, from: id.right, to: ex.left}
+  - {type: arrow, from: ex.right, to: mem.left}
+  - {type: arrow, from: mem.right, to: wb.left}
+  - {type: text, at: [100, 54], text: 每级 1 个时钟周期，理想 CPI = 1, size: 6, color: "#6E6E6E"}

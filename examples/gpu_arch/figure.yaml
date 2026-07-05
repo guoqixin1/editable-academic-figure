@@ -1,0 +1,15 @@
+figure: {width: 160, height: 110, dpi: 300}
+theme: mono
+elements:
+  - {type: text, at: [80, 4], text: GPU 架构简图, size: 8, bold: true}
+  - {type: group, rect: [6, 12, 108, 74], label: GPU 芯片, style: solid}
+  - {type: box, id: sm1, rect: [12, 22, 30, 22], title: SM 0, body: CUDA cores, variant: primary}
+  - {type: box, id: sm2, rect: [46, 22, 30, 22], title: SM 1, body: CUDA cores, variant: primary}
+  - {type: box, id: sm3, rect: [80, 22, 30, 22], title: SM 2, body: CUDA cores, variant: primary}
+  - {type: box, id: l2, rect: [12, 52, 98, 12], title: L2 Cache 共享, variant: secondary}
+  - {type: box, id: sched, rect: [12, 70, 98, 10], title: 线程调度 / 互连, variant: plain}
+  - {type: box, id: hbm, rect: [126, 30, 28, 40], title: HBM, body: 显存, shape: cylinder, variant: accent}
+  - {type: arrow, from: l2.right, to: hbm.left, bidir: true, label: 带宽}
+  - {type: arrow, from: sm1.bottom, to: l2.top}
+  - {type: arrow, from: sm2.bottom, to: l2.top}
+  - {type: arrow, from: sm3.bottom, to: l2.top}

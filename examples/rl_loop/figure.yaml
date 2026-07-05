@@ -1,0 +1,77 @@
+# 演示 spec #2：自博弈强化学习闭环
+# 目的：压测环形箭头路由、上下/左右混合走线、无 AI 素材的纯代码图。
+
+figure:
+  width: 150
+  height: 110
+  dpi: 600
+  background: "#FFFFFF"
+  assets_dir: assets
+
+theme:
+  preset: warm
+
+# 本例为纯代码图（无 AI 素材），演示 scifig 也能当常规矢量作图工具用。
+
+elements:
+  - type: box
+    id: agent
+    rect: [55, 12, 40, 26]
+    title: 策略网络
+    body: "π_θ(a|s)"
+    variant: primary
+
+  - type: box
+    id: env
+    rect: [55, 74, 40, 24]
+    title: 交互环境
+    body: 生成对局轨迹
+    variant: secondary
+
+  - type: box
+    id: buffer
+    rect: [8, 43, 36, 24]
+    title: 经验回放池
+    body: 存储 (s, a, r)
+    variant: accent
+
+  - type: box
+    id: update
+    rect: [106, 43, 36, 24]
+    title: 优势估计与更新
+    body: PPO 梯度上升
+    variant: highlight
+
+  # 顺时针闭环：agent → env → buffer → update → agent
+  - type: arrow
+    from: agent.bottom
+    to: env.top
+    route: straight
+    label: 采样动作
+  - type: arrow
+    from: env.left
+    to: buffer.bottom
+    route: auto
+    label: 轨迹
+  - type: arrow
+    from: buffer.top
+    to: agent.left
+    route: auto
+    label: 批采样
+  - type: arrow
+    from: update.top
+    to: agent.right
+    route: auto
+    label: 更新 θ
+  - type: arrow
+    from: env.right
+    to: update.bottom
+    route: auto
+    label: 回报 r
+
+  - type: text
+    id: title
+    at: [75, 2]
+    text: 自博弈强化学习训练闭环
+    size: 8.5
+    bold: true
