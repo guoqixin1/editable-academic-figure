@@ -3,6 +3,8 @@
 本仓库是 **scifig**：代码定布局、AI 只画物件素材、文字全走矢量渲染的受控科研作图工具。
 本文件是给 **AI 助手**看的操作手册，重点解决**用户拿到草稿后的二次修改**。人类看 [`USAGE.md`](USAGE.md)。
 
+> 作为主流 coding agent 的 skill 使用时（Claude Skills / Cursor Skills / `npx skills`），发现入口是同目录的 [`SKILL.md`](SKILL.md)（含 YAML frontmatter 和触发描述）。本文件是它指向的详细手册——上下文有余量或用户提到"改图/配色/坐标/字段"等具体动作时，直接来这里查。
+
 你最常见的任务：用户已有 `figure.yaml` + 渲染出的 `figure.png`，用自然语言让你「挪一下」「加条线」「换个色」「把占位实验图换成真图」。
 一张图 = 一个 YAML `spec`，所有坐标 **mm**、字号 **pt**、原点在左上、`rect: [x, y, w, h]`。
 

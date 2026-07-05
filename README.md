@@ -16,6 +16,7 @@
 
 > 📖 **完整使用说明 + 实践经验建议见 [USAGE.md](USAGE.md)**（人读）。
 > 🤖 **让 AI 助手后期二次修改这张图？见 [AGENTS.md](AGENTS.md)**（AI 读，含字段速查 + 改图配方）。
+> 🧩 **作为主流 coding agent 的 skill 使用？见 [SKILL.md](SKILL.md)**（Claude / Cursor / `npx skills` 生态自动发现入口，YAML frontmatter + 触发描述，主体仍指向 AGENTS.md）。
 
 ## 效果预览
 
@@ -152,6 +153,7 @@ scifig/
                      + studio.py & studio.html（交互式调图界面，零额外依赖）
   examples/          16 个可直接渲染的示例（rep_* 为真实论文图复现）
   prompts/           visual_rubric.md（评审标准）、AGENT_WORKFLOW.md（从零作图分阶段流程）
+  SKILL.md           主流 coding agent skill 入口（Claude/Cursor/npx skills 发现用）
   AGENTS.md          给 AI 助手的字段速查 + 二次改图配方（Cursor/Claude 自动加载）
   USAGE.md           面向人的完整使用说明
   tests/             回归测试（46 项）
