@@ -411,12 +411,25 @@ def _embed_image(path: Path, slot: Rect, halign: str, valign: str, ref: str,
 
 # ---------------------------------------------------------------- arrow
 
-def _anchor_point(ep: str | tuple[float, float], rects: dict[str, Rect]) -> tuple[float, float, str]:
-    """返回 (x, y, side)。side 用于路由决策，坐标端点 side='free'。"""
+def _anchor_point(ep: str | tuple[float, float], rects: dict[str, Rect],
+                  toward: tuple[float, float] | None = None) -> tuple[float, float, str]:
+    """返回 (x, y, side)。side 用于路由决策，坐标端点 side='free'。
+
+    ep 为裸节点 id（未写 .side）时按 `toward`（对方端点参考点）方向**自动选朝向对方的那条边**，
+    落在该边中点——这是消除"箭头没对上"的主力：调用方只写 `from: enc, to: dec` 即可。
+    """
     if not isinstance(ep, str):
         return ep[0], ep[1], "free"
     node, side, t = parse_anchor(ep)
     r = rects[node]
+    if side is None:
+        tx, ty = toward if toward is not None else (r.cx, r.cy)
+        dx, dy = tx - r.cx, ty - r.cy
+        if abs(dx) >= abs(dy):
+            side = "right" if dx >= 0 else "left"
+        else:
+            side = "bottom" if dy >= 0 else "top"
+        t = 0.5
     if side == "left":
         return r.x, r.y + t * r.h, "left"
     if side == "right":
@@ -467,10 +480,20 @@ def _dedupe(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
     return out
 
 
+def _ref_center(ep: str | tuple[float, float], rects: dict[str, Rect]) -> tuple[float, float]:
+    """端点的参考中心，供对侧自动选边定向用（节点取几何中心，坐标端点取自身）。"""
+    if not isinstance(ep, str):
+        return ep[0], ep[1]
+    node, _, _ = parse_anchor(ep)
+    r = rects[node]
+    return r.cx, r.cy
+
+
 def _render_arrow(el: ArrowEl, th: Theme, fs: float, res: RenderResult) -> str:
     color = el.color or th.arrow
-    x1, y1, s1 = _anchor_point(el.from_, res.node_rects)
-    x2, y2, s2 = _anchor_point(el.to, res.node_rects)
+    # 先算对方参考中心：from 朝向 to、to 朝向 from，裸 id 端点据此自动选边
+    x1, y1, s1 = _anchor_point(el.from_, res.node_rects, toward=_ref_center(el.to, res.node_rects))
+    x2, y2, s2 = _anchor_point(el.to, res.node_rects, toward=_ref_center(el.from_, res.node_rects))
 
     if el.style == "block":
         return _render_block_arrow(el, (x1, y1), (x2, y2), color, th, fs, res)

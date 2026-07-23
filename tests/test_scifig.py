@@ -347,6 +347,102 @@ elements:
     assert len(segs["blk"]) == 2
 
 
+def test_arrow_auto_side_bare_id(tmp_path):
+    # 裸 id from/to：自动选朝向对方的边（a 在 b 左上 → a.right、b.left/top）
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 90}
+elements:
+  - {type: box, id: a, rect: [10, 10, 30, 16], title: A}
+  - {type: box, id: b, rect: [80, 60, 30, 16], title: B}
+  - {type: arrow, id: ar, from: a, to: b}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    segs = dict(res.arrow_segments)
+    start, end = segs["ar"][0], segs["ar"][-1]
+    assert start == (40.0, 18.0)          # a 的右边中点（朝向 b）
+    assert abs(end[0] - 80.0) < 1e-6      # b 的左边（朝向 a）
+    assert [i for i in lint(spec, res) if i.level == "E"] == []
+
+
+def test_arrow_auto_side_same_row_is_straight(tmp_path):
+    # 同排等高两盒裸 id 连接 → 干净水平直线（无斜线"没对上"）
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 40}
+elements:
+  - {type: box, id: a, rect: [10, 12, 30, 16], title: A}
+  - {type: box, id: b, rect: [80, 12, 30, 16], title: B}
+  - {type: arrow, id: ar, from: a, to: b}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    pts = dict(res.arrow_segments)["ar"]
+    assert all(abs(p[1] - pts[0][1]) < 1e-6 for p in pts)  # 所有点 y 相同 → 水平
+
+
+def test_arrow_bare_id_bad_ref_rejected(tmp_path):
+    import pytest
+    from scifig.spec import SpecError
+    with pytest.raises(SpecError):
+        load_spec(_write(tmp_path, """
+figure: {width: 80, height: 60}
+elements:
+  - {type: box, id: a, rect: [5, 5, 20, 20]}
+  - {type: arrow, from: a, to: ghost}
+"""))
+
+
+def test_lint_row_near_misaligned(tmp_path):
+    # 三盒本想同排顶对齐，一个 y 差 1.2mm → row-misaligned（近失）
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 40}
+elements:
+  - {type: box, id: a, rect: [10, 10, 24, 16], title: A}
+  - {type: box, id: b, rect: [46, 11.2, 24, 16], title: B}
+  - {type: box, id: c, rect: [82, 10, 24, 16], title: C}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    assert any(i.code == "row-misaligned" for i in lint(spec, res))
+
+
+def test_lint_aligned_row_no_warning(tmp_path):
+    # 完美对齐等距 → 不报 row-misaligned / uneven-gap
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 40}
+elements:
+  - {type: box, id: a, rect: [10, 10, 24, 16], title: A}
+  - {type: box, id: b, rect: [46, 10, 24, 16], title: B}
+  - {type: box, id: c, rect: [82, 10, 24, 16], title: C}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    codes = {i.code for i in lint(spec, res)}
+    assert "row-misaligned" not in codes and "uneven-gap" not in codes
+
+
+def test_lint_intentional_offset_not_flagged(tmp_path):
+    # 明显有意的错落（阶梯，差远大于近失阈值）→ 不误报
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 80}
+elements:
+  - {type: box, id: a, rect: [10, 10, 24, 14], title: A}
+  - {type: box, id: b, rect: [46, 30, 24, 14], title: B}
+  - {type: box, id: c, rect: [82, 50, 24, 14], title: C}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    assert not any(i.code in ("row-misaligned", "col-misaligned") for i in lint(spec, res))
+
+
+def test_lint_uneven_gap_near_miss(tmp_path):
+    # 列方向中心间距几乎相等却差 2mm → uneven-gap
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 40, height: 120}
+elements:
+  - {type: box, id: a, rect: [8, 8, 24, 12], title: A}
+  - {type: box, id: b, rect: [8, 40, 24, 12], title: B}
+  - {type: box, id: c, rect: [8, 70, 24, 12], title: C}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    assert any(i.code == "uneven-gap" for i in lint(spec, res))
+
+
 def test_network_and_badge(tmp_path):
     spec = load_spec(_write(tmp_path, """
 figure: {width: 80, height: 60}

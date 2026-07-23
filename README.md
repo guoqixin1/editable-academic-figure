@@ -107,7 +107,7 @@ elements:
   - {type: box,   id: enc, rect: [62, 22, 34, 22], title: 编码器, body: 对齐表示, variant: secondary, icon: microscope}
   - {type: box,   id: db,  rect: [110, 22, 24, 22], title: 存储, shape: cylinder}
   - {type: asset, id: out, rect: [160, 30, 16, 36], src: report_doc, caption: 报告}
-  - {type: arrow, from: enc.right, to: out.left, route: auto, label: 输出}
+  - {type: arrow, from: enc, to: out, label: 输出}   # 裸 id 自动选朝向对方的边，不会"没对上"
   - {type: arrow, from: enc.left, to: db.top, via: [[50, 10]], style: dashed}
   - {type: group, members: [enc], label: 主干, style: dashed}
   - {type: text,  at: [90, 4], text: 图 1. 方法总览, size: 8, bold: true}
@@ -120,7 +120,7 @@ elements:
 
 **数学记号**：标题/正文/text 支持 `_{...}` 下标、`^{...}` 上标，如 `E_{s}`、`ℝ^{(B V) H W C}`、`L_{InfoNCE}`。
 
-**锚点**：`节点id.side`，side ∈ `left/right/top/bottom/center`，可加 `@t`（0~1）指定边上位置，如 `enc.right@0.3`。
+**锚点**：最简写**裸节点 id**（`from: a, to: b`）——渲染自动选朝向对方的边、落在边中点，消除"箭头没对上"；要精确控制才写 `节点id.side`，side ∈ `left/right/top/bottom/center`，可加 `@t`（0~1）指定边上位置，如 `enc.right@0.3`。
 
 **箭头路由**：`auto`（按锚点边智能选）/`straight`/`hv`/`vh`/`z`（横向 Z）/`zv`（纵向 Z）；或用 `via: [[x,y],...]` 手动途经点（残差/skip/绕线）。
 
@@ -156,6 +156,6 @@ scifig/
   SKILL.md           主流 coding agent skill 入口（Claude/Cursor/npx skills 发现用）
   AGENTS.md          给 AI 助手的字段速查 + 二次改图配方（Cursor/Claude 自动加载）
   USAGE.md           面向人的完整使用说明
-  tests/             回归测试（46 项）
+  tests/             回归测试（53 项）
   requirements.txt
 ```

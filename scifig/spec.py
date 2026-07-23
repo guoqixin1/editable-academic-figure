@@ -299,6 +299,7 @@ _ROUTES = {"auto", "straight", "hv", "vh", "z", "zv", "arc"}
 _ARROW_STYLES = {"solid", "dashed", "block"}
 
 _ANCHOR_RE = re.compile(r"^([A-Za-z0-9_\-]+)\.(left|right|top|bottom|center)(?:@([0-9.]+))?$")
+_BARE_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")   # 裸节点 id：不写 .side，渲染时按几何自动选边
 
 
 def _check_keys(d: dict, etype: str, ctx: str) -> None:
@@ -315,9 +316,10 @@ def _point(v, ctx: str) -> tuple[float, float]:
 
 def _endpoint(v, ctx: str) -> str | tuple[float, float]:
     if isinstance(v, str):
-        if not _ANCHOR_RE.match(v):
+        if not (_ANCHOR_RE.match(v) or _BARE_ID_RE.match(v)):
             raise SpecError(
-                f"{ctx}: 锚点格式应为 'nodeid.side' 或 'nodeid.side@t'（side ∈ left/right/top/bottom/center），得到 {v!r}"
+                f"{ctx}: 锚点格式应为 'nodeid'（自动选朝向对方的边）、'nodeid.side' 或 'nodeid.side@t'"
+                f"（side ∈ left/right/top/bottom/center），得到 {v!r}"
             )
         return v
     return _point(v, ctx)
@@ -556,7 +558,8 @@ def _validate_refs(spec: FigureSpec) -> None:
         if isinstance(el, ArrowEl):
             for ep, name in ((el.from_, "from"), (el.to, "to")):
                 if isinstance(ep, str):
-                    node = _ANCHOR_RE.match(ep).group(1)
+                    m = _ANCHOR_RE.match(ep)
+                    node = m.group(1) if m else ep
                     if node not in anchor_ids:
                         raise SpecError(f"arrow '{el.id}' 的 {name} 引用了不存在的节点 '{node}'")
         elif isinstance(el, GroupEl):
@@ -565,6 +568,9 @@ def _validate_refs(spec: FigureSpec) -> None:
                     raise SpecError(f"group '{el.id}' 的成员 '{m}' 不存在（成员必须是 box/asset/panel/tokens/network/scatter 的 id）")
 
 
-def parse_anchor(s: str) -> tuple[str, str, float]:
+def parse_anchor(s: str) -> tuple[str, str | None, float]:
+    """解析锚点：'id.side[@t]' → (id, side, t)；裸 'id' → (id, None, 0.5)（None 表示自动选边）。"""
     m = _ANCHOR_RE.match(s)
-    return m.group(1), m.group(2), float(m.group(3)) if m.group(3) else 0.5
+    if m:
+        return m.group(1), m.group(2), float(m.group(3)) if m.group(3) else 0.5
+    return s, None, 0.5

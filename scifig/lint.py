@@ -58,6 +58,7 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues += _check_arrow_crossings(spec, res)
     issues += _check_asset_scale(res)
     issues += _check_density(spec, res)
+    issues += _check_alignment(spec, res)
     return issues
 
 
@@ -188,6 +189,100 @@ def _check_asset_scale(res: RenderResult) -> list[Issue]:
         if shown.w < 12 and shown.h < 12:
             issues.append(Issue("W", "asset-tiny",
                                 f"素材 '{ref}' 显示尺寸仅 {shown.w:.0f}×{shown.h:.0f}mm，考虑加大槽位或裁剪素材"))
+    return issues
+
+
+# 对齐/间距体检只抓"近失"（明显想对齐/等距却差一点），不碰有意的错落——后者靠目检。
+_SNAP_TOL = 0.5      # mm：错位/间距差 ≤ 此值算已对齐/已等距，不报（亚像素级）
+_NEAR_ALIGN = 2.0    # mm：错位在 (SNAP, NEAR] 内 = "几乎对齐却没对上" → 提示；> 视为有意错落，不报
+_NEAR_GAP = 2.5      # mm：相邻间距极差在 (SNAP, NEAR] 内 = "几乎等距却差一点" → 提示；> 视为有意
+_BAND_OVERLAP = 0.6  # 交叉轴重叠 ≥ 此比例才算同一行/列（锚定首元素，防阶梯误聚类）
+
+
+def _overlap_frac(a0: float, a1: float, b0: float, b1: float) -> float:
+    inter = min(a1, b1) - max(a0, b0)
+    denom = min(a1 - a0, b1 - b0)
+    return inter / denom if denom > 1e-9 else 0.0
+
+
+def _bands(nodes: list[tuple[str, Rect]], axis: str) -> list[list[tuple[str, Rect]]]:
+    """把节点聚成行(axis='y')或列(axis='x')：按主轴中心排序，锚定每带首元素，
+    交叉轴重叠 ≥ _BAND_OVERLAP 才并入——锚定式聚类避免"阶梯状"被误判成一行。"""
+    if axis == "y":
+        center, lo, hi = (lambda r: r.cy), (lambda r: r.y), (lambda r: r.bottom)
+    else:
+        center, lo, hi = (lambda r: r.cx), (lambda r: r.x), (lambda r: r.right)
+    ordered = sorted(nodes, key=lambda n: center(n[1]))
+    bands: list[list[tuple[str, Rect]]] = []
+    for n in ordered:
+        placed = False
+        for band in bands:
+            ar = band[0][1]  # 锚 = 该带首元素
+            if _overlap_frac(lo(ar), hi(ar), lo(n[1]), hi(n[1])) >= _BAND_OVERLAP:
+                band.append(n)
+                placed = True
+                break
+        if not placed:
+            bands.append([n])
+    return bands
+
+
+def _near_align_issue(ids: str, edges: list[list[float]], code: str, where: str, hint: str) -> Issue | None:
+    """edges = [顶/左, 底/右, 中线] 三组坐标。取三种对齐里最接近的那种，
+    若其错位落在"近失"区间 (SNAP, NEAR] → 提示 snap；已对齐或明显有意错落都不报。"""
+    best = min(max(e) - min(e) for e in edges)
+    if _SNAP_TOL < best <= _NEAR_ALIGN:
+        return Issue("W", code, f"同{where}节点几乎对齐却差 {best:.1f}mm: {ids}——{hint}")
+    return None
+
+
+def _near_gap_issue(members: str, pitches: list[float], where: str) -> Issue | None:
+    """pitches = 相邻节点**中心距**（不是边到边）——这样宽度不一但中心等距的布局不会被误报。"""
+    if len(pitches) < 2 or min(pitches) <= 0:
+        return None
+    spread = max(pitches) - min(pitches)
+    if _SNAP_TOL < spread <= _NEAR_GAP:
+        return Issue("W", "uneven-gap",
+                     f"同{where}节点中心间距几乎相等却差 {spread:.1f}mm: {members}——微调成等距更整齐")
+    return None
+
+
+def _check_alignment(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """同一行/列的 box/asset 的**近失**对齐/间距检查（"图片分布不好"里可机检的那类小瑕疵）。
+    只抓"明显想对齐/等距却差 0.5–2mm"的情形；有意的错落（差距大）与已对齐（差距<0.5mm）都不报。"""
+    issues: list[Issue] = []
+    nodes = [(el.id, el.rect) for el in spec.elements if isinstance(el, (BoxEl, AssetEl))]
+    if len(nodes) < 3:
+        return issues
+
+    for row in _bands(nodes, "y"):
+        if len(row) < 3:
+            continue
+        row = sorted(row, key=lambda n: n[1].x)
+        rects = [r for _, r in row]
+        ids = ", ".join(i for i, _ in row)
+        ai = _near_align_issue(ids, [[r.y for r in rects], [r.bottom for r in rects],
+                                     [r.cy for r in rects]], "row-misaligned", "排", "统一 y 或 h 即可对齐")
+        if ai:
+            issues.append(ai)
+        gi = _near_gap_issue(ids, [rects[i + 1].cx - rects[i].cx for i in range(len(rects) - 1)], "排")
+        if gi:
+            issues.append(gi)
+
+    for col in _bands(nodes, "x"):
+        if len(col) < 3:
+            continue
+        col = sorted(col, key=lambda n: n[1].y)
+        rects = [r for _, r in col]
+        ids = ", ".join(i for i, _ in col)
+        ai = _near_align_issue(ids, [[r.x for r in rects], [r.right for r in rects],
+                                     [r.cx for r in rects]], "col-misaligned", "列", "统一 x 或 w 即可对齐")
+        if ai:
+            issues.append(ai)
+        gi = _near_gap_issue(ids, [rects[i + 1].cy - rects[i].cy for i in range(len(rects) - 1)], "列")
+        if gi:
+            issues.append(gi)
+
     return issues
 
 

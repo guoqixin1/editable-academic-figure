@@ -29,7 +29,7 @@ pip install -r requirements.txt
 sudo apt install libcairo2 fonts-noto-cjk fonts-liberation2
 ```
 
-自检：`python tests/test_scifig.py` 应输出 `46 passed`。
+自检：`python -m pytest tests/ -q` 应全部通过（当前 53 passed）。
 
 ---
 
@@ -198,7 +198,7 @@ assets:
   fill: "#FFFFFF"          # block 样式的填充色（默认白=空心箭头；填彩色=实心粗箭头）
 ```
 
-- **锚点**：`节点id.side`，side ∈ `left/right/top/bottom/center`；可加 `@t`（0~1）指定边上位置，如 `enc.right@0.3`。group 也可作锚点（框对框连线）。
+- **锚点**：最简写**裸节点 id**（`from: enc, to: dec`）——渲染时**自动选朝向对方的那条边**，多数情况最整齐、省去手算 side，是消除"箭头没对上"的首选；要精确控制才写 `节点id.side`，side ∈ `left/right/top/bottom/center`，可加 `@t`（0~1）指定边上位置，如 `enc.right@0.3`。group 也可作锚点（框对框连线）。
 - **route**：`auto` 会根据两端锚点边智能选折线，且多条同向箭头会自动共用一条总线（fan-out/fan-in 很干净）。`arc` 画二次贝塞尔弧线——无线链路、环形流程、绕大弯的场景。
 - **via**：给了途经点就走「起点→途经点→终点」直线连接，用于让残差/跳连**绕开**中间的盒子（否则会触发 `arrow-through-node`）。
 - **style: block**：画多边形粗箭头（始终直线）。`fill` 白色=流程图空心箭头；`fill` 同 `color`=彩色实心粗箭头（模型图的强调流向）。
@@ -413,7 +413,7 @@ python -m scifig.cli studio path/to/figure.yaml    # 自动打开 http://127.0.0
 
 - **先占位、后填素材**。素材没生成时会渲成虚线占位框，不阻塞——先把坐标、字号、连线调到满意，再抽卡。倒过来做会反复返工。
 - **用 `--grid` 对坐标**。10mm 网格叠上去，对齐一目了然；改坐标重渲即可精确微调，这是本工具相对纯 AI 生图的核心价值。
-- **同类元素等尺寸、共坐标**。同一行的盒子写相同的 `y` 和 `h`，同一列写相同的 `x` 和 `w`，天然对齐。
+- **同类元素等尺寸、共坐标**。同一行的盒子写相同的 `y` 和 `h`，同一列写相同的 `x` 和 `w`，天然对齐。渲染体检会用 `row/col-misaligned`、`uneven-gap` 替你抓"几乎对齐/等距却差 1–2mm"的手滑，按提示 snap 即可（有意的大错落不报）。
 - **画布尺寸要贴合内容**。体检报 `canvas-sparse`（内容覆盖 <45%）就是四周留白太多，把 `width/height` 收紧即可。双栏 180mm、单栏 ~85mm 是期刊常用值。
 
 ### 关于 AI 素材抽卡（最需要经验的部分）
@@ -434,6 +434,7 @@ python -m scifig.cli studio path/to/figure.yaml    # 自动打开 http://127.0.0
 
 ### 关于形状与连线
 
+- **箭头端点优先写裸 id**：`from: a, to: b` 会自动选朝向对方的那条边、落在边中点，省去手算 `.side`，也不会"箭头没对上"；只有要精确指定某条边/某个边上位置时才写 `a.right@0.3`。
 - **判定菱形要给足尺寸**：diamond 的文字区只有外接框的 ~60%，短标题（如「loss 收敛?」）也建议给到 55×22mm 以上，否则文字溢出。
 - **残差/跳连一定用 `via`**：纵向堆叠的网络图里，直连侧边会穿过中间的宽盒子（体检报 `arrow-through-node`）。用 `via` 把线引到盒子外侧再回来，一步到位。
 - **善用 `auto` 路由的总线效应**：多条箭头指向同一目标时，`auto` 会让它们并到同一条竖/横线上，fan-in/fan-out 自动变整齐，不用手算。
@@ -487,6 +488,8 @@ python -m scifig.cli studio path/to/figure.yaml    # 自动打开 http://127.0.0
 | `font-too-small` | W | 字号 <5.5pt | 调大字号或 `font_scale` |
 | `font-small` | W | 字号 5.5–6.0pt，缩印后偏小 | 调大字号或 `font_scale`（可接受则忽略） |
 | `node-overlap` | W | 两节点矩形重叠 | 调 `rect` |
+| `row-misaligned` / `col-misaligned` | W | 同排/列节点几乎对齐却差 0.5–2mm（多半手滑） | 统一它们的 `y`+`h`（横排）或 `x`+`w`（竖排）；有意的大错落不报 |
+| `uneven-gap` | W | 同排/列节点中心间距几乎相等却差一点 | 微调相邻坐标成等距（按中心距算，宽度不一不误报） |
 | `asset-tiny` | W | 素材显示 <12mm | 加大槽位或裁掉素材空白 |
 | `canvas-sparse` | W | 内容包围盒覆盖画布 <45%，四周留白过多 | 缩小画布尺寸 |
 | `canvas-crowded` | W | 节点面积占画布 >82% | 加大画布 |

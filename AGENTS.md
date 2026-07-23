@@ -25,7 +25,7 @@
 - **坐标系**：mm，左上原点，x 向右、y 向下。`rect: [x, y, w, h]`。`at: [x, y]` 是点（text/marker）。
 - **绘制顺序（z 轴，后画的盖前面的）**：`panel` → `group` → `box`/`asset`/`tokens` → `arrow` → `marker` → `text`/`panel_label`。
   所以：分区容器 `panel` 放最前面写；标注 `marker`/`text` 放最后写才在最上层。
-- **锚点**：箭头端点写 `节点id.side`，side ∈ `left|right|top|bottom|center`，可加 `@t`(0~1) 指定边上位置，如 `enc.right@0.3`；也可直接写坐标 `[x, y]`。
+- **锚点**：箭头端点最简写 `节点id`（**自动选朝向对方的那条边**，最省心，消除"箭头没对上"）；要精确控制某条边再写 `节点id.side`，side ∈ `left|right|top|bottom|center`，可加 `@t`(0~1) 指定边上位置，如 `enc.right@0.3`；也可直接写坐标 `[x, y]`。
 - **对齐靠共享坐标**：同一行的盒子写相同 `y`+`h`，同一列写相同 `x`+`w`，天然对齐。这是改图时保持整齐的关键手法。
 - **画布**：双栏 `width≈180`，单栏 `width≈85`（mm）；高度贴合内容（体检 `canvas-sparse` 提示留白过多）。
 
@@ -87,7 +87,7 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 | **对齐一排盒子** | 统一它们的 `y` 和 `h`（横排）或 `x` 和 `w`（竖排）；等间距则让相邻 `x` 差值一致。 |
 | **加一个节点** | 新增一条 `box`，`id` 唯一，`rect` 放到空位；需要连线再加 `arrow`。 |
 | **删节点** | 删该元素，并删掉所有 `from/to/members` 引用它的 `arrow`/`group`（否则报错）。 |
-| **加连线** | `- {type: arrow, from: a.right, to: b.left, route: auto, label: ...}`。 |
+| **加连线** | 最简 `- {type: arrow, from: a, to: b, label: ...}`——裸 id **自动选朝向对方的边**，多数情况最整齐、不会"没对上"；要精确控制某条边再写 `from: a.right, to: b.left`。 |
 | **箭头穿过了别的盒子**（`arrow-through-node`） | 换 `route`(hv/vh/z/zv)；仍穿则加 `via` 途经点把线引到盒子外侧再回来。 |
 | **加残差 / skip 连接** | `arrow` 用 `via` 走侧边：`from: mha.left, to: an.left, via: [[侧边x, y1], [侧边x, y2]], style: dashed, label: 残差`。 |
 | **换形状** | 改 `box.shape`（数据库→`cylinder`、采样块→`trapezoid`、判定→`diamond` 并给足尺寸）。 |
@@ -137,6 +137,8 @@ python -m scifig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {proj}
 | `asset-placeholder` | W | **正常**，实验图待用户手动插入；不用管 |
 | `font-too-small`/`font-small` | W | 调大字号或 `font_scale` |
 | `node-overlap` | W | 调 `rect` |
+| `row-misaligned`/`col-misaligned` | W | 同排/列节点**几乎对齐却差 0.5–2mm**（多半是手滑）→ 统一它们的 `y`+`h`（横排）或 `x`+`w`（竖排）snap 齐；明显有意的错落（>2mm）不会报 |
+| `uneven-gap` | W | 同排/列节点**中心间距几乎相等却差一点** → 微调相邻坐标成等距（按中心距算，宽度不一也不误报） |
 | `asset-tiny` | W | 加大槽位或裁素材空白 |
 | `canvas-sparse`/`canvas-crowded` | W | 调 `figure` 尺寸贴合内容 |
 

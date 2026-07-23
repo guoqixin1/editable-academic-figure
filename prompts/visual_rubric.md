@@ -4,30 +4,17 @@
 
 ## 一、机检（lint 自动）
 
-`python -m scifig.cli render spec.yaml` 会打印 E/W 两级问题：
+`render` 会打印 E/W 两级问题，覆盖客观项：溢出 / 重叠 / 越界 / 字号 / 穿线 / 疏密，以及**对齐与等距近失**（`row-misaligned` / `col-misaligned` / `uneven-gap`——同排/列几乎对齐或等距却差 1–2mm 时提示 snap，明显有意的错落不报）。
 
-| 代码 | 级别 | 含义 | 常见修法 |
-| --- | --- | --- | --- |
-| `asset-missing` | E | 素材文件不存在，渲成占位框 | 跑 `assets` 生成，或修 `src` 引用 |
-| `text-overflow` | E | box 内容高度超出盒子 | 加大 `rect` 高度 / 缩短文字 / 调小 `body_size` |
-| `text-overlap` | E | 两段文字物理重叠 | 移动 `at` 坐标或错开元素 |
-| `out-of-canvas` | E | 文字或节点超出画布 | 调坐标或加大 `figure.width/height` |
-| `arrow-through-node` | E | 箭头穿过无关节点 | 改 `route`（hv/vh/z/zv），或用 `via` 途经点绕行 |
-| `asset-placeholder` | W | 真实实验图占位槽待填（**正常状态，非缺陷**） | 投稿前由用户放真实文件；开发阶段忽略 |
-| `font-too-small` | W | 字号 < 5.5pt | 调大字号或 `font_scale` |
-| `font-small` | W | 字号 5.5–6.0pt，缩印偏小 | 调大字号或 `font_scale`（可接受则忽略） |
-| `node-overlap` | W | 两节点矩形重叠 | 调 `rect` |
-| `asset-tiny` | W | 素材显示 < 12mm | 加大槽位或裁掉素材空白 |
-| `canvas-sparse` | W | 内容包围盒覆盖画布 <45%，留白过多 | 缩小画布尺寸 |
-| `canvas-crowded` | W | 节点面积占画布 >82% | 加大画布 |
+> **完整体检码 → 修法表见 [`../AGENTS.md`](../AGENTS.md) §4（唯一权威，勿在本文件重复维护）。**
 
-**目标：E 级必须清零，W 级尽量清零**（`asset-placeholder` 例外，是预期内的待填占位）。
+判读口径：**E 级必须清零，W 级尽量清零**（`asset-placeholder` 是预期内的待填占位，例外）。
 
 ## 二、目检（多模态看图）
 
 渲染 PNG 后逐项打分（参照短视频工作流 phase9 的做法）：
 
-1. **对齐与网格**：同一行/列的盒子边缘是否对齐？用 `--grid` 叠加 10mm 网格核对坐标。
+1. **对齐与网格**：同一行/列的盒子边缘是否对齐、间距是否均匀？用 `--grid` 叠加 10mm 网格核对坐标（机检的 `row/col-misaligned`、`uneven-gap` 会先替你抓 1–2mm 级近失）。
 2. **留白与呼吸感**：是否有大块死白，或元素挤成一团？期刊图偏好紧凑但不拥挤。
 3. **箭头语义**：箭头方向、起止锚点是否表达了正确的数据流？双向流用 `bidir: true`。
 4. **配色一致性**：AI 素材的色调是否和 `theme` 协调？不协调就换候选（见抠图/抽卡）或换 `preset`。
