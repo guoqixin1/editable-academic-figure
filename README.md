@@ -57,6 +57,19 @@ pip install -r requirements.txt
 sudo apt install libcairo2 fonts-noto-cjk fonts-liberation2
 ```
 
+### AI 素材的 API Key（可选，仅 `assets` 抽卡步骤需要）
+
+布局/渲染（`box`/`arrow`/`panel`/`text` 等纯代码元素）**不需要 key**；只有 spec 里声明了 `assets`、要生成插画素材时才会调用 AI 生图 API：
+
+1. 去 [grsai.ai/zh](https://grsai.ai/zh) 注册账号（注册送 5000 积分，够测试用），在控制台创建 API key。scifig 默认调用其 `nano-banana-fast` 模型出图（见 `scifig/assets.py`），也可传 `--model` 换别的 grsai 模型。
+2. 拿到 key 后二选一：
+   ```bash
+   python -m scifig.cli assets figure.yaml --api-key sk-xxxx     # 命令行传入
+   export SCIFIG_API_KEY=sk-xxxx                                 # 或设环境变量，下面命令可省略 --api-key
+   ```
+
+没有 key 也能正常用：声明了 `assets` 但没配 key 时，素材会渲成虚线占位框（不阻塞布局调试），配好 key 后重渲即可自动填入。
+
 ## 交互式微调：studio（推荐）
 
 改一个数就得重跑 CLI 太笨重——`studio` 起一个本地网页（零额外依赖，Python 标准库 + 单文件原生 JS）：
@@ -78,6 +91,7 @@ python -m scifig.cli studio examples/rep_evdispatch/figure.yaml
 python -m scifig.cli render examples/demo_method/figure.yaml --grid -o draft.png
 
 # 2. 抽卡生成 spec 里声明的 AI 素材（每个默认抽 3 张候选，自动抠图+评分+选卡）
+# --api-key 从 https://grsai.ai/zh 注册获取（见上方「AI 素材的 API Key」），也可用环境变量 SCIFIG_API_KEY
 python -m scifig.cli assets examples/demo_method/figure.yaml --api-key sk-xxxx
 
 # 3.（可选）不满意就看 contact sheet 换卡，或整体重抽
