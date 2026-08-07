@@ -1,0 +1,21 @@
+figure: {width: 150, height: 78, grid_bg: true}
+theme: isosystem
+elements:
+  - {type: panel, id: p, rect: [4, 4, 142, 70], title: "Edge Inference Stack", header_style: smallcaps, fill: "#E8EEF5"}
+  - {type: box, id: cam, rect: [12, 20, 24, 28], title: "Sensor", body: "RGB-D", variant: plain, shape: trapezoid, sketch: grid, valign: top}
+  - {type: box, id: isp, rect: [44, 16, 28, 20], title: "ISP", body: "preprocess", variant: primary, sketch: spectrum, valign: top}
+  - {type: box, id: npu, rect: [44, 42, 28, 22], title: "NPU", body: "INT8 net", variant: highlight, sketch: layers, valign: top}
+  - {type: box, id: ram, rect: [84, 16, 26, 20], title: "DRAM", body: "feature", variant: muted, shape: cylinder, sketch: bars, valign: top}
+  - {type: box, id: act, rect: [84, 42, 26, 22], title: "Actuator", body: "cmd", variant: secondary, sketch: dots_flow, valign: top}
+  - {type: box, id: host, rect: [118, 26, 22, 28], title: "Host", body: "log", variant: tertiary, sketch: matrix, valign: top}
+  - {type: arrow, from: cam.right, to: isp.left, semantic: data, label: "raw", route: avoid}
+  - {type: arrow, from: isp.bottom, to: npu.top, semantic: data, route: avoid}
+  - {type: arrow, from: isp.right, to: ram.left, semantic: control, label: "buf", route: avoid}
+  - {type: arrow, from: npu.right, to: act.left, semantic: data, label: "pose", route: avoid}
+  - {type: arrow, from: ram.bottom, to: npu.right@0.3, semantic: optional, route: avoid}
+  - {type: arrow, from: act.right, to: host.left, semantic: feedback, label: "tel", route: avoid}
+  - {type: legend, id: lg, at: [12, 62], items: [
+      {swatch: box, color: "#3D5A80", label: "compute"},
+      {swatch: box, color: "#EE6C4D", label: "action"},
+      {swatch: line, color: "#3D5A80", label: "data"},
+    ]}

@@ -2,7 +2,7 @@
 
 **Editable Academic Figure** —— 受控学术作图工具：**布局用 YAML 逐毫米定死（可控、可复现、可微调），AI 只生成插画物件并抠成透明图（美观），文字/公式全部矢量渲染（杜绝乱码）**。目标是产出可直接进 Illustrator/Inkscape 的可编辑学术论文配图草稿，把手工调整压到最少。
 
-适合方法框架图、网络架构图、模块详解、对比消融、数据行为示意，以及体系结构 / 分布式 / 流程图。新图默认 **顶会克制风**（`topconf`）。
+适合方法框架图、网络架构图、模块详解、对比消融、数据行为示意，以及体系结构 / 分布式 / 流程图。新图默认 **NeurIPS Soft Pastel**（`neurips`）。
 
 > 人用本文档；让 AI 助手二次改图 → [AGENTS.md](AGENTS.md)。从零作图先读 [prompts/FIGURE_BRIEF.md](prompts/FIGURE_BRIEF.md) 与 [prompts/AGENT_WORKFLOW.md](prompts/AGENT_WORKFLOW.md)。
 
@@ -66,7 +66,7 @@ python -m paperfig.cli studio hello.yaml    # 拖拽 / 键盘微调
 | 步 | 做什么 | 命令 / 文档 |
 | --- | --- | --- |
 | **0.5 Figure Brief** | 把粗糙需求扩成结构化图纸说明（图类型、分区、每盒 title/body/sketch、箭头语义、风格、素材清单） | [`prompts/FIGURE_BRIEF.md`](prompts/FIGURE_BRIEF.md) — **本阶段不写 YAML** |
-| **1 写 spec** | Brief → YAML；新图默认 `topconf` + 四层分解 | [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md) |
+| **1 写 spec** | Brief → YAML；新图默认 `neurips` + 四层分解 | [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md) |
 | **2 占位渲染** | 调布局；缺素材 = 虚线框 | `python -m paperfig.cli render fig.yaml --grid -o draft.png --dpi 180` |
 | **3 抽卡**（可选） | 生成 AI 物件；**必须目检** contact sheet 再 `select` | `python -m paperfig.cli assets fig.yaml` |
 | **4 定稿** | 高 DPI + SVG；清零 E，尽量清零 `R-*` | `python -m paperfig.cli render fig.yaml -o fig.png --svg fig.svg` |
@@ -79,15 +79,18 @@ python -m paperfig.cli studio hello.yaml    # 拖拽 / 键盘微调
 
 ## 3. 主题与配色
 
-### 3.1 五个 preset
+### 3.1 主题 preset
 
 | preset | 视觉 | 适用 |
 | --- | --- | --- |
-| **`topconf`**（新图默认） | 白填充 + Okabe-Ito 彩色/灰细边框 + 浅灰分区；投影默认关 | CVPR / NeurIPS / Nature 顶会克制风 |
-| **`airy`** | 白面板 + pastel 填充 + **默认 soft shadow** | 现代 ML/RL 示意、柔彩浮动面板 |
-| `sci` | 蓝/绿/橙柔和填充底 | 旧稿兼容；通用 AI/ML |
-| `warm` | 橙棕大地色 | 工程/系统图、需与 sci 区分 |
-| `mono` | 灰阶 | 体系结构、黑白印刷投稿 |
+| **`neurips`**（新图默认） | Soft Pastel 浅填 + Okabe 描边；印刷字号；无阴影；inline 图例 | 主文方法 / 架构图 |
+| **`topconf`** | 白填充 + Okabe 彩/灰细边框；投影默认关 | 顶刊克制 / 白底边框风 |
+| **`airy`** | pastel 填充 + **默认 soft shadow** + 大圆角 | talk / blog；**勿当论文默认** |
+| **`editorial`** | 暖纸画布 `#FAF9F5` + clay accent；细线无阴影 | 博客隐喻 / 解释性附图 |
+| **`isosystem`** | 浅晒图 `#F4F7FA` + 钢蓝；可选 `figure.grid_bg: true` | 系统 / 硬件 / 具身架构 |
+| `sci` / `warm` / `mono` | 旧稿兼容 | 非新图默认 |
+
+示例：[`examples/themes/editorial_concept.yaml`](examples/themes/editorial_concept.yaml)、[`examples/themes/isosystem_stack.yaml`](examples/themes/isosystem_stack.yaml)。
 
 ```yaml
 # airy 示例（默认 soft shadow）
@@ -120,23 +123,25 @@ elements:
 
 | 方案 | YAML `palette` 要点 |
 | --- | --- |
-| Okabe-Ito（默认） | `theme: {preset: topconf}` |
-| Teal + Amber | `{primary: "#00897B", secondary: "#FFB300", section_bg: "#ECEFF1"}` |
-| Navy + Coral | `{primary: "#1A3A5C", secondary: "#E05A47", section_bg: "#F9F6EE"}` |
-| Slate + Violet | `{primary: "#3F51B5", secondary: "#7E57C2", section_bg: "#EDE7F6"}` |
-| Forest + Gold | `{primary: "#2E7D32", secondary: "#C49A00", section_bg: "#F9F6EE"}` |
-| Minimal Grey | `{primary: "#263238", secondary: "#546E7A", tertiary: "#0072B2", section_bg: "#ECEFF1"}` |
-| Airy 柔彩 | `theme: {preset: airy}` |
+| Soft Pastel（默认） | `theme: {preset: neurips}` |
+| Okabe 白底彩框 | `theme: {preset: topconf}` |
+| Teal + Amber | `{preset: neurips, palette: {primary: "#00897B", secondary: "#FFB300"}}` |
+| Navy + Coral | `{preset: topconf, palette: {primary: "#1A3A5C", secondary: "#E05A47", section_bg: "#F9F6EE"}}` |
+| Slate + Violet | `{preset: topconf, palette: {primary: "#3F51B5", secondary: "#7E57C2", section_bg: "#EDE7F6"}}` |
+| Forest + Gold | `{preset: topconf, palette: {primary: "#2E7D32", secondary: "#C49A00", section_bg: "#F9F6EE"}}` |
+| Minimal Grey | `{preset: topconf, palette: {primary: "#263238", secondary: "#546E7A", tertiary: "#0072B2", section_bg: "#ECEFF1"}}` |
+| Airy / Editorial / IsoSystem | `theme: {preset: airy\|editorial\|isosystem}` |
 
 ### 3.3 variant 语义分配
 
 | variant | 语义 |
 | --- | --- |
-| `primary` | **核心贡献**模块 |
-| `secondary` | 次要 / 辅助支路 |
-| `tertiary` / `accent` | 点缀 / 输出 |
-| `muted` / `plain` | 常规结构、共享骨架 |
-| `highlight` / `dark` | 强调或深底白字 |
+| `primary` / `secondary` / `tertiary` | 主 / 次 / 辅模块（neurips 为浅填+同色描边） |
+| `sky` / `purple` / `vermillion` | neurips 扩展角色色 |
+| `trainable` / `frozen` | 可训（暖橙）/ 冻结（冷灰蓝） |
+| `ours` / `baseline` | 对比列强调 / 灰色基线 |
+| `muted` / `plain` / `section` | 常规结构、共享骨架 |
+| `highlight` / `accent` / `dark` | 强调或深底白字 |
 
 同图主色 ≤3 + 灰系。`≥2` 种非 muted 语义色时建议加 `legend`（机检约在 ≥3 色时报 `R-no-legend`）。
 
@@ -146,7 +151,7 @@ elements:
 | --- | --- |
 | 4–5 种彩色背景面板 | 白/近白 + 极浅 `section_bg` |
 | 高饱和彩色 banner | topconf 下 `header_style: smallcaps` |
-| 每个模块不同彩色填充 | 白填充 + 彩色/灰**边框** |
+| 每个模块高饱和填色 | neurips：浅 pastel 填；topconf：白填 + 彩边 |
 | 彩虹渐变 / 霓虹 | 扁平纯色；融合例外可用双色 `gradient` |
 | 无图例的多语义色 | 加 `legend` |
 

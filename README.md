@@ -5,7 +5,7 @@
 
 - **Controllable layout**：`layout:` 树（row/col/grid）或显式 mm 坐标；`resolve` 物化后可手改，100% 可复现。
 - **AI 只画物件**：自动抠成透明 PNG；文字/连线/公式全部代码渲染。
-- **顶会级信息密度**：`topconf`/`airy` 主题、`sketch` 缩略图、`legend`、soft shadow、accent 色条。
+- **顶会级信息密度**：`neurips` Soft Pastel / `topconf` / `editorial` / `isosystem`、`sketch`、inline `legend`、箭头语义。
 - **生成即体检**：几何 + 视觉丰度 lint（含 `R-empty-box` / 箭头对齐）；本地 **studio** 拖拽微调。
 
 |  | 纯代码作图 (draw.io/TikZ) | 纯 AI 生图 | **paperfig** |
@@ -105,7 +105,7 @@ elements:
 ### 五步工作流（从零作图）
 
 1. **Figure Brief**（Phase 0.5）：用 [`prompts/FIGURE_BRIEF.md`](prompts/FIGURE_BRIEF.md) 把粗糙需求扩成结构化图纸说明（分区 / title·body·sketch / 箭头语义）。**已有精确改图指令则跳过。**
-2. **写结构化 spec**：`layout:` 树摆盒子 + 箭头 `route: avoid`（零手写坐标）；新图默认 `theme: {preset: topconf}`。参见 [`examples/showcase/rag_framework_flex.yaml`](examples/showcase/rag_framework_flex.yaml)。
+2. **写结构化 spec**：`layout:` 树摆盒子 + 箭头 `route: avoid`（零手写坐标）；新图默认 `theme: {preset: neurips}`。参见 [`examples/showcase/rag_framework_flex.yaml`](examples/showcase/rag_framework_flex.yaml)。
 3. **占位渲染 / 物化**：`python -m paperfig.cli render fig.yaml --grid -o draft.png --dpi 180`；结构满意后 `python -m paperfig.cli resolve fig.yaml -o fig.resolved.yaml`，再对手调单个 `rect`。
 4. **抽卡素材**（可选）：`python -m paperfig.cli assets fig.yaml` → 目检 contact sheet → `select` 换卡。
 5. **定稿**：`python -m paperfig.cli render fig.yaml -o fig.png --svg fig.svg`（清零 E 级，尽量清零 `R-*`）。
@@ -115,8 +115,8 @@ elements:
 ```yaml
 figure: {width: 180, height: 80, dpi: 600}
 theme:
-  preset: topconf          # topconf | airy | sci | warm | mono
-  palette: {primary: "#00897B", secondary: "#FFB300", section_bg: "#ECEFF1"}
+  preset: neurips          # neurips | topconf | airy | editorial | isosystem
+  # palette: {primary: "#00897B", secondary: "#FFB300"}   # 可选覆盖
 
 elements:
   - {type: panel, id: p, rect: [4, 4, 172, 72], title: Overall Pipeline,

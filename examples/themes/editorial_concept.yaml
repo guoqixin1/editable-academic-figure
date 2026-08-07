@@ -1,0 +1,17 @@
+figure: {width: 140, height: 72}
+theme: editorial
+elements:
+  - {type: panel, id: p, rect: [4, 4, 132, 64], title: "Alignment as Editing", header_style: smallcaps, fill: "#F2EDE4"}
+  - {type: box, id: draft, rect: [12, 18, 28, 36], title: "Draft", body: "raw intent", variant: plain, sketch: waveform, valign: top}
+  - {type: box, id: critic, rect: [48, 14, 36, 22], title: "Critic", body: "clay accent", variant: highlight, sketch: nested, valign: top}
+  - {type: box, id: revise, rect: [48, 40, 36, 20], title: "Revise", body: "thin edits", variant: secondary, sketch: tree, valign: top}
+  - {type: box, id: essay, rect: [96, 18, 30, 36], title: "Essay", body: "warm ink", variant: tertiary, sketch: layers, valign: top, shape: stadium}
+  - {type: arrow, from: draft.right, to: critic.left, semantic: data, label: "read", route: avoid}
+  - {type: arrow, from: critic.bottom, to: revise.top, semantic: control, label: "score", route: avoid}
+  - {type: arrow, from: revise.right, to: essay.left, semantic: data, label: "ink", route: avoid}
+  - {type: arrow, from: essay.left@0.2, to: critic.right, semantic: feedback, label: "loop", route: avoid}
+  - {type: legend, id: lg, at: [12, 58], items: [
+      {swatch: box, color: "#D97757", label: "critic"},
+      {swatch: box, color: "#6A9BCC", label: "revise"},
+      {swatch: dashed, color: "#6A9BCC", label: "feedback"},
+    ]}
