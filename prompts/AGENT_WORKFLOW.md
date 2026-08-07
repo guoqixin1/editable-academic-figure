@@ -16,7 +16,7 @@
 - **专用示意元素**：神经网络内部 → `network`；数据聚类/嵌入空间 → `scatter`；token 序列/特征金字塔 → `tokens`（`colors` 掩码、`sizes` 递变）；步骤编号 → `badge`；⊕/⊗ 算子 → `marker: oplus/otimes`；无线链路 → `route: arc` + `marker: wifi`。
 - **数学记号**：模块名/损失里的下标上标一律用 `_{...}`/`^{...}`（`E_{s}`、`L_{InfoNCE}`、`ℝ^{(B V) H W C}`），别写伪记号。含 `_`/`^`/`{` 的 YAML 值要加引号。
 - **可训练/冻结标注**：🔥/❄ → `marker`（`fire`/`snow`），贴在模块角上。
-- **连接**：数据/控制流向 → `arrow`，端点直接写**裸节点 id**（`from: a, to: b`）即自动选朝向对方的边、不会"没对上"；只在需要精确指定某条边时才写 `a.right`。残差/skip/需绕开盒子的线 → 用 `arrow.via` 途经点。强调主流向的粗箭头 → `style: block`。多语义流（前向/反馈）用双色区分并配图例（短 arrow + text 拼）。
+- **连接**：数据/控制流向 → `arrow`，端点直接写**裸节点 id**（`from: a, to: b`）即自动选朝向对方的边、不会"没对上"；只在需要精确指定某条边时才写 `a.right`。**箭头一律先写 `route: avoid`**（走廊 A* 正交避障，自动绕盒、垂直进出、平行错开；标签默认 `label_pos: auto` 碰撞打分）。只有对路径不满意时才删掉 `avoid`、改用手写 `via` 微调。强调主流向的粗箭头 → `style: block`。多语义流（前向/反馈）用双色区分并配图例（短 arrow + text 拼）。
 - **素材需求**：哪些概念用插画更直观（设备、器官、文档、机器人……）？这些进 `assets` 抽卡。**抽象概念、带文字的东西不要用 AI 素材**——用 box 或代码画。
 - **真实实验图**：频谱/波形/生成结果/热图/定量曲线等**来自真实实验的图，绝不能让 AI 生成（学术不端）**。用 `asset` + `placeholder: true` 占位，投稿前由用户手动放真实文件进去。
 
@@ -64,7 +64,7 @@
 ### Layer 3 · 全局标注
 
 - 主数据流箭头：`weight: heavy`，`label` 标维度/含义（如 `"R^{B×D}"`、`"features"`）。
-- skip / 残差 / 反馈：`style: dashed` 或 `dotted`，必要时 `via` / `route: arc`。
+- skip / 残差 / 反馈：`route: avoid` + `style: dashed`/`dotted`；自动路径不满意再手写 `via`，或无线链路用 `route: arc`。
 - **设计建议**：≥2 种非 muted 语义色就加 `type: legend`（不要用手拼短箭头冒充）。机检 `R-no-legend` 在 ≥3 色时才报（阈值宽松，不报不代表不需要）。
 
 ### Layer 4 · 风格规格
@@ -381,7 +381,7 @@ python -m paperfig.cli render {project}/figure.yaml -o {project}/figure.png --sv
 - 不要把真实实验结果交给 AI 生成。
 - 空标题框交稿前必须补 body/sketch/icon。
 - 多语义色忘记 `legend` → `R-no-legend`。
-- 箭头穿盒 → `route` / `via`；文字溢出 → 加高或缩短。
+- 箭头穿盒 → 先 `route: avoid`，不满再用 `via`；文字溢出 → 加高或缩短。
 - 上下标 YAML 忘加引号。
 - 素材风格不统一 → 补 `assets_style`，色板跟 `theme.palette`。
 - **真实实验图绝不 AI 生成**（频谱/波形/热图/生成样本/定量曲线）→ 一律 `asset` + `placeholder: true`。

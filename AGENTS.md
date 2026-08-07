@@ -63,7 +63,7 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 | `network` | `id, rect, layers([3,4,3]), variant, node_fill, color, direction(v)` | 迷你 MLP |
 | `scatter` | `id, rect, clusters[{at,rx,ry,rot,n,color}], seed(42), dot_r(0.5), outline(dashed)` | 聚类散点 |
 | `badge` | `id, at, text("1"), size(5), color, text_color(#FFF)` | 编号圆点 |
-| `arrow` | `from, to, route(auto), style(solid\|dashed\|dotted\|block), label, color, head(arrow), bidir(false), label_offset(1.4), via([]), width, fill, bend(0.25), weight(normal), label_bg(true)` | 连线 |
+| `arrow` | `from, to, route(auto), style(solid\|dashed\|dotted\|block), label, color, head(arrow), bidir(false), label_offset(1.4), label_pos, via([]), width, fill, bend(0.25), weight(normal), label_bg(true)` | 连线 |
 | `group` | `id, members[] 或 rect, label, pad(2.5), style(dashed), fill, color, label_pos(top), label_size, lw, hatch(false), shadow` | 分组框 / 分区底 |
 | `text` | `id, at, text, size(7), bold(false), italic(false), color, anchor(middle), max_w, rotate(0), smallcaps(false)` | 自由文字 |
 | `panel_label` | `id, at, text` | a/b/c 面板号（自动加粗） |
@@ -75,7 +75,9 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 - **panel.header_style**：`banner`（色条）\| `smallcaps`（顶会克制：大写标签+灰线）。
 - **legend.swatch**：`box | line | dashed | arrow | dot`。
 - **marker.icon**：`fire snow lock check cross oplus otimes wifi`。
-- **arrow.route**：`auto straight hv vh z zv arc`；**arrow.weight**：`thin|normal|heavy`；**arrow.style** 含 `dotted`；**arrow.label_bg**：标签胶囊底。
+- **arrow.route**：`auto straight hv vh z zv arc avoid`；**优先 `route: avoid`**（走廊网格 A* 正交避障，忽略手写 `via`；失败回退 `auto` 并报 `route-avoid-fallback`）。仅当路径不满意时再用 `via` 微调。
+- **arrow.label_pos**：`auto` = 碰撞打分落标；`route: avoid` 时默认开启。显式 `label_offset` 或非 avoid 箭头保持旧落标（兼容旧图逐像素不变）。
+- **arrow.weight**：`thin|normal|heavy`；**arrow.style** 含 `dotted`；**arrow.label_bg**：标签胶囊底。
 - **group.fill / hatch / shadow**：分区浅底、斜线底纹、投影。
 - **text.smallcaps**：大写+字距；**text.rotate: -90**：竖排。
 - **文字记号**：`_{...}` / `^{...}`（值须加引号）。
@@ -94,8 +96,8 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 | **加一个节点** | 新增一条 `box`，`id` 唯一，`rect` 放到空位；需要连线再加 `arrow`。 |
 | **删节点** | 删该元素，并删掉所有 `from/to/members` 引用它的 `arrow`/`group`（否则报错）。 |
 | **加连线** | 最简 `- {type: arrow, from: a, to: b, label: ...}`——裸 id **自动选朝向对方的边**，多数情况最整齐、不会"没对上"；要精确控制某条边再写 `from: a.right, to: b.left`。 |
-| **箭头穿过了别的盒子**（`arrow-through-node`） | 换 `route`(hv/vh/z/zv)；仍穿则加 `via` 途经点把线引到盒子外侧再回来。 |
-| **加残差 / skip 连接** | `arrow` 用 `via` 走侧边：`from: mha.left, to: an.left, via: [[侧边x, y1], [侧边x, y2]], style: dashed, label: 残差`。 |
+| **箭头穿过了别的盒子**（`arrow-through-node`） | 优先改 `route: avoid`；仍不满意再手写 `via` 把线引到盒子外侧。 |
+| **加残差 / skip 连接** | 先试 `route: avoid` + `style: dashed`；自动路径不满意再用 `via`：`from: mha.left, to: an.left, via: [[侧边x, y1], [侧边x, y2]], style: dashed, label: 残差`。 |
 | **换形状** | 改 `box.shape`（数据库→`cylinder`、采样块→`trapezoid`、判定→`diamond` 并给足尺寸）。 |
 | **融合/跨模态模块要渐变** | 给该 `box` 加 `gradient: [c1, c2]`（两端模态色）。 |
 | **换配色 / 主题** | 局部：改元素 `variant`；全局：改 `theme.preset` 或 `theme.palette`（如 Teal+Amber）。 |
@@ -142,7 +144,8 @@ python -m paperfig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {pro
 | `text-overflow` | E | 加高 `rect` / 缩短文字 / 调小 `body_size`（diamond 文字区仅 ~60%） |
 | `text-overlap` | E | 挪 `at` 或错开元素 |
 | `out-of-canvas` | E | 调坐标或加大 `figure.width/height`（注意 `tokens.sizes` 居中可能越界） |
-| `arrow-through-node` | E | 换 `route`，或用 `via` 绕行 |
+| `arrow-through-node` | E | 优先 `route: avoid`；仍穿再用 `via` |
+| `route-avoid-fallback` | W | A* 无解已回退 `auto`；检查障碍/间隙或改手写 `via` |
 | `asset-placeholder` | W | **正常**，实验图待用户手动插入；不用管 |
 | `font-too-small`/`font-small` | W | 调大字号或 `font_scale` |
 | `node-overlap` | W | 调 `rect` |
@@ -164,8 +167,8 @@ python -m paperfig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {pro
 - **diamond 给足尺寸**：文字区只有外接框 ~60%，短标题也建议 ≥55×22mm。
 - **tokens.sizes 居中越界**：最大值别超出周围留白，否则 token 会伸出画布。
 - **删元素要清引用**：删 box 后，引用它的 arrow/group 会报无效引用。
-- **via 是折线不是曲线**：途经点之间直线相连，绕盒子要给到盒子外侧的坐标。
-- **auto 总线效应**：多箭头指向同一目标会自动并线（fan-in/out 很整齐）；不想并就用 `via` 拆开。
+- **via 是折线不是曲线**：途经点之间直线相连；新图优先 `route: avoid`，via 只作微调。
+- **auto 总线效应**：多箭头指向同一目标会自动并线（fan-in/out 很整齐）；`route: avoid` 会对共享走廊 nudge 错开；仍重叠再用 `via` 拆开。
 - **cairosvg 无字形回退**：中西文/符号靠 `fonts.py` 分段发排，别手动塞奇怪字体。
 
 ---

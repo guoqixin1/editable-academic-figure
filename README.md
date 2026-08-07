@@ -142,7 +142,7 @@ elements:
 
 **box 形状**：`rect` / `stadium` / `diamond` / `cylinder` / `parallelogram` / `hexagon` / `ellipse` / `trapezoid`。支持 `accent` / `header_fill` / `shadow` / `sketch` / `stack` / `gradient`。
 
-**箭头**：裸 id `from: a, to: b` 自动选朝向对方的边；`route`: `auto|straight|hv|vh|z|zv|arc`；`weight`: `thin|normal|heavy`；`style` 含 `dotted`；`via` 绕线；末段强制垂直进入目标边。
+**箭头**：裸 id `from: a, to: b` 自动选朝向对方的边；`route`: `auto|straight|hv|vh|z|zv|arc|avoid`（**推荐 `avoid`**：正交避障，失败回退 `auto`）；`weight`: `thin|normal|heavy`；`style` 含 `dotted`；`via` 仅作微调；`label_pos: auto` 碰撞打分落标（`avoid` 默认开启）；末段强制垂直进入目标边。
 
 坐标 **mm**，字号 **pt**。调布局加 `--grid`。
 
