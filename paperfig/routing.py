@@ -845,8 +845,12 @@ def _label_hard_collision(
         if cap.intersection_area(b.expanded(box_pad)) > 0.02:
             return True
     for t in texts:
-        if cap.intersection_area(t) > 0.05:
-            return True
+        if cap.intersection_area(t) <= 0.05:
+            continue
+        # 落在端点盒内的标题/正文：视为端点内容，不硬拒（否则窄缝标签全被挤走）
+        if endpoints and any(t.intersection_area(e) > 0.5 for e in endpoints):
+            continue
+        return True
     for o in other_caps:
         if cap.intersection_area(o.expanded(0.3)) > 0.05:
             return True
