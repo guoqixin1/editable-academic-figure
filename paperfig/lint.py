@@ -40,8 +40,9 @@ _ARROW_GAP_PENETRATE = 0.5   # 深入视觉边界内部超过此值 → W
 _ARROW_APPROACH_MAX_DEG = 15.0
 _ARROW_APPROACH_MIN_COS = math.cos(math.radians(_ARROW_APPROACH_MAX_DEG))
 
-MIN_FONT_PT = 5.5   # 180mm 图按 1:1 排版时的裸下限
-IDEAL_MIN_FONT_PT = 6.0
+MIN_FONT_PT = 5.5   # 旧主题 font-too-small 下限（lint_min_font 未设时）
+IDEAL_MIN_FONT_PT = 6.0  # 旧主题 font-small 软下限（lint_min_font 未设时）
+ABS_MIN_FONT_PT = 5.0    # 绝对硬底线：任何主题低于此仍报警
 
 # 视觉丰度阈值
 _RICHNESS_MIN_ELEMENTS = 8          # ≥ 此数才检查分区底
@@ -87,7 +88,7 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
 
     issues += _check_text_overlap(res)
     issues += _check_canvas_bounds(spec, res)
-    issues += _check_font_sizes(res)
+    issues += _check_font_sizes(spec, res)
     issues += _check_node_overlap(spec, res)
     issues += _check_arrow_crossings(spec, res)
     issues += _check_arrow_geometry(spec, res)
@@ -129,17 +130,30 @@ def _check_canvas_bounds(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     return issues
 
 
-def _check_font_sizes(res: RenderResult) -> list[Issue]:
+def _check_font_sizes(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """字号体检：主题 lint_min_font 控制 font-small；ABS_MIN_FONT_PT 为硬底线。"""
+    from .theme import load_theme
+    th = load_theme(spec.theme_cfg)
+    # None → 旧行为 soft=6.0；印刷主题设 5.5 以放行 caption/arrow 5.8
+    soft_floor = th.lint_min_font if th.lint_min_font is not None else IDEAL_MIN_FONT_PT
+    # 旧主题保留 5.5 的 font-too-small；印刷主题仅用绝对硬底线 5.0
+    hard_floor = ABS_MIN_FONT_PT if th.lint_min_font is not None else MIN_FONT_PT
+
     issues = []
     seen: set[float] = set()
     for s in res.text_spans:
         if not s.text.strip() or s.pt in seen or getattr(s, "diagnostic", False):
             continue
         seen.add(s.pt)
-        if s.pt < MIN_FONT_PT:
+        if s.pt < ABS_MIN_FONT_PT:
+            # 绝对硬底线：任何主题（含把 lint_min_font 调得很低）都报警
             issues.append(Issue("W", "font-too-small",
-                                f"{s.pt:.1f}pt 低于下限 {MIN_FONT_PT}pt（如 “{s.text[:12]}”）"))
-        elif s.pt < IDEAL_MIN_FONT_PT:
+                                f"{s.pt:.1f}pt 低于绝对下限 {ABS_MIN_FONT_PT}pt"
+                                f"（如 “{s.text[:12]}”）"))
+        elif s.pt < hard_floor:
+            issues.append(Issue("W", "font-too-small",
+                                f"{s.pt:.1f}pt 低于下限 {hard_floor}pt（如 “{s.text[:12]}”）"))
+        elif s.pt < soft_floor:
             issues.append(Issue("W", "font-small",
                                 f"{s.pt:.1f}pt 接近下限，印刷缩印后可能难以辨认"))
     return issues

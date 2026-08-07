@@ -1646,6 +1646,39 @@ elements:
     assert any(i.code == "arrow-label-over-text" for i in issues)
 
 
+def test_font_small_theme_aware(tmp_path):
+    """neurips lint_min_font=5.5 放行 5.8；硬底线 5.0；topconf 旧阈值不变。"""
+    from paperfig.lint import _check_font_sizes
+    from paperfig.render import RenderResult, _TextSpan
+
+    def _issues(theme: str, pt: float):
+        spec = load_spec(_write(tmp_path, f"""
+figure: {{width: 40, height: 20}}
+theme: {theme}
+elements:
+  - {{type: text, id: t, at: [10, 10], text: hello, size: {pt}}}
+"""))
+        # 直接注入 span，避免 wrap/测量干扰；lint 从 spec.theme_cfg 读阈值
+        res = RenderResult()
+        res.text_spans.append(
+            _TextSpan(x=2, baseline=10, text="hello", pt=pt, bold=False, color="#333"))
+        return _check_font_sizes(spec, res)
+
+    # neurips：印刷档 5.8 不报；4.8 低于绝对硬底线仍报
+    assert load_theme("neurips").lint_min_font == 5.5
+    codes_ok = {i.code for i in _issues("neurips", 5.8)}
+    assert "font-small" not in codes_ok and "font-too-small" not in codes_ok
+    codes_lo = {i.code for i in _issues("neurips", 4.8)}
+    assert "font-too-small" in codes_lo
+
+    # topconf：未设 lint_min_font → 5.8 仍 font-small；≥6 不报
+    assert load_theme("topconf").lint_min_font is None
+    codes_tc = {i.code for i in _issues("topconf", 5.8)}
+    assert "font-small" in codes_tc
+    codes_tc6 = {i.code for i in _issues("topconf", 6.0)}
+    assert "font-small" not in codes_tc6 and "font-too-small" not in codes_tc6
+
+
 if __name__ == "__main__":
     import tempfile
     import traceback

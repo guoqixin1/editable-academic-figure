@@ -340,6 +340,9 @@ class Theme:
     grid_step: float = 5.0
     grid_lw: float = 0.12
 
+    # lint font-small 软下限（pt）；None=沿用 IDEAL_MIN_FONT_PT(6.0) 旧行为
+    lint_min_font: float | None = None
+
 
 _PRESETS = {
     "sci": _SCI_VARIANTS,
@@ -424,6 +427,7 @@ _PRESET_DEFAULTS: dict[str, dict] = {
         "panel_case": "ml",
         "default_legend_style": "inline",
         "canvas": "#FFFFFF",
+        "lint_min_font": 5.5,  # Nature 下限 5pt + 0.5 缓冲；允许印刷档 5.8
     },
     "editorial": {
         "ink": "#141413",
@@ -446,6 +450,7 @@ _PRESET_DEFAULTS: dict[str, dict] = {
         "default_shadow": False,
         "default_legend_style": "inline",
         "canvas": "#FAF9F5",
+        "lint_min_font": 5.5,
         "arrow_styles": {
             "data": {"style": "solid", "color": "#4A4A4A", "width": 0.24},
             "control": {"style": "solid", "color": "#6A6A6A", "width": 0.20},
@@ -475,6 +480,7 @@ _PRESET_DEFAULTS: dict[str, dict] = {
         "default_shadow": False,
         "default_legend_style": "inline",
         "canvas": "#F4F7FA",
+        "lint_min_font": 5.5,
         "grid_bg": False,  # figure/theme 显式 grid_bg: true 开启
         "grid_color": "#D0D7E2",
         "grid_step": 5.0,
