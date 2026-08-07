@@ -1,6 +1,6 @@
-"""scifig 回归测试：核心几何 + 6 个 bugbot 修复的边界用例。
+"""paperfig 回归测试：核心几何 + 6 个 bugbot 修复的边界用例。
 
-运行：python -m pytest tests/ -q   （或 python tests/test_scifig.py）
+运行：python -m pytest tests/ -q   （或 python tests/test_paperfig.py）
 不联网，不调用生图 API。
 """
 
@@ -12,13 +12,13 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scifig.cutout import cutout_white_bg
-from scifig.fonts import (measure_markup_mm, measure_mm, parse_markup, split_runs,
+from paperfig.cutout import cutout_white_bg
+from paperfig.fonts import (measure_markup_mm, measure_mm, parse_markup, split_runs,
                           strip_markup, wrap_text)
-from scifig.lint import lint
-from scifig.render import render
-from scifig.spec import FigureSpec, Rect, load_spec
-from scifig.theme import load_theme
+from paperfig.lint import lint
+from paperfig.render import render
+from paperfig.spec import FigureSpec, Rect, load_spec
+from paperfig.theme import load_theme
 
 
 def _write(tmp, text):
@@ -210,7 +210,7 @@ elements:
 
 def test_bad_marker_rejected(tmp_path):
     import pytest
-    from scifig.spec import SpecError
+    from paperfig.spec import SpecError
     with pytest.raises(SpecError):
         load_spec(_write(tmp_path, """
 figure: {width: 40, height: 40}
@@ -234,7 +234,7 @@ elements:
 
 def test_bad_gradient_rejected(tmp_path):
     import pytest
-    from scifig.spec import SpecError
+    from paperfig.spec import SpecError
     with pytest.raises(SpecError):
         load_spec(_write(tmp_path, """
 figure: {width: 80, height: 30}
@@ -380,7 +380,7 @@ elements:
 
 def test_arrow_bare_id_bad_ref_rejected(tmp_path):
     import pytest
-    from scifig.spec import SpecError
+    from paperfig.spec import SpecError
     with pytest.raises(SpecError):
         load_spec(_write(tmp_path, """
 figure: {width: 80, height: 60}
@@ -522,7 +522,7 @@ elements:
 
 
 def test_studio_element_ranges(tmp_path):
-    from scifig.studio import element_ranges
+    from paperfig.studio import element_ranges
     text = """figure: {width: 80, height: 60}
 elements:
   - {type: box, id: a, rect: [5, 5, 20, 10], title: A}
@@ -539,7 +539,7 @@ elements:
 
 
 def test_studio_api_render_and_error(tmp_path):
-    from scifig.studio import StudioServer
+    from paperfig.studio import StudioServer
     p = _write(tmp_path, """
 figure: {width: 60, height: 40}
 elements:
@@ -571,7 +571,7 @@ elements:
 
 def test_bad_shape_rejected(tmp_path):
     import pytest
-    from scifig.spec import SpecError
+    from paperfig.spec import SpecError
     with pytest.raises(SpecError):
         load_spec(_write(tmp_path, """
 figure: {width: 60, height: 40}
@@ -598,7 +598,7 @@ elements:
 
 def test_arrow_visual_anchor_accent_and_stack(tmp_path):
     """锚点落在 accent/stack 视觉外边界，而非逻辑 rect。"""
-    from scifig.render import visual_rect_for
+    from paperfig.render import visual_rect_for
 
     spec = load_spec(_write(tmp_path, """
 figure: {width: 140, height: 80}
@@ -623,7 +623,7 @@ elements:
 
 def test_arrow_orthogonal_entry_hv_to_left(tmp_path):
     """hv 指向 left 时末段必须水平，且整条折线无斜线段。"""
-    from scifig.render import _segments_axis_aligned
+    from paperfig.render import _segments_axis_aligned
 
     spec = load_spec(_write(tmp_path, """
 figure: {width: 120, height: 80}
@@ -646,7 +646,7 @@ elements:
 
 def test_arrow_z_route_fully_orthogonal(tmp_path):
     """z 路由（right→left、y 不对齐）全部为水平/垂直段。"""
-    from scifig.render import _segments_axis_aligned
+    from paperfig.render import _segments_axis_aligned
 
     spec = load_spec(_write(tmp_path, """
 figure: {width: 120, height: 80}
@@ -703,7 +703,7 @@ elements:
 
 def test_arrow_endpoints_resnap_to_visual(tmp_path):
     """ortho 改写后 tip 必须精确落在目标视觉边。"""
-    from scifig.render import visual_rect_for
+    from paperfig.render import visual_rect_for
     spec = load_spec(_write(tmp_path, """
 figure: {width: 120, height: 70}
 elements:
@@ -815,7 +815,7 @@ def test_cutout_real_asset_no_halo():
 
 def test_spec_rejects_bad_ref(tmp_path):
     import pytest
-    from scifig.spec import SpecError
+    from paperfig.spec import SpecError
     with pytest.raises(SpecError):
         load_spec(_write(tmp_path, """
 figure: {width: 80, height: 60}
@@ -828,7 +828,7 @@ elements:
 # ── assets 风格包（离线，不调 API）──────────────────────
 
 def test_style_pack_sci_contains_palette_and_sections():
-    from scifig.assets import build_full_prompt, build_style_pack, resolve_asset_palette
+    from paperfig.assets import build_full_prompt, build_style_pack, resolve_asset_palette
 
     pack = build_style_pack("sci")
     assert "STYLE SPECIFICATIONS:" in pack
@@ -853,7 +853,7 @@ def test_style_pack_sci_contains_palette_and_sections():
 
 
 def test_style_pack_palette_override_and_presets():
-    from scifig.assets import build_style_pack, resolve_asset_palette, resolve_preset
+    from paperfig.assets import build_style_pack, resolve_asset_palette, resolve_preset
 
     assert resolve_preset("topconf") == "topconf"
     assert resolve_preset("airy") == "airy"
@@ -876,7 +876,7 @@ def test_style_pack_palette_override_and_presets():
 
 
 def test_assets_style_override_and_yaml_load(tmp_path):
-    from scifig.assets import (
+    from paperfig.assets import (
         build_style_pack, build_full_prompt, load_style_context_from_yaml,
         resolve_asset_palette,
     )

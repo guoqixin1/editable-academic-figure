@@ -1,23 +1,24 @@
 ---
-name: scifig
+name: paperfig
 description: >-
-  Create or modify controlled scientific figures (paper-style architecture
-  diagrams, method frameworks, flowcharts, pipelines, feature pyramids, mini
-  network / embedding diagrams) with the scifig toolkit. Layout is defined
-  by an explicit YAML spec in mm coordinates and rendered to editable SVG+PNG;
-  AI is used only to generate object assets (device / organ / document icons);
-  all text, formulas, and numbers go through vector rendering; every render
-  emits a geometry lint report. From-scratch figures first expand the rough
-  request into a Figure Brief via prompts/FIGURE_BRIEF.md, then write the YAML
-  spec. Use this skill when the user asks to draw or edit a scientific figure,
-  reproduce a paper figure, replace a placeholder experiment image with a real
-  one, tweak an existing figure.yaml, or mentions "scifig", "figure.yaml",
-  "科研作图", "论文架构图", or "复现论文图". Never generate real experimental
-  plots (spectra, waveforms, heatmaps, quantitative curves) — those must always
-  use placeholder assets that the user fills in.
+  Create or modify editable academic figures / paper figures with controllable
+  layout (architecture diagrams, method frameworks, flowcharts, pipelines,
+  feature pyramids, mini network / embedding diagrams) using the paperfig
+  toolkit. Layout is an explicit YAML spec in mm coordinates, rendered to
+  reproducible editable SVG+PNG; AI generates only object assets (device /
+  organ / document icons); all text, formulas, and numbers use vector
+  rendering; every render emits a geometry lint report. From-scratch figures
+  first expand the rough request into a Figure Brief via prompts/FIGURE_BRIEF.md,
+  then write the YAML. Use when the user asks to draw or edit a scientific /
+  academic figure, reproduce a paper figure, replace a placeholder experiment
+  image, tweak figure.yaml, or mentions "paperfig", "figure.yaml", "学术图",
+  "学术作图", "论文配图", "论文架构图", "可编辑", "可复现", "顶会风格图",
+  "科研作图", or "复现论文图". Never generate real experimental plots (spectra,
+  waveforms, heatmaps, quantitative curves) — those must always use placeholder
+  assets that the user fills in.
 ---
 
-# scifig — Controlled scientific figure generation
+# paperfig — Editable, controllable academic paper figures
 
 一张图 = 一份 YAML `spec`。坐标 **mm**，字号 **pt**，左上原点，`rect: [x, y, w, h]`。
 改数值就是改图，可精确复现。
@@ -32,14 +33,15 @@ description: >-
 
 ## 前置条件
 
-先确认 CLI 可用（`python -m scifig.cli --help` 能跑）。若尚未安装：
+先确认 CLI 可用（`python -m paperfig.cli --help` 能跑）。若尚未安装：
 
 ```bash
-# 在 scifig 仓库内
-pip install -r requirements.txt
+# 在本仓库内
+pip install -e .
+# 或仅装依赖：pip install -r requirements.txt
 
-# 或在其他项目里使用 scifig
-pip install -e /path/to/scifig
+# 或在其他项目里使用 paperfig
+pip install -e /path/to/editable-academic-figure
 ```
 
 系统依赖：`libcairo2` + `fonts-noto-cjk`（缺失时 `sudo apt install libcairo2 fonts-noto-cjk fonts-liberation2`）。
@@ -48,19 +50,19 @@ pip install -e /path/to/scifig
 
 ```bash
 # 渲染 + 体检；调试用低 DPI 快渲，定稿用 600 出矢量
-python -m scifig.cli render  spec.yaml [--grid] [--dpi 180|600] [-o png] [--svg svg] [--strict]
+python -m paperfig.cli render  spec.yaml [--grid] [--dpi 180|600] [-o png] [--svg svg] [--strict]
 
 # 交互式微调界面（给用户手工调，不是给 AI 用）
-python -m scifig.cli studio  spec.yaml [--port 8323]
+python -m paperfig.cli studio  spec.yaml [--port 8323]
 
 # 抽卡生成 AI 物件素材（每素材默认抽 3 张候选、自动抠图评分）
-python -m scifig.cli assets  spec.yaml --api-key KEY [--only ids] [--force]
+python -m paperfig.cli assets  spec.yaml --api-key KEY [--only ids] [--force]
 
 # 换卡（把候选 #INDEX 提为正式素材，零成本）
-python -m scifig.cli select  spec.yaml ASSET_ID INDEX
+python -m paperfig.cli select  spec.yaml ASSET_ID INDEX
 ```
 
-`SCIFIG_API_KEY` 环境变量可替代 `--api-key`。
+`PAPERFIG_API_KEY` 环境变量可替代 `--api-key`（仍兼容旧名 `SCIFIG_API_KEY`）。
 
 ## 迭代循环
 

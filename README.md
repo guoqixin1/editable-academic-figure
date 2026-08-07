@@ -1,175 +1,145 @@
-# scifig — 受控科研图片生成工具
+# Editable Academic Figure (paperfig)
 
-把「代码定布局的精确可控」和「AI 生成素材的美观」结合起来，产出**审稿人能接受**的科研图。
+**Editable, controllable, reproducible academic paper figures from a YAML spec.**  
+**可编辑、可控、可复现的学术论文配图工具**——用 mm 坐标声明每个盒子/箭头/文字，代码渲染成 SVG+PNG；AI 只生成插画物件，文字/公式走矢量渲染，从根源规避乱码。
 
-- **布局由代码定，逐像素可控**：一份 YAML `spec` 显式声明每个盒子、箭头、文字的 mm 坐标。改任何一个数值重渲即可精确微调，结果 100% 可复现——不会像纯 AI 生图那样"抽一次变一个样"。
-- **素材由 AI 生成，可换可退**：需要显微镜、芯片、报告文档这类插画时，调用生图模型生成**白底图**，自动**抠成透明 PNG** 嵌进版面。文字、连线、公式全部走代码渲染，AI 只画"物件"，从根源规避 AI 乱码文字这个最大雷点。
-- **生成即体检**：每次渲染自动跑几何 lint（溢出/重叠/越界/穿线/字号/疏密），像短视频工作流里的视觉评审闭环一样，先过机检再目检。
+- **Controllable layout**：YAML `spec` 显式声明坐标；改数值即改图，100% 可复现。
+- **AI 只画物件**：自动抠成透明 PNG；文字/连线/公式全部代码渲染。
+- **顶会级信息密度**：`topconf`/`airy` 主题、`sketch` 缩略图、`legend`、soft shadow、accent 色条。
+- **生成即体检**：几何 + 视觉丰度 lint（含 `R-empty-box` / 箭头对齐）；本地 **studio** 拖拽微调。
 
-|  | 纯代码作图 (draw.io/TikZ) | 纯 AI 生图 | **scifig** |
+|  | 纯代码作图 (draw.io/TikZ) | 纯 AI 生图 | **paperfig** |
 | --- | --- | --- | --- |
 | 布局精确可控 | ✅ | ❌ | ✅ |
-| 可手工微调/复现 | ✅ | ❌ | ✅ |
+| 可手工微调 / 复现 | ✅ | ❌ | ✅ |
 | 文字清晰无乱码 | ✅ | ❌ | ✅（文字走代码） |
 | 插画素材美观 | ❌ | ✅ | ✅（AI 画物件） |
+| 视觉精美度（阴影/缩略图/图例/顶会风） | 靠手工堆叠 | 不可控 | ✅（主题 + sketch + legend） |
 | 达到审稿人精度 | 勉强 | ❌ | ✅ |
 
-> 📖 **完整使用说明 + 实践经验建议见 [USAGE.md](USAGE.md)**（人读）。
-> 🤖 **让 AI 助手后期二次修改这张图？见 [AGENTS.md](AGENTS.md)**（AI 读，含字段速查 + 改图配方）。
-> 🧩 **作为主流 coding agent 的 skill 使用？见 [SKILL.md](SKILL.md)**（Claude / Cursor / `npx skills` 生态自动发现入口，YAML frontmatter + 触发描述，主体仍指向 AGENTS.md）。
+> 📖 **人读教程** → [USAGE.md](USAGE.md)  
+> 🤖 **AI 改图手册** → [AGENTS.md](AGENTS.md)（字段速查 + 配方）  
+> 🧩 **Skill 入口** → [SKILL.md](SKILL.md)（Claude / Cursor / `npx skills`）  
+> 🧭 **需求 → Figure Brief** → [prompts/FIGURE_BRIEF.md](prompts/FIGURE_BRIEF.md)（从零作图 Phase 0.5）  
+> 📐 **作图算法** → [prompts/AGENT_WORKFLOW.md](prompts/AGENT_WORKFLOW.md)（四层分解 / 密度 checklist / 版式卡）
 
 ## 效果预览
 
-覆盖 AI / 体系结构 / 分布式 / 流程图各类图型，`examples/` 下均可直接渲染：
+**双面板方法总览**（`topconf`，信息密度对标顶会）：
+
+![Method overview](docs/images/example-method-overview.png)
+
+**多分区网络架构图**：
+
+![Architecture](docs/images/example-architecture.png)
+
+**对真实论文图的复现**（左原图 / 右复现）：
+
+![对比](comparison.png)
 
 | 示例 | 领域 | 看点 |
 | --- | --- | --- |
-| `rep_evdispatch/` | **论文复现** | 彩色虚线分区 + scatter 聚类 + 竖排文字 + AI 素材（大脑/鲸鱼/光伏） |
-| `rep_uavedge/` | **论文复现** | 弧线无线链路 + wifi/❌ 标记 + badge 步骤条 + 图例框 |
-| `rep_codriving/` | **论文复现** | 多列彩色面板 + 白色子卡 + 双色语义箭头 + 叠影卡片 |
-| `rep_d3pgmodel/` | **论文复现** | network 迷你 MLP + block 粗箭头 + ⊕ 拼接 + 图标阵列 |
-| `rep_ensemble/` | **论文复现** | 渐变色系列 + 空心箭头 + 叠影文档 + AI 线稿机器人 |
-| `paper_style/` | AI | panel 分区 + tokens 序列 + 🔥/❄ marker + 上下标 + 渐变 + 占位实验图 |
-| `unet_lora/` | AI | 扩散 U-Net + LoRA：trapezoid 采样块 + 特征金字塔 tokens |
-| `demo_method/` | AI | 含 AI 素材（显微镜/报告），模块框架图 |
-| `transformer/` | AI | 纵向堆叠 + 残差 `via` 绕线 |
+| `rep_evdispatch/` | 论文复现 | 彩色虚线分区 + scatter + 竖排文字 + AI 素材 |
+| `rep_uavedge/` | 论文复现 | 弧线无线链路 + wifi/❌ + badge + 图例 |
+| `rep_codriving/` | 论文复现 | 多列面板 + 叠影卡片 + 双色语义箭头 |
+| `rep_d3pgmodel/` | 论文复现 | network 迷你 MLP + block 粗箭头 + ⊕ |
+| `rep_ensemble/` | 论文复现 | 渐变色系列 + 空心箭头 + AI 线稿 |
+| `paper_style/` | AI | panel + tokens + 🔥/❄ + 上下标 + 占位实验图 |
+| `unet_lora/` | AI | trapezoid + 特征金字塔 tokens |
+| `demo_method/` | AI | AI 素材（显微镜/报告）模块框架 |
+| `transformer/` | AI | 纵向堆叠 + 残差 `via` |
 | `rl_loop/` | AI | 环形训练闭环 |
-| `cpu_pipeline/` | 体系结构 | 五级流水线（mono 主题） |
+| `cpu_pipeline/` | 体系结构 | 五级流水线（mono） |
 | `memory_hierarchy/` | 体系结构 | 存储层次金字塔 |
-| `gpu_arch/` | 体系结构 | 嵌套 group + 显存 cylinder |
-| `mapreduce/` | 分布式 | fan-out/fan-in 数据流 |
-| `flowchart/` | 流程图 | stadium/parallelogram/diamond 规范 |
+| `gpu_arch/` | 体系结构 | 嵌套 group + cylinder |
+| `mapreduce/` | 分布式 | fan-out/fan-in |
+| `flowchart/` | 流程图 | stadium/parallelogram/diamond |
 | `shapes/` | — | 8 种形状总览 |
-
-**对真实论文图的复现能力**（左原图 / 右 scifig 复现，见 `comparison.png`）：
-
-![对比](comparison.png)
 
 ## 安装
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
+# 或：pip install -r requirements.txt
+sudo apt install libcairo2 fonts-noto-cjk fonts-liberation2   # 系统依赖
 ```
 
-系统依赖：`libcairo2`（cairosvg 需要）与中文字体 `fonts-noto-cjk`。多数 Linux 桌面已自带；缺失时：
+AI 素材（可选）：[grsai.ai](https://grsai.ai/zh) 拿 key → `export PAPERFIG_API_KEY=sk-xxxx`（兼容 `SCIFIG_API_KEY`）。默认生图模型为 `nano-banana-fast`（`python -m paperfig.cli assets --model` 可换）。无 key 时素材渲成虚线占位，不阻塞调布局。
+
+## 快速开始
 
 ```bash
-sudo apt install libcairo2 fonts-noto-cjk fonts-liberation2
+# 最小示例（见下方 YAML）
+python -m paperfig.cli render hello.yaml -o hello.png
+
+# 交互微调（拖拽 / 方向键 / 即时重渲）
+python -m paperfig.cli studio hello.yaml
 ```
 
-### AI 素材的 API Key（可选，仅 `assets` 抽卡步骤需要）
-
-布局/渲染（`box`/`arrow`/`panel`/`text` 等纯代码元素）**不需要 key**；只有 spec 里声明了 `assets`、要生成插画素材时才会调用 AI 生图 API：
-
-1. 去 [grsai.ai/zh](https://grsai.ai/zh) 注册账号（注册送 5000 积分，够测试用），在控制台创建 API key。scifig 默认调用其 `nano-banana-fast` 模型出图（见 `scifig/assets.py`），也可传 `--model` 换别的 grsai 模型。
-2. 拿到 key 后二选一：
-   ```bash
-   python -m scifig.cli assets figure.yaml --api-key sk-xxxx     # 命令行传入
-   export SCIFIG_API_KEY=sk-xxxx                                 # 或设环境变量，下面命令可省略 --api-key
-   ```
-
-没有 key 也能正常用：声明了 `assets` 但没配 key 时，素材会渲成虚线占位框（不阻塞布局调试），配好 key 后重渲即可自动填入。
-
-## 交互式微调：studio（推荐）
-
-改一个数就得重跑 CLI 太笨重——`studio` 起一个本地网页（零额外依赖，Python 标准库 + 单文件原生 JS）：
-
-```bash
-python -m scifig.cli studio examples/rep_evdispatch/figure.yaml
-# 浏览器自动打开 http://127.0.0.1:8323/
+```yaml
+# hello.yaml
+figure: {width: 120, height: 40, dpi: 600}
+theme: {preset: topconf}
+elements:
+  - {type: box, id: a, rect: [8, 10, 40, 22], title: Input, body: "raw x",
+     variant: primary, accent: left, sketch: grid, valign: top}
+  - {type: box, id: b, rect: [72, 10, 40, 22], title: Output, body: logits,
+     variant: secondary, sketch: bars, valign: top}
+  - {type: arrow, from: a, to: b, label: encode, weight: heavy}
 ```
 
-- **改动即时重渲**：左侧编辑 YAML，右侧预览自动刷新，体检结果实时列出（点击条目定位到出错元素）。
-- **点选与拖拽**：点预览里的元素 → 高亮并定位到对应 YAML 行；直接**拖拽元素**改位置（自动写回 `rect`/`at`，0.5mm 吸附、按 Alt 0.1mm）。
-- **细微参数微调**：选中后**方向键**微调（0.1/0.5/2mm 三档）；编辑器里光标放在任意数字上 **Alt+↑↓** 步进；所有改动都是普通文本编辑，Ctrl+Z 可撤销。
-- **保存/导出**：Ctrl+S 保存 YAML；「导出」一键出 PNG + SVG（可选 DPI）。
+### 五步工作流（从零作图）
 
-## 四步工作流
-
-```bash
-# 1. 写 spec（见 examples/），先占位渲染调布局——素材还没生成时用虚线占位框
-python -m scifig.cli render examples/demo_method/figure.yaml --grid -o draft.png
-
-# 2. 抽卡生成 spec 里声明的 AI 素材（每个默认抽 3 张候选，自动抠图+评分+选卡）
-# --api-key 从 https://grsai.ai/zh 注册获取（见上方「AI 素材的 API Key」），也可用环境变量 SCIFIG_API_KEY
-python -m scifig.cli assets examples/demo_method/figure.yaml --api-key sk-xxxx
-
-# 3.（可选）不满意就看 contact sheet 换卡，或整体重抽
-python -m scifig.cli select examples/demo_method/figure.yaml report_doc 2   # 手动选 2 号候选
-python -m scifig.cli assets examples/demo_method/figure.yaml --only report_doc --force  # 重抽
-
-# 4. 正式渲染 + 体检（默认 600dpi）
-python -m scifig.cli render examples/demo_method/figure.yaml -o figure.png --svg figure.svg
-```
+1. **Figure Brief**（Phase 0.5）：用 [`prompts/FIGURE_BRIEF.md`](prompts/FIGURE_BRIEF.md) 把粗糙需求扩成结构化图纸说明（分区 / title·body·sketch / 箭头语义）。**已有精确改图指令则跳过。**
+2. **写 spec**：按 Brief 落 YAML；新图默认 `theme: {preset: topconf}`。
+3. **占位渲染调布局**：`python -m paperfig.cli render fig.yaml --grid -o draft.png --dpi 180`
+4. **抽卡素材**（可选）：`python -m paperfig.cli assets fig.yaml` → 目检 contact sheet → `select` 换卡。
+5. **定稿**：`python -m paperfig.cli render fig.yaml -o fig.png --svg fig.svg`（清零 E 级，尽量清零 `R-*`）。
 
 ## spec 速览
 
 ```yaml
-figure:
-  width: 180          # mm，双栏图宽
-  height: 96
-  dpi: 600
-  assets_dir: assets  # AI 素材目录（相对 spec）
-
+figure: {width: 180, height: 80, dpi: 600}
 theme:
-  preset: sci         # sci | warm | mono，也可写 theme: sci
-
-assets:               # 声明要 AI 生成的素材（抽卡对象）
-  - {id: microscope, prompt: 一台简洁的光学显微镜, 蓝灰色扁平插画, candidates: 3}
+  preset: topconf          # topconf | airy | sci | warm | mono
+  palette: {primary: "#00897B", secondary: "#FFB300", section_bg: "#ECEFF1"}
 
 elements:
-  - {type: box,   id: enc, rect: [62, 22, 34, 22], title: 编码器, body: 对齐表示, variant: secondary, icon: microscope}
-  - {type: box,   id: db,  rect: [110, 22, 24, 22], title: 存储, shape: cylinder}
-  - {type: asset, id: out, rect: [160, 30, 16, 36], src: report_doc, caption: 报告}
-  - {type: arrow, from: enc, to: out, label: 输出}   # 裸 id 自动选朝向对方的边，不会"没对上"
-  - {type: arrow, from: enc.left, to: db.top, via: [[50, 10]], style: dashed}
-  - {type: group, members: [enc], label: 主干, style: dashed}
-  - {type: text,  at: [90, 4], text: 图 1. 方法总览, size: 8, bold: true}
-  - {type: panel_label, at: [6, 6], text: a}
+  - {type: panel, id: p, rect: [4, 4, 172, 72], title: Overall Pipeline,
+     header_style: smallcaps, fill: "#ECEFF1"}
+  - {type: box, id: inp, rect: [12, 20, 36, 36], title: Input, body: "raw x",
+     variant: primary, accent: left, sketch: grid, valign: top}
+  - {type: box, id: core, rect: [66, 20, 44, 36], title: Core Module,
+     variant: primary, sketch: layers, valign: top, shadow: true}
+  - {type: box, id: out, rect: [128, 20, 36, 36], title: Output, body: "y",
+     variant: secondary, sketch: bars, valign: top}
+  - {type: arrow, from: inp, to: core, label: "R^{B×D}", weight: heavy}
+  - {type: arrow, from: core, to: out, label: logits, weight: heavy}
+  - {type: arrow, from: out.top, to: core.top, route: arc, style: dashed,
+     label: feedback, weight: thin}
+  - {type: legend, id: lg, at: [118, 60], columns: 3, items: [
+      {swatch: box, color: "#00897B", label: "core"},
+      {swatch: box, color: "#FFB300", label: "aux"},
+      {swatch: dashed, color: "#4D4D4D", label: "skip"},
+    ]}
 ```
 
-**元素类型**：`box`（带标题/正文/图标的盒子，可作容器卡、可叠影）、`asset`（独立素材图+图注，`placeholder: true` 为真实实验图占位槽）、`arrow`（连线：折线/弧线/粗 block 箭头）、`panel`（带色条标题的分区面板）、`tokens`（token/特征图条组）、`marker`（🔥/❄/⊕/⊗/wifi 等矢量角标）、`network`（迷你 MLP）、`scatter`（聚类散点）、`badge`（编号圆点）、`group`（分组框，可自定义颜色作彩色分区）、`text`（自由文字，支持换行/斜体/旋转竖排）、`panel_label`（a/b/c 面板号）。
+**元素类型**：`box` · `panel` · `sketch`（14 种程序化缩略图）· `legend` · `asset` · `arrow` · `group` · `tokens` · `marker` · `network` · `scatter` · `badge` · `text` · `panel_label`。
 
-**box 形状**（`shape`）：`rect`(默认)/`stadium`(起止)/`diamond`(判定)/`cylinder`(数据库)/`parallelogram`(输入输出)/`hexagon`(预处理)/`ellipse`/`trapezoid`(采样块)。支持 `gradient` 渐变、`fill/stroke/text_color` 逐盒配色、`stack` 叠影。
+**box 形状**：`rect` / `stadium` / `diamond` / `cylinder` / `parallelogram` / `hexagon` / `ellipse` / `trapezoid`。支持 `accent` / `header_fill` / `shadow` / `sketch` / `stack` / `gradient`。
 
-**数学记号**：标题/正文/text 支持 `_{...}` 下标、`^{...}` 上标，如 `E_{s}`、`ℝ^{(B V) H W C}`、`L_{InfoNCE}`。
+**箭头**：裸 id `from: a, to: b` 自动选朝向对方的边；`route`: `auto|straight|hv|vh|z|zv|arc`；`weight`: `thin|normal|heavy`；`style` 含 `dotted`；`via` 绕线；末段强制垂直进入目标边。
 
-**锚点**：最简写**裸节点 id**（`from: a, to: b`）——渲染自动选朝向对方的边、落在边中点，消除"箭头没对上"；要精确控制才写 `节点id.side`，side ∈ `left/right/top/bottom/center`，可加 `@t`（0~1）指定边上位置，如 `enc.right@0.3`。
-
-**箭头路由**：`auto`（按锚点边智能选）/`straight`/`hv`/`vh`/`z`（横向 Z）/`zv`（纵向 Z）；或用 `via: [[x,y],...]` 手动途经点（残差/skip/绕线）。
-
-坐标单位一律 mm，字号 pt。调布局时加 `--grid` 叠加 10mm 网格。
+坐标 **mm**，字号 **pt**。调布局加 `--grid`。
 
 ## 命令
 
 | 命令 | 作用 |
 | --- | --- |
 | `render spec [-o png] [--svg svg] [--grid] [--dpi N] [--strict]` | 渲染 + 体检 |
-| `studio spec [--port 8323] [--no-open]` | 交互式调图界面（即时重渲、拖拽/键盘微调） |
-| `assets spec --api-key KEY [--only ids] [--force] [--no-auto-select]` | 抽卡生成素材 |
-| `select spec ASSET_ID INDEX` | 把候选 #INDEX 提升为正式素材 |
-| `cutout in.png out.png [--threshold 238] [--shadow keep\|remove]` | 单独抠一张白底图 |
+| `studio spec [--port 8323]` | 交互式调图 |
+| `assets spec [--api-key KEY] [--only ids] [--force]` | 抽卡生成素材 |
+| `select spec ASSET_ID INDEX` | 换卡（零 API 成本） |
+| `cutout in.png out.png` | 单独抠白底图 |
 
-## 关于"抽卡"（重要）
-
-当前生图技术产出天然不稳定，一次生成不一定达标是**正常现象**。scifig 的对策：
-
-1. **一次多抽**：每个素材默认并发抽 3 张（`candidates` 可调），生成 `contact_sheet_{id}.png` 供对比。
-2. **客观评分先过滤**：抠图后按前景占比、连通块数、是否贴边裁断打分（见 `gacha_report.json`），自动选最高分；`reject` 卡直接淘汰。
-3. **换卡零成本**：候选都留在 `assets/candidates/`，`select` 换卡不重新花钱；仍不满意再 `--force` 重抽或改 prompt。
-4. **审美判断交给看图**：分数只管客观项（干不干净），色调是否协调、造型是否贴切要靠目检——这正是把 `select` 独立出来的原因。
-
-## 目录结构
-
-```
-scifig/
-  scifig/            核心库：spec / render / cutout / assets / lint / fonts / theme / cli
-                     + studio.py & studio.html（交互式调图界面，零额外依赖）
-  examples/          16 个可直接渲染的示例（rep_* 为真实论文图复现）
-  prompts/           visual_rubric.md（评审标准）、AGENT_WORKFLOW.md（从零作图分阶段流程）
-  SKILL.md           主流 coding agent skill 入口（Claude/Cursor/npx skills 发现用）
-  AGENTS.md          给 AI 助手的字段速查 + 二次改图配方（Cursor/Claude 自动加载）
-  USAGE.md           面向人的完整使用说明
-  tests/             回归测试（53 项）
-  requirements.txt
-```
+**Keywords / 关键词**: academic figure · paper figure · editable · controllable layout · reproducible · architecture diagram · framework diagram · YAML spec · SVG · 论文配图 · 学术作图 · 论文架构图 · 顶会风格图 · CVPR/NeurIPS style

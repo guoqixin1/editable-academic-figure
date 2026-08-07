@@ -1,10 +1,10 @@
-"""scifig 命令行入口。
+"""paperfig 命令行入口。
 
-  python -m scifig.cli render  spec.yaml [-o out.png] [--grid] [--dpi 600] [--svg out.svg]
-  python -m scifig.cli studio  spec.yaml [--port 8323] [--no-open]
-  python -m scifig.cli assets  spec.yaml --api-key KEY [--only id1,id2] [--force] [--no-auto-select]
-  python -m scifig.cli select  spec.yaml ASSET_ID INDEX
-  python -m scifig.cli cutout  in.png out.png [--threshold 238] [--shadow keep|remove]
+  python -m paperfig.cli render  spec.yaml [-o out.png] [--grid] [--dpi 600] [--svg out.svg]
+  python -m paperfig.cli studio  spec.yaml [--port 8323] [--no-open]
+  python -m paperfig.cli assets  spec.yaml --api-key KEY [--only id1,id2] [--force] [--no-auto-select]
+  python -m paperfig.cli select  spec.yaml ASSET_ID INDEX
+  python -m paperfig.cli cutout  in.png out.png [--threshold 238] [--shadow keep|remove]
 """
 
 from __future__ import annotations
@@ -41,9 +41,17 @@ def cmd_render(args: argparse.Namespace) -> int:
 
 def cmd_assets(args: argparse.Namespace) -> int:
     spec = load_spec(args.spec)
-    api_key = args.api_key or os.environ.get("SCIFIG_API_KEY", "")
+    # Prefer PAPERFIG_API_KEY; fall back to SCIFIG_API_KEY for backward compatibility.
+    api_key = (
+        args.api_key
+        or os.environ.get("PAPERFIG_API_KEY")
+        or os.environ.get("SCIFIG_API_KEY", "")
+    )
     if not api_key:
-        print("需要 --api-key 或环境变量 SCIFIG_API_KEY", file=sys.stderr)
+        print(
+            "需要 --api-key 或环境变量 PAPERFIG_API_KEY（兼容 SCIFIG_API_KEY）",
+            file=sys.stderr,
+        )
         return 2
     only = set(args.only.split(",")) if args.only else None
 
@@ -87,7 +95,7 @@ def cmd_studio(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="scifig", description="受控科研图片生成工具")
+    p = argparse.ArgumentParser(prog="paperfig", description="Editable, controllable academic paper figures")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pr = sub.add_parser("render", help="渲染 spec 为 PNG 并体检")

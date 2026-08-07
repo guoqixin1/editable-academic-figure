@@ -1,6 +1,6 @@
-# scifig · Agent 作图工作流
+# paperfig · Agent 作图工作流
 
-给 AI agent 的操作指南：当用户要一张科研图（方法框架图、流程图、系统总览、pipeline 图等），按下面的分阶段流程驱动 scifig。核心原则：**布局用代码精确控制，AI 只生成"物件"素材，默认产出顶会级信息密度，每步渲染后自检。**
+给 AI agent 的操作指南：当用户要一张科研图（方法框架图、流程图、系统总览、pipeline 图等），按下面的分阶段流程驱动 paperfig。核心原则：**布局用代码精确控制，AI 只生成"物件"素材，默认产出顶会级信息密度，每步渲染后自检。**
 
 ---
 
@@ -65,7 +65,7 @@
 
 - 主数据流箭头：`weight: heavy`，`label` 标维度/含义（如 `"R^{B×D}"`、`"features"`）。
 - skip / 残差 / 反馈：`style: dashed` 或 `dotted`，必要时 `via` / `route: arc`。
-- **≥2 种非 muted 语义色** → 必须放 `type: legend`（不要用手拼短箭头冒充）。
+- **设计建议**：≥2 种非 muted 语义色就加 `type: legend`（不要用手拼短箭头冒充）。机检 `R-no-legend` 在 ≥3 色时才报（阈值宽松，不报不代表不需要）。
 
 ### Layer 4 · 风格规格
 
@@ -93,7 +93,7 @@ topconf 下卡片默认无投影；需要浮起时显式 `shadow: true`。airy �
 - [ ] **画布覆盖**：内容不呈「四周大片死白」（lint `canvas-sparse`）；也不挤爆（`canvas-crowded`）
 - [ ] **数学记号**：一律 `_{...}` / `^{...}`，YAML 值加引号
 - [ ] **色彩克制**：同图最多 3 个主色 + 灰系；见配色禁忌表
-- [ ] **图例完备**：≥2 种语义色时有 `legend`
+- [ ] **图例完备**：设计建议 ≥2 种非 muted 语义色加 `legend`（机检 ≥3 色才报，不报≠不需要）
 - [ ] **素材风格统一**：有 AI 素材时写顶层 `assets_style`，与 `theme` 色板一致
 
 机检会以 W 级提示部分项：`R-empty-box` / `R-no-section` / `R-no-legend`（不阻断，但新图应清零）。
@@ -320,7 +320,7 @@ elements:
 ## Phase 2：布局草稿（占位渲染）
 
 ```bash
-python -m scifig.cli render {project}/figure.yaml --grid -o {project}/draft.png --dpi 150
+python -m paperfig.cli render {project}/figure.yaml --grid -o {project}/draft.png --dpi 150
 ```
 
 - `--grid` 叠 10mm 网格核对齐。
@@ -331,21 +331,21 @@ python -m scifig.cli render {project}/figure.yaml --grid -o {project}/draft.png 
 ## Phase 3：素材抽卡
 
 ```bash
-python -m scifig.cli assets {project}/figure.yaml --api-key <KEY>
+python -m paperfig.cli assets {project}/figure.yaml --api-key <KEY>
 ```
 
 - 顶层可写 `assets_style`（英文插画语言），工具会注入与 `theme`/`palette` 一致的 STYLE SPECIFICATIONS（含统一色板、~2px 描边、图标级抽象、三分之四视角硬约束）。
 - `assets[].prompt`：**只写「是什么 + 形态」**（如「一块 GPU 加速卡，斜俯视角」）；**不要写色调/风格词**（蓝灰、扁平插画、赛博朋克等——交给风格包，避免与 STYLE SPEC 抢权）；**不要写文字**；避免负面人像/审核敏感词。
 - **必须目检** `contact_sheet_{id}.png` 再定稿：自动选卡**只看抠图洁净度**（前景占比/连通块/贴边），**不保证**跨素材视角与细节密度一致。优先选与同图其他素材视角族一致的候选；换卡零成本：
   ```bash
-  python -m scifig.cli select {project}/figure.yaml {asset_id} {index}
+  python -m paperfig.cli select {project}/figure.yaml {asset_id} {index}
   ```
 - 全体候选风格都不合 → 改 prompt（仍勿写色调）后 `--force` 重抽。
 
 ## Phase 4：正式渲染 + 视觉评审闭环
 
 ```bash
-python -m scifig.cli render {project}/figure.yaml -o {project}/figure.png --svg {project}/figure.svg
+python -m paperfig.cli render {project}/figure.yaml -o {project}/figure.png --svg {project}/figure.svg
 ```
 
 按 `prompts/visual_rubric.md`：
@@ -364,7 +364,7 @@ python -m scifig.cli render {project}/figure.yaml -o {project}/figure.png --svg 
 
 作图/改图的**硬规则、YAML 引号陷阱、体检码 → 修法**统一见 [`../AGENTS.md`](../AGENTS.md)：§0 铁律 · §4 体检码 · §5 陷阱（唯一权威，不在此重复维护）。
 
-| 审稿人雷点 | scifig 对策 |
+| 审稿人雷点 | paperfig 对策 |
 | --- | --- |
 | AI 乱码文字 | 文字走代码渲染；素材禁止文字 |
 | 模糊/低分 | SVG，导出 ≥600dpi |

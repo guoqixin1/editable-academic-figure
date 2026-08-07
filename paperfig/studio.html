@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<title>scifig studio</title>
+<title>paperfig studio</title>
 <style>
   :root {
     --ink: #1f2933; --muted: #52606d; --line: #d5dbe3;
@@ -125,7 +125,7 @@
 <body>
 
 <div id="bar">
-  <span class="logo">scifig studio</span>
+  <span class="logo">paperfig studio</span>
   <span class="path" id="specpath"></span>
   <span class="sp"></span>
   <select id="tpl" title="在光标处插入元素模板">
@@ -579,7 +579,7 @@ window.addEventListener("resize", () => { if (fitted) fit(); });
 (async () => {
   const info = await api("/api/load");
   $("specpath").textContent = info.path;
-  document.title = "scifig studio — " + info.path.split("/").pop();
+  document.title = "paperfig studio — " + info.path.split("/").pop();
   ed.value = info.text;
   updGutter();
   await doRender();

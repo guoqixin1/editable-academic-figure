@@ -1,6 +1,6 @@
-# AGENTS.md — 用 scifig 帮用户改图 / 作图
+# AGENTS.md — 用 paperfig 帮用户改图 / 作图
 
-本仓库是 **scifig**：代码定布局、AI 只画物件素材、文字全走矢量渲染的受控科研作图工具。
+本仓库是 **paperfig**：代码定布局、AI 只画物件素材、文字全走矢量渲染的受控科研作图工具。
 本文件是给 **AI 助手**看的操作手册，重点解决**用户拿到草稿后的二次修改**。人类看 [`USAGE.md`](USAGE.md)。
 
 > 作为主流 coding agent 的 skill 使用时（Claude Skills / Cursor Skills / `npx skills`），发现入口是同目录的 [`SKILL.md`](SKILL.md)（含 YAML frontmatter 和触发描述）。本文件是它指向的详细手册——上下文有余量或用户提到"改图/配色/坐标/字段"等具体动作时，直接来这里查。
@@ -99,7 +99,7 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 | **换形状** | 改 `box.shape`（数据库→`cylinder`、采样块→`trapezoid`、判定→`diamond` 并给足尺寸）。 |
 | **融合/跨模态模块要渐变** | 给该 `box` 加 `gradient: [c1, c2]`（两端模态色）。 |
 | **换配色 / 主题** | 局部：改元素 `variant`；全局：改 `theme.preset` 或 `theme.palette`（如 Teal+Amber）。 |
-| **图太朴素 / 太素 / 像 PPT** | **升级配方（按序做，每步重渲）**：① `theme: {preset: topconf}`（或 airy）；② 每个空心 box 补 `body`/`sketch`/`icon`；③ 加 `panel`（`header_style: smallcaps` + 浅 `fill`）或 `group`+`fill`；④ ≥2 语义色加 `legend`；⑤ 核心卡 `shadow: true` + `accent: left`；⑥ 主箭头 `weight: heavy` 并补 `label`。详见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)。 |
+| **图太朴素 / 太素 / 像 PPT** | **升级配方（按序做，每步重渲）**：① `theme: {preset: topconf}`（或 airy）；② 每个空心 box 补 `body`/`sketch`/`icon`；③ 加 `panel`（`header_style: smallcaps` + 浅 `fill`）或 `group`+`fill`；④ 设计建议 ≥2 语义色加 `legend`（机检 ≥3 色才报）；⑤ 核心卡 `shadow: true` + `accent: left`；⑥ 主箭头 `weight: heavy` 并补 `label`。详见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)。 |
 | **加单色缩略图** | box 内：`sketch: heatmap`（或 waveform/curve/…）+ `valign: top`；独立：`type: sketch`。 |
 | **加图例** | `- {type: legend, id: lg, at: [x,y], items: [{swatch: box, color: "#0072B2", label: "encoder"}, …]}`。 |
 | **字太小 / 太大** | 改该元素 `title_size/body_size/size`；整体缩放改 `figure.font_scale`。 |
@@ -127,9 +127,9 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 
 ```bash
 # 迭代：低 DPI + 网格核对坐标
-python -m scifig.cli render {proj}/figure.yaml --grid -o {proj}/draft.png --dpi 180
+python -m paperfig.cli render {proj}/figure.yaml --grid -o {proj}/draft.png --dpi 180
 # 定稿：高 DPI + 出矢量图
-python -m scifig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {proj}/figure.svg --dpi 600
+python -m paperfig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {proj}/figure.svg --dpi 600
 ```
 
 每次渲染都会打印体检（E/W 两级）。流程：**清零 E → 尽量清零 W（`asset-placeholder` 除外）→ 读 PNG 目检**（对齐、留白、箭头语义、配色、素材融入、文字可读、上下标是否正确、marker/tokens 是否表意）。
@@ -180,7 +180,7 @@ python -m scifig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {proj}
 | `select spec ASSET_ID INDEX` | 把候选 #INDEX 提为正式素材（零成本换卡） |
 | `cutout in.png out.png [--threshold 238] [--shadow keep\|remove]` | 单张白底图抠图 |
 
-API key 也可用环境变量 `SCIFIG_API_KEY`。
+API key 也可用环境变量 `PAPERFIG_API_KEY`（兼容旧名 `SCIFIG_API_KEY`）。
 
 studio 说明：你（AI）改图仍然直接编辑 YAML + `render` 验证；studio 是给**用户**手工微调用的（它对 YAML 的改写与你的编辑完全等价，可能在你两次会话之间发生——重读文件即可）。用户要求"打开调图界面"时，运行 `studio` 命令即可（默认端口 8323，自动开浏览器）。
 

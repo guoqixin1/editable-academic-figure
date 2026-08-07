@@ -11,7 +11,7 @@ figure:
 theme:
   preset: warm
 
-# 本例为纯代码图（无 AI 素材），演示 scifig 也能当常规矢量作图工具用。
+# 本例为纯代码图（无 AI 素材），演示 paperfig 也能当常规矢量作图工具用。
 
 elements:
   - type: box

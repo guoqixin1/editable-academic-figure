@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paperfig"
+version = "0.2.0"
+description = "Editable, controllable academic paper figures from YAML specs"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "cairosvg>=2.7",
+  "Pillow>=10.0",
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "PyYAML>=6.0",
+  "requests>=2.31",
+]
+
+[project.scripts]
+paperfig = "paperfig.cli:main"
+
+[tool.setuptools]
+packages = ["paperfig"]

@@ -1,8 +1,8 @@
-"""scifig studio — 本地交互式调图界面（零额外依赖，浏览器打开即用）。
+"""paperfig studio — 本地交互式调图界面（零额外依赖，浏览器打开即用）。
 
 用法：
-    python -m scifig.cli studio examples/rep_evdispatch/figure.yaml
-    # 等价：python -m scifig.studio examples/rep_evdispatch/figure.yaml --port 8323
+    python -m paperfig.cli studio examples/rep_evdispatch/figure.yaml
+    # 等价：python -m paperfig.studio examples/rep_evdispatch/figure.yaml --port 8323
 
 设计：
 - spec 文本的源头始终在浏览器编辑器里；每次改动自动 POST /api/render
@@ -137,7 +137,7 @@ class StudioServer:
 
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = "scifig-studio"
+    server_version = "paperfig-studio"
     studio: StudioServer  # serve() 注入
 
     def log_message(self, fmt, *args):  # 静默访问日志
@@ -193,7 +193,7 @@ def serve(spec_path: str | Path, port: int = 8323, open_browser: bool = True) ->
     _Handler.studio = StudioServer(sp)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
     url = f"http://127.0.0.1:{port}/"
-    print(f"scifig studio → {url}   spec: {sp}（Ctrl+C 退出）")
+    print(f"paperfig studio → {url}   spec: {sp}（Ctrl+C 退出）")
     if open_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
     try:
@@ -203,7 +203,7 @@ def serve(spec_path: str | Path, port: int = 8323, open_browser: bool = True) ->
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="scifig 交互式调图界面")
+    ap = argparse.ArgumentParser(description="paperfig 交互式调图界面")
     ap.add_argument("spec")
     ap.add_argument("--port", type=int, default=8323)
     ap.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
