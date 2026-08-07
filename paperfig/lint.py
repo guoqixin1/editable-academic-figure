@@ -352,7 +352,9 @@ def _check_arrow_label_occlusion(spec: FigureSpec, res: RenderResult) -> list[Is
                 continue
             bb = s.bbox()
             inter = cap.intersection_area(bb)
-            if inter > 0.35 * min(cap.w * cap.h, bb.w * bb.h):
+            # 相对阈值 0.12，或绝对相交 >1.2mm² —— 取更敏感者
+            min_area = min(cap.w * cap.h, bb.w * bb.h)
+            if inter > 0.12 * min_area or inter > 1.2:
                 issues.append(Issue(
                     "W", "arrow-label-over-text",
                     f"箭头 '{aid}' 标签 “{label[:14]}” 压到文字 “{s.text[:14]}”",

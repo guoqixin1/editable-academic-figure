@@ -1623,6 +1623,29 @@ elements:
     assert any(i.code == "R-figurative-overload" for i in lint(spec, res))
 
 
+def test_lint_arrow_label_occlusion_tighter(tmp_path):
+    """新阈值：相对 0.12 或绝对 >1.2mm²；轻微压字应报警。"""
+    from paperfig.lint import _check_arrow_label_occlusion
+    from paperfig.render import RenderResult, _TextSpan
+
+    res = RenderResult()
+    cap = Rect(10, 10, 10, 4)
+    res.arrow_label_boxes.append(("ar", cap, "lbl"))
+    res.arrow_segments.append(("ar", [(0, 12), (30, 12)]))
+    span = _TextSpan(x=18, baseline=13, text="ModuleTitle", pt=6.5, bold=False, color="#333")
+    res.text_spans.append(span)
+    issues = _check_arrow_label_occlusion(
+        load_spec(_write(tmp_path, """
+figure: {width: 40, height: 30}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [2, 2, 10, 10], title: A}
+""")),
+        res,
+    )
+    assert any(i.code == "arrow-label-over-text" for i in issues)
+
+
 if __name__ == "__main__":
     import tempfile
     import traceback
