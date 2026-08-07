@@ -48,7 +48,7 @@ elements:
   - {type: arrow, from: q.right, to: rewrite.left, label: "raw q", weight: heavy, route: avoid}
   - {type: arrow, from: rewrite.right@0.28, to: dense.left, label: "768-d vec", weight: heavy, route: avoid}
   - {type: arrow, from: rewrite.right@0.78, to: sparse.left, label: "tok q",
-     weight: heavy, label_offset: -2.2, route: avoid}
+     weight: heavy, route: avoid}
   - {type: arrow, from: dense.right, to: fuse.left@0.28, label: "top-k=50", weight: heavy, route: avoid}
   - {type: arrow, from: sparse.right, to: fuse.left@0.72, label: "top-k=50", weight: heavy, route: avoid}
   - {type: arrow, from: fuse.right, to: compress.left, label: "top-k=8", weight: heavy, route: avoid}

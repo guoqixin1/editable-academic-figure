@@ -729,7 +729,9 @@ def label_candidates(
     label_w: float,
     label_h: float,
     asc: float,
-    offsets: tuple[float, ...] = (1.6, -1.6, 2.4, -2.4, 3.6, -3.6, 5.0, -5.0),
+    offsets: tuple[float, ...] = (
+        1.6, -1.6, 2.4, -2.4, 3.6, -3.6, 5.0, -5.0, 7.0, -7.0, 9.0, -9.0,
+    ),
 ) -> list[tuple[float, float, Rect, str, float]]:
     """生成候选：(text_x, baseline, cap, tag, segment_preference)。
 
@@ -786,7 +788,84 @@ def label_candidates(
             bb_y = ty - asc
             cap = Rect(tx - 0.7, bb_y - 0.25, label_w + 1.4, label_h + 0.5)
             out.append((tx, ty, cap, f"corner{i}:{tag}", 3.0))
+
+    # 窄缝逃逸：沿路径包围盒外围滑移，宽标签塞不进短段时用
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    mid_x, mid_y = (min_x + max_x) / 2, (min_y + max_y) / 2
+    for dx, dy, tag, pref in (
+        (-label_w - 1.2, -asc - 1.2, "escape:L-above", 4.0),
+        (-label_w - 1.2, 1.5, "escape:L-below", 4.0),
+        (1.2, -asc - 1.2, "escape:R-above", 3.5),
+        (1.2, 1.5, "escape:R-below", 3.5),
+        (-label_w / 2, -asc - 3.5, "escape:mid-above", 5.0),
+        (-label_w / 2, 3.5, "escape:mid-below", 5.0),
+        (-label_w / 2, -asc - 6.0, "escape:far-above", 3.0),
+        (-label_w / 2, 6.0, "escape:far-below", 3.0),
+    ):
+        tx, ty = mid_x + dx, mid_y + dy + asc
+        bb_y = ty - asc
+        cap = Rect(tx - 0.7, bb_y - 0.25, label_w + 1.4, label_h + 0.5)
+        out.append((tx, ty, cap, tag, pref))
     return out
+
+
+def _seg_crosses_cap(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    cap: Rect,
+    pad: float = 0.15,
+) -> bool:
+    """线段是否穿入标签胶囊（含描边容差）。"""
+    return _segment_hits_rect(a[0], a[1], b[0], b[1], cap.expanded(pad))
+
+
+def _label_hard_collision(
+    cap: Rect,
+    boxes: list[Rect],
+    texts: list[Rect],
+    other_caps: list[Rect],
+    other_arrow_segs: list[tuple[tuple[float, float], tuple[float, float]]],
+    own_segs: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
+    tip: tuple[float, float] | None = None,
+    box_pad: float = 0.35,
+    endpoint_boxes: list[Rect] | None = None,
+) -> bool:
+    """硬碰撞：压非端点盒子（含边框带）/文字/其它标签，或被其它箭头线段穿过。
+
+    端点盒子（箭头 from/to）只走软惩罚：窄缝标签几何上几乎必然贴近端点盒。
+    """
+    endpoints = endpoint_boxes or []
+    for b in boxes:
+        if any(abs(b.x - e.x) < 1e-6 and abs(b.y - e.y) < 1e-6
+               and abs(b.w - e.w) < 1e-6 and abs(b.h - e.h) < 1e-6 for e in endpoints):
+            continue
+        if cap.intersection_area(b.expanded(box_pad)) > 0.02:
+            return True
+    for t in texts:
+        if cap.intersection_area(t) > 0.05:
+            return True
+    for o in other_caps:
+        if cap.intersection_area(o.expanded(0.3)) > 0.05:
+            return True
+    # 其它箭头：穿过或贴边 <0.8mm 都硬拒（避免 tok|q）
+    for a, b in other_arrow_segs:
+        if _seg_crosses_cap(a, b, cap, pad=0.8):
+            return True
+    if own_segs:
+        for a, b in own_segs:
+            # 折线竖直/水平段劈开胶囊文字区 → 硬拒
+            inner = Rect(cap.x + 0.5, cap.y + 0.4,
+                         max(cap.w - 1.0, 0.2), max(cap.h - 0.8, 0.2))
+            if _segment_hits_rect(a[0], a[1], b[0], b[1], inner):
+                return True
+    if tip is not None:
+        if (cap.x - 0.05 <= tip[0] <= cap.right + 0.05
+                and cap.y - 0.05 <= tip[1] <= cap.bottom + 0.05):
+            return True
+    return False
 
 
 def score_label_candidate(
@@ -799,13 +878,32 @@ def score_label_candidate(
     other_caps: list[Rect],
     seg_pref: float = 0.0,
     head_keep: float = 2.8,
+    other_arrow_segs: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
+    endpoint_boxes: list[Rect] | None = None,
 ) -> float:
-    """越高越好。硬碰撞大幅扣分。"""
+    """越高越好。硬碰撞大幅扣分；其它箭头线段穿标签为重罚。"""
     s = 100.0 + seg_pref
+    endpoints = endpoint_boxes or []
+
+    def _is_endpoint(b: Rect) -> bool:
+        return any(
+            abs(b.x - e.x) < 1e-6 and abs(b.y - e.y) < 1e-6
+            and abs(b.w - e.w) < 1e-6 and abs(b.h - e.h) < 1e-6
+            for e in endpoints
+        )
+
     for b in boxes:
-        a = cap.intersection_area(b)
-        if a > 0:
-            s -= 80 + a * 4
+        a = cap.intersection_area(b.expanded(0.35))
+        if a <= 0:
+            continue
+        if _is_endpoint(b):
+            # 端点盒：轻罚，避免被赶到远处；边框带比深入盒内多罚一点
+            inner = Rect(b.x + 0.5, b.y + 0.5, max(b.w - 1.0, 0.1), max(b.h - 1.0, 0.1))
+            deep = cap.intersection_area(inner)
+            border = max(0.0, a - deep)
+            s -= 8 + deep * 1.5 + border * 6
+        else:
+            s -= 120 + a * 8
     for t in texts:
         a = cap.intersection_area(t)
         if a > 0:
@@ -819,7 +917,17 @@ def score_label_candidate(
     cx, cy = cap.x + cap.w / 2, cap.y + cap.h / 2
     if math.hypot(cx - tip[0], cy - tip[1]) < head_keep * 0.55:
         s -= 60
-    segs = arrow_segs or list(zip(pts, pts[1:]))
+    own_segs = list(zip(pts, pts[1:])) if len(pts) >= 2 else []
+    foreign = list(other_arrow_segs) if other_arrow_segs is not None else [
+        seg for seg in arrow_segs if seg not in own_segs
+    ]
+    # 其它箭头线段：穿过胶囊或贴太近 → 重罚（修复 tok|q 竖线劈标）
+    for a, b in foreign:
+        if _seg_crosses_cap(a, b, cap, pad=0.8):
+            s -= 200
+        elif _point_seg_dist((cx, cy), a, b) < 1.2:
+            s -= 50
+    segs = own_segs or list(arrow_segs)
     dmin = min(_point_seg_dist((cx, cy), a, b) for a, b in segs) if segs else 99.0
     if dmin < 0.25:
         s -= 40
@@ -827,12 +935,6 @@ def score_label_candidate(
         s -= (dmin - 5.0) * 3
     else:
         s += 6
-    # 压到其它箭头线段
-    for a, b in arrow_segs:
-        # 标签中心到别人线段太近
-        if _point_seg_dist((cx, cy), a, b) < 0.8:
-            # 若是自己的段则上面 dmin 已处理；这里用略弱惩罚
-            pass
     return s
 
 
@@ -846,6 +948,7 @@ def pick_best_label(
     other_arrow_segs: list[tuple[tuple[float, float], tuple[float, float]]],
     other_caps: list[Rect],
     head_keep: float = 2.8,
+    endpoint_boxes: list[Rect] | None = None,
 ) -> LabelCandidate | None:
     tip = pts[-1]
     own_segs = list(zip(pts, pts[1:]))
@@ -854,23 +957,15 @@ def pick_best_label(
     best: LabelCandidate | None = None
     best_soft: LabelCandidate | None = None
     for tx, ty, cap, tag, pref in cands:
-        hard = False
-        for b in boxes:
-            if cap.intersection_area(b) > 0.05:
-                hard = True
-                break
-        if not hard:
-            for t in texts:
-                if cap.intersection_area(t) > 0.05:
-                    hard = True
-                    break
-        if not hard:
-            for o in other_caps:
-                if cap.intersection_area(o.expanded(0.3)) > 0.05:
-                    hard = True
-                    break
+        hard = _label_hard_collision(
+            cap, boxes, texts, other_caps, other_arrow_segs,
+            own_segs=own_segs, tip=tip, endpoint_boxes=endpoint_boxes,
+        )
         sc = score_label_candidate(
-            cap, tip, pts, boxes, texts, all_segs, other_caps, pref, head_keep)
+            cap, tip, pts, boxes, texts, all_segs, other_caps, pref, head_keep,
+            other_arrow_segs=other_arrow_segs,
+            endpoint_boxes=endpoint_boxes,
+        )
         cand = LabelCandidate(x=tx, baseline=ty, cap=cap, tag=tag, score=sc)
         if not hard and (best is None or sc > best.score):
             best = cand

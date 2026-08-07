@@ -847,9 +847,17 @@ def _place_auto_arrow_labels(
         for aid, segs in all_segs.items():
             if aid != el.id:
                 other_segs.extend(segs)
+        endpoint_boxes: list[Rect] = []
+        for ep in (el.from_, el.to):
+            nid = _endpoint_node_id(ep)
+            if nid:
+                vr = res.node_visual_rects.get(nid) or res.node_rects.get(nid)
+                if vr is not None:
+                    endpoint_boxes.append(vr)
         best = pick_best_label(
             g.pts, w, h, asc, boxes, texts, other_segs, other_caps,
             head_keep=max(head_len + 1.2, 2.8),
+            endpoint_boxes=endpoint_boxes,
         )
         if best is None:
             continue
