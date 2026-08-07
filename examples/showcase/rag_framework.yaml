@@ -1,0 +1,101 @@
+# A1 — RAG end-to-end pipeline (README showcase)
+figure: {width: 180, height: 86, dpi: 600}
+theme:
+  preset: topconf
+
+elements:
+  # ── Online inference ──
+  - {type: panel, id: p_online, rect: [3, 2.5, 174, 52], title: "Online Inference Pipeline",
+     header_style: smallcaps, fill: "#F7F7F7", title_size: 7.0, header_h: 6.5}
+
+  - {type: box, id: q, rect: [7, 12, 18, 36], title: "User Query",
+     body: "natural language", variant: plain, shape: stadium,
+     sketch: waveform, valign: top, title_size: 6.8, body_size: 6.0}
+
+  - {type: box, id: rewrite, rect: [28, 12, 20, 36], title: "Query Rewrite",
+     body: "HyDE + multi-q", variant: secondary, accent: left,
+     sketch: tree, valign: top, title_size: 6.6, body_size: 6.0}
+
+  - {type: box, id: dense, rect: [52, 12, 22, 16.5], title: "Dense Retriever",
+     body: "bi-encoder ANN", variant: primary, accent: left,
+     sketch: scatter, valign: top, title_size: 6.4, body_size: 6.0}
+
+  - {type: box, id: sparse, rect: [52, 31.5, 22, 16.5], title: "Sparse BM25",
+     body: "lexical match", variant: secondary,
+     sketch: bars, valign: top, title_size: 6.4, body_size: 6.0}
+
+  - {type: box, id: fuse, rect: [78, 12, 24, 36], title: "Fusion + Rerank",
+     body: "RRF + cross-enc", variant: primary, accent: left,
+     sketch: heatmap, valign: top, shadow: true, title_size: 6.6, body_size: 6.0}
+
+  - {type: box, id: compress, rect: [106, 12, 20, 36], title: "Compress",
+     body: "MMR + dedup", variant: muted,
+     sketch: dots_flow, valign: top, title_size: 6.6, body_size: 6.0}
+
+  - {type: box, id: llm, rect: [130, 12, 22, 36], title: "LLM Generate",
+     body: "token decode", variant: primary, accent: left,
+     sketch: spectrum, valign: top, shadow: true, title_size: 6.6, body_size: 6.0}
+
+  - {type: box, id: verify, rect: [156, 12, 18, 16.5], title: "Cite+Verify",
+     body: "NLI check", variant: tertiary,
+     sketch: matrix, valign: top, title_size: 6.2, body_size: 6.0}
+
+  - {type: box, id: ans, rect: [156, 31.5, 18, 16.5], title: "Answer",
+     body: "cited text", variant: accent, shape: stadium,
+     sketch: nested, valign: top, title_size: 6.4, body_size: 6.0}
+
+  # Online main flow
+  - {type: arrow, from: q.right, to: rewrite.left, label: "raw q", weight: heavy}
+  - {type: arrow, from: rewrite.right@0.28, to: dense.left, label: "768-d vec", weight: heavy}
+  - {type: arrow, from: rewrite.right@0.78, to: sparse.left, label: "tok q",
+     weight: heavy, label_offset: -2.2}
+  - {type: arrow, from: dense.right, to: fuse.left@0.28, label: "top-k=50", weight: heavy}
+  - {type: arrow, from: sparse.right, to: fuse.left@0.72, label: "top-k=50", weight: heavy}
+  - {type: arrow, from: fuse.right, to: compress.left, label: "top-k=8", weight: heavy}
+  - {type: arrow, from: compress.right, to: llm.left, label: "≤4k tok", weight: heavy}
+  - {type: arrow, from: llm.right@0.28, to: verify.left, label: "draft", weight: heavy}
+  - {type: arrow, from: verify.bottom, to: ans.top, label: "ok", weight: heavy}
+
+  # ── Offline index ──
+  - {type: panel, id: p_offline, rect: [3, 56, 110, 27], title: "Offline Index Build",
+     header_style: smallcaps, fill: "#F0F4F8", title_size: 7.0, header_h: 6.0}
+
+  - {type: box, id: docs, rect: [7, 63.5, 22, 17], title: "Doc Corpus",
+     body: "PDF / wiki", variant: muted,
+     sketch: grid, valign: top, title_size: 6.2, body_size: 6.0}
+
+  - {type: box, id: chunk, rect: [33, 63.5, 20, 17], title: "Chunking",
+     body: "512+overlap", variant: muted,
+     sketch: bars, valign: top, title_size: 6.2, body_size: 6.0}
+
+  - {type: box, id: embed, rect: [57, 63.5, 22, 17], title: "Embedding",
+     body: "E5 / BGE", variant: secondary, accent: left,
+     sketch: scatter, valign: top, title_size: 6.2, body_size: 6.0}
+
+  - {type: box, id: vdb, rect: [83, 63.5, 26, 17], title: "Vector Store",
+     body: "HNSW index", variant: primary, shape: cylinder,
+     sketch: grid, valign: top, title_size: 6.2, body_size: 6.0}
+
+  - {type: arrow, from: docs.right, to: chunk.left, label: "docs", style: dashed, weight: normal}
+  - {type: arrow, from: chunk.right, to: embed.left, label: "chunks", style: dashed, weight: normal}
+  - {type: arrow, from: embed.right, to: vdb.left, label: "768-d", style: dashed, weight: normal}
+  # index link: corridor left of dual-retriever column (x=49), avoid piercing sparse
+  - {type: arrow, from: vdb.top, to: dense.left,
+     via: [[96, 55], [49, 55], [49, 20]], style: dashed, weight: thin, label: "index"}
+
+  # Feedback (dotted) along panel gap
+  - {type: arrow, from: ans.bottom, to: fuse.bottom,
+     via: [[165, 53.5], [90, 53.5]], style: dotted, weight: thin, label: "feedback"}
+
+  # Feedback cue + legend (fill bottom-right)
+  - {type: box, id: fb_note, rect: [118, 58, 56, 10], title: "Feedback loop",
+     body: "click / rating → reranker FT", variant: muted,
+     title_size: 6.2, body_size: 6.0, sketch: curve, valign: top}
+
+  - {type: legend, id: lg, at: [118, 70], columns: 2, size: 6.0, items: [
+      {swatch: box, color: "#0072B2", label: "neural / core"},
+      {swatch: box, color: "#E69F00", label: "lexical / rewrite"},
+      {swatch: box, color: "#009E73", label: "verify / answer"},
+      {swatch: dashed, color: "#4D4D4D", label: "offline index"},
+      {swatch: dot, color: "#4D4D4D", label: "feedback (dotted)"},
+    ]}

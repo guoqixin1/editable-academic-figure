@@ -1,0 +1,132 @@
+# B1 — LLM Agent RL Training Loop (airy) · r7
+figure: {width: 172, height: 90, dpi: 600, background: "#FFFFFF"}
+theme:
+  preset: airy
+
+elements:
+  # Panels fill almost all canvas; 3–4mm outer margin
+  - {type: panel, id: p_env, rect: [2.5, 5, 45, 68], title: "Environment & Agent",
+     header_style: smallcaps, fill: "#F3F8FE", title_size: 6.8, header_h: 5.4}
+  - {type: panel, id: p_roll, rect: [50, 5, 58, 31], title: "Trajectory Sampling",
+     header_style: smallcaps, fill: "#FFF8F5", title_size: 6.8, header_h: 5.4}
+  - {type: panel, id: p_rew, rect: [50, 38.5, 58, 34.5], title: "Reward Model",
+     header_style: smallcaps, fill: "#F7FBF6", title_size: 6.8, header_h: 5.4}
+  - {type: panel, id: p_upd, rect: [120, 5, 49.5, 35.5], title: "Advantage & Update",
+     header_style: smallcaps, fill: "#F8F4FC", title_size: 6.8, header_h: 5.4}
+  - {type: panel, id: p_aux, rect: [120, 42.5, 49.5, 30.5], title: "Side Path",
+     header_style: smallcaps, fill: "#FFFBF0", title_size: 6.8, header_h: 5.4}
+
+  # Environment & Agent — equal center gaps (~21mm)
+  # centers 18.5 / 39.5 / 60.5 → equal 21mm gaps
+  - {type: box, id: env, rect: [5.5, 12, 39, 13], title: "Task Dispatcher",
+     body: "prompt · schema · tools", variant: secondary, shape: parallelogram,
+     sketch: tree, valign: top, title_size: 6.6, body_size: 6.0}
+  - {type: box, id: policy, rect: [5.5, 28.5, 39, 22], title: "Agent Policy π_θ",
+     body: "LLM decoder + tool API", variant: primary, accent: left,
+     sketch: waveform, valign: top, title_size: 7.0, body_size: 6.0}
+  - {type: box, id: tool_s, rect: [5.5, 52.5, 12.5, 16], title: "Search",
+     body: "web/RAG", variant: accent, sketch: spectrum, valign: top,
+     title_size: 6.0, body_size: 6.0}
+  - {type: box, id: tool_c, rect: [19, 52.5, 12.5, 16], title: "Code",
+     body: "sandbox", variant: accent, sketch: grid, valign: top,
+     title_size: 6.0, body_size: 6.0}
+  - {type: box, id: tool_m, rect: [32.5, 52.5, 12, 16], title: "Memory",
+     body: "KV R/W", variant: highlight, sketch: heatmap, valign: top,
+     title_size: 6.0, body_size: 6.0}
+
+  # Trajectory — tokens without inline labels (labels as free text below)
+  - {type: box, id: roll, rect: [53, 12, 24, 20], title: "G Rollouts",
+     body: "multi-turn tools", variant: primary, accent: left,
+     sketch: curve, valign: top, title_size: 6.8, body_size: 6.0}
+  - {type: tokens, id: tok_traj, rect: [80, 12.5, 25, 7.5], n: 7, direction: h,
+     variant: primary, gap: 0.4}
+  - {type: tokens, id: tok_tool, rect: [80, 22, 25, 7.5], n: 6, direction: h,
+     variant: secondary, gap: 0.45,
+     colors: ["#FFD0D0", "#FFD0D0", "#E0E0E0", "#FFD0D0", "#E0E0E0", "#FFD0D0"]}
+  - {type: text, id: t_tok, at: [92.5, 21], text: "tau · tool-call tokens", size: 6.0,
+     color: "#6A5ACD", anchor: middle}
+  # keep clear of store dotted path (y≈36.5)
+  - {type: text, id: t_g, at: [80, 33.2], text: "G∥ · T steps", size: 6.0,
+     color: "#6A5ACD", anchor: middle}
+
+  # Reward
+  - {type: box, id: rm, rect: [53, 46, 23, 23], title: "Reward Model",
+     body: "r(τ) composite", variant: secondary, accent: left,
+     sketch: bars, valign: top, title_size: 6.8, body_size: 6.0}
+  - {type: box, id: r_succ, rect: [78.5, 46, 13.5, 10.5], title: "Success",
+     body: "task hit", variant: tertiary, sketch: distribution, valign: top,
+     title_size: 6.0, body_size: 6.0}
+  - {type: box, id: r_step, rect: [93.5, 46, 12, 10.5], title: "−λT",
+     body: "steps", variant: muted, sketch: curve_desc, valign: top,
+     title_size: 6.0, body_size: 6.0}
+  - {type: box, id: r_fmt, rect: [78.5, 58.5, 27, 10.5], title: "Format Check",
+     body: "schema / JSON", variant: accent, sketch: matrix, valign: top,
+     title_size: 6.2, body_size: 6.0}
+
+  # Advantage & Update
+  - {type: box, id: adv, rect: [123.5, 12, 42.5, 13], title: "Advantage Ahat",
+     body: "group-relative", variant: primary, accent: left,
+     sketch: heatmap, valign: top, title_size: 6.6, body_size: 6.0}
+  - {type: box, id: upd, rect: [123.5, 27.5, 42.5, 11], title: "GRPO / PPO",
+     body: "policy gradient Δθ", variant: highlight, accent: left,
+     sketch: curve, valign: top, title_size: 6.8, body_size: 6.0}
+
+  # Side path — with sketches; h≥11
+  - {type: box, id: buf, rect: [123.5, 49.5, 42.5, 11], title: "Replay Buffer",
+     body: "store τ · batch", variant: accent, shape: cylinder,
+     title_size: 6.2, body_size: 6.0}
+  - {type: box, id: ref, rect: [123.5, 61.5, 42.5, 10], title: "π_ref (frozen)",
+     body: "β·KL region", variant: muted, sketch: scatter, valign: top,
+     title_size: 6.2, body_size: 6.0}
+
+  # Badges / markers
+  - {type: badge, id: b1, at: [7, 13.5], text: "1", size: 4.2, color: "#E05555"}
+  - {type: badge, id: b2, at: [7, 30], text: "2", size: 4.2, color: "#1A9988"}
+  - {type: badge, id: b3, at: [54.5, 13.5], text: "3", size: 4.2, color: "#6A5ACD"}
+  - {type: badge, id: b4, at: [54.5, 47.5], text: "4", size: 4.2, color: "#E05555"}
+  - {type: badge, id: b5, at: [125, 13.5], text: "5", size: 4.2, color: "#1A9988"}
+  - {type: marker, id: m_fire1, at: [42.5, 30], icon: fire, size: 3.6}
+  - {type: marker, id: m_fire2, at: [164, 29], icon: fire, size: 3.6}
+  - {type: marker, id: m_snow, at: [164, 63], icon: snow, size: 3.4}
+
+  # Main flow
+  - {type: arrow, from: env.bottom, to: policy.top, label: "task", weight: heavy}
+  - {type: arrow, from: tool_s.top, to: policy.bottom@0.2, weight: thin, style: dotted, label: "api"}
+  - {type: arrow, from: tool_c.top, to: policy.bottom@0.5, weight: thin, style: dotted}
+  - {type: arrow, from: tool_m.top, to: policy.bottom@0.8, weight: thin, style: dotted}
+  - {type: arrow, from: policy.right, to: roll.left, label: "act", weight: heavy}
+  - {type: arrow, from: roll.bottom, to: rm.top, label: "τ_1:G", weight: heavy}
+
+  # r(τ): corridor x=111.5 (p_rew ends 108, p_upd starts 120)
+  - {type: arrow, from: rm.right, to: adv.left,
+     via: [[111.5, 57.5], [111.5, 18.5]], label: "r(τ)", weight: heavy}
+  - {type: arrow, from: adv.bottom, to: upd.top, label: "Ahat", weight: heavy}
+
+  # Δθ outer corridor — no label on arrow (free text)
+  # policy.left center y = 28.5+11 = 39.5 — last via must match for horizontal approach
+  - {type: arrow, from: upd.right, to: policy.left,
+     via: [[170.5, 33], [170.5, 2.6], [4.2, 2.6], [4.2, 39.5]],
+     weight: heavy, style: dashed, color: "#6A5ACD"}
+  - {type: text, id: t_dtheta, at: [86, 3.6], text: "Δθ feedback", size: 6.2,
+     color: "#6A5ACD", anchor: middle, bold: true}
+
+  # store: corridor below t_g (x≈80); label offset away from "G∥ · T steps"
+  - {type: arrow, from: tok_tool.right, to: buf.left,
+     via: [[110, 25.75], [116, 25.75], [116, 55]], label: "store", weight: thin,
+     style: dotted, label_offset: 2.0}
+  - {type: arrow, from: buf.top, to: upd.bottom, label: "batch", weight: thin, style: dotted}
+  # KL: last via y = upd.left@0.75 = 27.5+11*0.75 = 35.75
+  - {type: arrow, from: ref.left, to: upd.left@0.75,
+     via: [[121.5, 66.5], [121.5, 35.75]], label: "KL", weight: thin, style: dashed}
+
+  # Bottom strip — formula left, legend right (fills width)
+  - {type: text, id: t_loss, at: [48, 78],
+     text: "L = −Ahat log π_θ − β KL(π_θ ‖ π_ref)",
+     size: 6.2, bold: true, color: "#6A5ACD", anchor: middle}
+  - {type: legend, id: lg, at: [95, 75.5], columns: 2, size: 6.0, frame: true,
+     items: [
+       {swatch: box, color: "#90CAF9", label: "policy / update"},
+       {swatch: box, color: "#EF9A9A", label: "reward / env"},
+       {swatch: dashed, color: "#6A5ACD", label: "Δθ feedback"},
+       {swatch: dashed, color: "#9E9E9E", label: "KL / replay"},
+     ]}

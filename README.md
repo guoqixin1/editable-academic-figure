@@ -25,17 +25,31 @@
 
 ## 效果预览
 
-**双面板方法总览**（`topconf`，信息密度对标顶会）：
+下列四张图均由对应 YAML spec **完全复现**（改坐标 / 主题即改图，可反复重渲）。
 
-![Method overview](docs/images/example-method-overview.png)
+**RAG 推理管线框架图**（`topconf`，上下双 section + 图例）：
 
-**多分区网络架构图**：
+![RAG framework](docs/images/showcase-rag-framework.png)
 
-![Architecture](docs/images/example-architecture.png)
+→ [`examples/showcase/rag_framework.yaml`](examples/showcase/rag_framework.yaml)
 
-**对真实论文图的复现**（左原图 / 右复现）：
+**多任务视觉主干**（macro + micro 双面板，Teal + Amber 配色）：
 
-![对比](comparison.png)
+![Vision backbone](docs/images/showcase-vision-backbone.png)
+
+→ [`examples/showcase/vision_backbone.yaml`](examples/showcase/vision_backbone.yaml)
+
+**LLM Agent 强化学习闭环**（`airy` 柔彩主题，五分区 + 底部公式）：
+
+![Agent RL loop](docs/images/showcase-agent-rl.png)
+
+→ [`examples/showcase/agent_rl.yaml`](examples/showcase/agent_rl.yaml)
+
+**医学影像 CAD 管线**（内嵌 AI 生成素材；`assets_style` 风格包保证多素材风格统一）：
+
+![Medical CAD](docs/images/showcase-medical-cad.png)
+
+→ [`examples/showcase/medical_cad.yaml`](examples/showcase/medical_cad.yaml)
 
 | 示例 | 领域 | 看点 |
 | --- | --- | --- |

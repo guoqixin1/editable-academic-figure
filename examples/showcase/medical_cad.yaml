@@ -1,0 +1,99 @@
+# C2 — Medical imaging CAD pipeline (AI object assets + code layout)
+figure: {width: 176, height: 64, dpi: 600, assets_dir: assets}
+theme:
+  preset: topconf
+
+assets_style: >
+  clean academic sticker icons, uniform 2px charcoal outline,
+  two-tone flat fill, three-quarter view, icon-level abstraction
+
+assets:
+  - id: microscope
+    prompt: 一台简洁的台式光学显微镜，斜俯视角
+    aspect: "1:1"
+    candidates: 3
+    shadow: remove
+  - id: report_doc
+    prompt: 一份摊开的结构化医疗报告文档，带笔夹，斜俯视角
+    aspect: "1:1"
+    candidates: 3
+    shadow: remove
+  - id: workstation
+    prompt: 一台显示医学影像的台式工作站显示器与键盘，斜俯视角
+    aspect: "1:1"
+    candidates: 3
+    shadow: remove
+
+elements:
+  - {type: panel, id: p_pipe, rect: [2.5, 1.5, 171, 60.5], title: "Medical Imaging CAD Pipeline",
+     header_style: smallcaps, fill: "#F7F7F7", title_size: 7.0, header_h: 5.8}
+
+  # Stage 1 — Acquisition
+  - {type: asset, id: mic, rect: [5.5, 10, 20, 28], src: assets/microscope.png,
+     caption: "Acquisition", halign: center, valign: middle}
+  - {type: badge, id: bd1, at: [7.5, 9], text: "1", size: 4.0, color: "#0072B2"}
+
+  # Stage 2 — Preprocess
+  - {type: box, id: prep, rect: [28.5, 10, 21, 28], title: "Preprocess",
+     body: "denoise + norm", variant: muted,
+     sketch: waveform, valign: top, title_size: 6.4, body_size: 6.0}
+  - {type: badge, id: bd2, at: [30.5, 9], text: "2", size: 4.0, color: "#666666"}
+
+  # Stage 3 — Segmentation
+  - {type: box, id: seg, rect: [52.5, 10, 24, 28], title: "Segmentation",
+     body: "U-Net / SAM", variant: primary, accent: left,
+     sketch: heatmap, valign: top, shadow: true, title_size: 6.5, body_size: 6.0}
+  - {type: badge, id: bd3, at: [54.5, 9], text: "3", size: 4.0, color: "#0072B2"}
+  - {type: marker, at: [75, 11.5], icon: fire, size: 3.8}
+
+  # Stage 4 — Feature extract
+  - {type: box, id: feat, rect: [79.5, 10, 19.5, 28], title: "Feature Extract",
+     body: "morph + CNN emb", variant: secondary, accent: left,
+     sketch: scatter, valign: top, title_size: 6.2, body_size: 6.0}
+  - {type: badge, id: bd4, at: [81.5, 9], text: "4", size: 4.0, color: "#E69F00"}
+
+  # Stage 5 — Diagnosis (wider feat→clf corridor so R^{B×D} clears accent)
+  - {type: box, id: clf, rect: [113, 10, 18.5, 28], title: "Diagnosis",
+     body: "multi-label head", variant: primary, accent: left,
+     sketch: bars, valign: top, shadow: true, title_size: 6.4, body_size: 6.0}
+  - {type: badge, id: bd5, at: [115, 9], text: "5", size: 4.0, color: "#0072B2"}
+  - {type: marker, at: [130, 11.5], icon: fire, size: 3.8}
+
+  # Stage 6 — captions inside asset slot (same pattern as Acquisition)
+  - {type: asset, id: report, rect: [134, 9.5, 17, 16.5], src: assets/report_doc.png,
+     caption: "report", halign: center, valign: middle}
+  - {type: badge, id: bd6, at: [136, 8.5], text: "6", size: 3.6, color: "#009E73"}
+  - {type: asset, id: doctor, rect: [153, 9.5, 17, 16.5], src: assets/workstation.png,
+     caption: "PACS review", halign: center, valign: middle}
+
+  # cy: report≈17.75 → findings=35 → out=52 (pitch ≈17.25)
+  - {type: box, id: findings, rect: [134, 28.75, 36, 12.5], title: "Findings",
+     body: "ROI descriptors", variant: tertiary, sketch: bars, valign: top,
+     title_size: 6.2, body_size: 6.0}
+  - {type: box, id: out_note, rect: [134, 45.75, 36, 12.5], title: "Structured Output",
+     body: "ICD + confidence", variant: tertiary, sketch: matrix, valign: top,
+     title_size: 6.2, body_size: 6.0}
+
+
+  # Main flow — R^{B×D} sits in widened feat→clf corridor
+  - {type: arrow, from: mic.right, to: prep.left, label: "raw FOV", weight: heavy}
+  - {type: arrow, from: prep.right, to: seg.left, label: "H×W×C", weight: heavy}
+  - {type: arrow, from: seg.right, to: feat.left, label: "mask+ROI", weight: heavy}
+  - {type: arrow, from: feat.right, to: clf.left, weight: heavy}
+  # feat right=99, accent≈111.9 → corridor mid≈105.5; keep left of mid for safety
+  - {type: text, at: [103, 20.5], text: "R^{B×D}", size: 6.0, color: "#333333",
+     anchor: middle}
+  - {type: arrow, from: clf.right, to: report.left, label: "logits", weight: heavy}
+  - {type: arrow, from: report.right, to: doctor.left, weight: normal}
+  # land on left of Findings so shaft misses "PACS review" under doctor
+  - {type: arrow, from: doctor.bottom, to: findings.top@0.22, weight: thin}
+  - {type: arrow, from: findings.bottom, to: out_note.top, label: "encode", weight: normal}
+  - {type: arrow, from: out_note.left, to: clf.bottom, via: [[130, 52], [120, 52]],
+     style: dotted, label: "feedback", weight: thin}
+
+  - {type: legend, id: lg, at: [5.5, 45], columns: 4, size: 6.0, items: [
+      {swatch: box, color: "#0072B2", label: "neural / trainable"},
+      {swatch: box, color: "#E69F00", label: "feature stage"},
+      {swatch: box, color: "#CCCCCC", label: "preprocess"},
+      {swatch: dashed, color: "#4D4D4D", label: "clinician feedback"},
+    ]}
