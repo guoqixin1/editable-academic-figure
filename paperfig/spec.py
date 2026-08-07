@@ -230,6 +230,11 @@ class ArrowEl:
     # label_pos: None=未写（avoid 默认 auto，其它保持旧落标）；"auto"=碰撞打分落标
     label_pos: str | None = None
     label_offset_explicit: bool = False  # YAML 是否显式写了 label_offset
+    # 语义预设：data|control|feedback|optional|error；显式 style/color/width 可覆盖
+    semantic: str | None = None
+    style_explicit: bool = False
+    color_explicit: bool = False
+    width_explicit: bool = False
 
 
 @dataclass
@@ -290,10 +295,14 @@ class LegendEl:
     at: tuple[float, float]
     items: list[LegendItem] = field(default_factory=list)
     columns: int = 1
-    frame: bool = True           # 浅底圆角外框
+    frame: bool = True           # 浅底圆角外框（card 模式）
     fill: str | None = None
     stroke: str | None = None
     size: float = 6.0            # 文字 pt
+    # None=跟随 theme.default_legend_style；inline=无框色键；card=卡片式
+    style: str | None = None
+    frame_explicit: bool = False
+    size_explicit: bool = False
 
 
 Element = (BoxEl | AssetEl | TextEl | ArrowEl | GroupEl | PanelLabelEl | PanelEl
@@ -312,6 +321,8 @@ class FigureSpec:
     assets_dir: Path
     asset_requests: list[AssetRequest]
     elements: list[Element]
+    background_explicit: bool = False  # figure 是否显式写了 background
+    grid_bg: bool | None = None        # None=跟随 theme.grid_bg
 
     def find(self, el_id: str) -> Element | None:
         for el in self.elements:
@@ -336,7 +347,7 @@ _ALLOWED_KEYS = {
              "max_w", "rotate", "smallcaps"},
     "arrow": {"type", "id", "from", "to", "route", "style", "label", "color",
               "head", "bidir", "label_offset", "label_pos", "via", "width", "fill",
-              "bend", "label_bg", "weight"},
+              "bend", "label_bg", "weight", "semantic"},
     "group": {"type", "id", "members", "rect", "label", "pad", "style", "fill",
               "color", "label_pos", "label_size", "lw", "hatch", "shadow"},
     "panel_label": {"type", "id", "at", "text"},
@@ -349,8 +360,14 @@ _ALLOWED_KEYS = {
     "scatter": {"type", "id", "rect", "clusters", "seed", "dot_r", "outline"},
     "badge": {"type", "id", "at", "text", "size", "color", "text_color"},
     "sketch": {"type", "id", "rect", "kind", "color", "stroke_color", "label", "seed"},
-    "legend": {"type", "id", "at", "items", "columns", "frame", "fill", "stroke", "size"},
+    "legend": {"type", "id", "at", "items", "columns", "frame", "fill", "stroke",
+               "size", "style"},
 }
+
+_ARROW_SEMANTICS = {"data", "control", "feedback", "optional", "error"}
+_LEGEND_STYLES = {"inline", "card"}
+_PANEL_CASES = {"ml", "lower", "upper"}
+
 
 _SHAPES = {"rect", "stadium", "diamond", "cylinder", "parallelogram", "hexagon", "ellipse", "trapezoid"}
 _MARKER_ICONS = {"fire", "snow", "lock", "check", "cross", "oplus", "otimes", "wifi"}
@@ -412,10 +429,27 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
     width = float(fig.get("width", 180))
     height = float(fig.get("height", 100))
     dpi = int(fig.get("dpi", 600))
+    background_explicit = "background" in fig
     background = fig.get("background", "#FFFFFF")
     font_scale = float(fig.get("font_scale", 1.0))
+    grid_bg = fig.get("grid_bg")
+    if grid_bg is not None:
+        grid_bg = bool(grid_bg)
     assets_dir = fig.get("assets_dir")
     assets_dir = (p.parent / assets_dir).resolve() if assets_dir else (p.parent / "assets")
+
+    # theme canvas：figure 未显式 background 时采用主题画布色
+    theme_cfg_early = raw.get("theme") or {}
+    if isinstance(theme_cfg_early, str):
+        theme_cfg_early = {"preset": theme_cfg_early}
+    if not background_explicit and isinstance(theme_cfg_early, dict):
+        try:
+            from .theme import load_theme as _load_theme_early
+            _th = _load_theme_early(theme_cfg_early)
+            if _th.canvas:
+                background = _th.canvas
+        except Exception:
+            pass
 
     asset_requests = []
     for i, a in enumerate(raw.get("assets") or []):
@@ -560,6 +594,12 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
             weight = str(e.get("weight", "normal"))
             if weight not in _ARROW_WEIGHTS:
                 raise SpecError(f"{ctx}: weight 必须是 thin/normal/heavy")
+            semantic = e.get("semantic")
+            if semantic is not None:
+                semantic = str(semantic)
+                if semantic not in _ARROW_SEMANTICS:
+                    raise SpecError(
+                        f"{ctx}: arrow.semantic 必须是 {sorted(_ARROW_SEMANTICS)}")
             via = [_point(p, f"{ctx}.via[{k}]") for k, p in enumerate(e.get("via") or [])]
             label_offset_explicit = "label_offset" in e
             label_pos = e.get("label_pos", None)
@@ -579,6 +619,10 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 label_bg=bool(e.get("label_bg", True)), weight=weight,
                 label_pos=label_pos,
                 label_offset_explicit=label_offset_explicit,
+                semantic=semantic,
+                style_explicit="style" in e,
+                color_explicit="color" in e,
+                width_explicit="width" in e,
             ))
         elif etype == "group":
             members = [str(m) for m in (e.get("members") or [])]
@@ -629,12 +673,21 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                     swatch=sw, label=str(it.get("label", "")),
                     color=str(it.get("color", "#333333")),
                 ))
+            legend_style = e.get("style")
+            if legend_style is not None:
+                legend_style = str(legend_style)
+                if legend_style not in _LEGEND_STYLES:
+                    raise SpecError(
+                        f"{ctx}: legend.style 必须是 {sorted(_LEGEND_STYLES)}")
             elements.append(LegendEl(
                 id=eid, at=_point(e.get("at"), ctx), items=items,
                 columns=int(e.get("columns", 1)),
                 frame=bool(e.get("frame", True)),
                 fill=e.get("fill"), stroke=e.get("stroke"),
                 size=float(e.get("size", 6.0)),
+                style=legend_style,
+                frame_explicit="frame" in e,
+                size_explicit="size" in e,
             ))
         elif etype == "network":
             if "rect" not in e:
@@ -689,6 +742,7 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
     spec = FigureSpec(
         path=p, width=width, height=height, dpi=dpi, background=background,
         font_scale=font_scale, theme_cfg=theme_cfg,
+        background_explicit=background_explicit, grid_bg=grid_bg,
         assets_dir=assets_dir, asset_requests=asset_requests, elements=elements,
     )
     _validate_refs(spec)

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from dataclasses import dataclass, field
 
 
@@ -73,6 +74,105 @@ _AIRY_PALETTE = {
     "purple": "#6A5ACD",
 }
 
+# Soft Pastel academic（NeurIPS 方法图默认）：Okabe 描边 + 浅填
+_NEURIPS_PALETTE = {
+    "primary": "#0072B2",
+    "secondary": "#E69F00",
+    "tertiary": "#009E73",
+    "sky": "#56B4E9",
+    "purple": "#CC79A7",
+    "vermillion": "#D55E00",
+    "text": "#333333",
+    "fill": "#FFFFFF",
+    "section_bg": "#F7F7F5",
+    "border": "#DDDDDD",
+    "arrow": "#4D4D4D",
+}
+
+# Anthropic/Distill 暖编辑风
+_EDITORIAL_PALETTE = {
+    "primary": "#6A6A6A",
+    "secondary": "#6A9BCC",
+    "tertiary": "#2F5B4F",
+    "accent": "#D97757",
+    "text": "#141413",
+    "fill": "#FFFDF8",
+    "section_bg": "#F2EDE4",
+    "border": "#E8E4DC",
+    "arrow": "#4A4A4A",
+    "canvas": "#FAF9F5",
+}
+
+# 浅晒图等距/系统风
+_ISOSYSTEM_PALETTE = {
+    "primary": "#3D5A80",
+    "secondary": "#EE6C4D",
+    "tertiary": "#293241",
+    "text": "#1F2A37",
+    "fill": "#FFFFFF",
+    "section_bg": "#E8EEF5",
+    "border": "#9AA8B8",
+    "arrow": "#3D5A80",
+    "grid": "#D0D7E2",
+    "canvas": "#F4F7FA",
+}
+
+# mainstream §1.2 Soft Pastel 基准填色（stroke → fill）
+_KNOWN_PASTEL_FILLS = {
+    "#0072B2": "#E8F4FD",
+    "#E69F00": "#FFF3E0",
+    "#009E73": "#E6F5F0",
+    "#56B4E9": "#E3F2FD",
+    "#CC79A7": "#F3E5F5",
+    "#D55E00": "#FCE8E6",
+    "#E07A3D": "#FCE8D8",
+    "#90A4AE": "#ECEFF1",
+    "#8C8C8C": "#F5F5F5",
+    "#4A90D9": "#E8F4FD",
+    "#3D5A80": "#E8EEF5",
+    "#EE6C4D": "#FDE8E2",
+    "#D97757": "#F8E6DF",
+    "#6A9BCC": "#E8F1F8",
+    "#2F5B4F": "#E4EDE9",
+}
+
+
+def _norm_hex(c: str) -> str:
+    s = str(c).strip()
+    if not s.startswith("#"):
+        s = "#" + s
+    if len(s) == 4:
+        s = "#" + "".join(ch * 2 for ch in s[1:])
+    return s.upper()
+
+
+def pastel_fill_from_stroke(stroke: str, mix: float = 0.14) -> str:
+    """由描边色派生浅填（约 12–18% 饱和 tint）。已知 Okabe 色用基准表。"""
+    key = _norm_hex(stroke)
+    if key in _KNOWN_PASTEL_FILLS:
+        return _KNOWN_PASTEL_FILLS[key]
+    m = re.fullmatch(r"#([0-9A-F]{6})", key)
+    if not m:
+        return "#F5F5F5"
+    r = int(m.group(1)[0:2], 16)
+    g = int(m.group(1)[2:4], 16)
+    b = int(m.group(1)[4:6], 16)
+    t = max(0.10, min(0.18, mix))
+    return "#{:02X}{:02X}{:02X}".format(
+        round(255 * (1 - t) + r * t),
+        round(255 * (1 - t) + g * t),
+        round(255 * (1 - t) + b * t),
+    )
+
+
+_NEURIPS_ARROW_STYLES: dict[str, dict] = {
+    "data": {"style": "solid", "color": "#4D4D4D", "width": 0.24},
+    "control": {"style": "solid", "color": "#7B8794", "width": 0.20},
+    "feedback": {"style": "dashed", "color": "#0072B2", "width": 0.20},
+    "optional": {"style": "dotted", "color": "#999999", "width": 0.16},
+    "error": {"style": "dashed", "color": "#D94A4A", "width": 0.22},
+}
+
 
 def _variants_border_style(pal: dict[str, str]) -> dict[str, Variant]:
     """白填充 + 角色色边框（topconf 设计语言）。"""
@@ -105,8 +205,94 @@ def _variants_airy(pal: dict[str, str]) -> dict[str, Variant]:
     }
 
 
+def _variants_pastel(pal: dict[str, str]) -> dict[str, Variant]:
+    """Soft Pastel：浅填 + 同色系深描边（neurips 设计语言）。"""
+    text = pal.get("text", "#333333")
+    border = pal.get("border", "#DDDDDD")
+
+    def role(stroke: str, lw: float | None = None, fill: str | None = None) -> Variant:
+        return Variant(
+            fill=fill or pastel_fill_from_stroke(stroke),
+            stroke=stroke,
+            text=text,
+            lw=lw,
+        )
+
+    primary = pal.get("primary", "#0072B2")
+    secondary = pal.get("secondary", "#E69F00")
+    tertiary = pal.get("tertiary", "#009E73")
+    sky = pal.get("sky", "#56B4E9")
+    purple = pal.get("purple", "#CC79A7")
+    vermillion = pal.get("vermillion", "#D55E00")
+    return {
+        "primary": role(primary),
+        "secondary": role(secondary),
+        "tertiary": role(tertiary),
+        "sky": role(sky),
+        "purple": role(purple),
+        "vermillion": role(vermillion),
+        "accent": role(purple),
+        "highlight": role(vermillion),
+        "plain": Variant(fill=pal.get("fill", "#FFFFFF"), stroke=border, text=text),
+        "muted": Variant(fill="#F7F7F5", stroke=border, text=text),
+        "section": Variant(fill=pal.get("section_bg", "#F7F7F5"), stroke=border, text=text),
+        "trainable": role("#E07A3D"),
+        "frozen": role("#90A4AE"),
+        "ours": role(primary, lw=0.28),
+        "baseline": Variant(fill="#F5F5F5", stroke="#8C8C8C", text=text),
+        "dark": Variant(fill=text, stroke=text, text="#FFFFFF"),
+    }
+
+
+def _variants_editorial(pal: dict[str, str]) -> dict[str, Variant]:
+    """暖纸编辑风：纸色填充 + 暖灰描边；clay accent 仅 highlight。"""
+    text = pal.get("text", "#141413")
+    fill = pal.get("fill", "#FFFDF8")
+    border = pal.get("border", "#E8E4DC")
+    clay = pal.get("accent", "#D97757")
+    return {
+        "primary": Variant(fill=fill, stroke=pal.get("primary", "#6A6A6A"), text=text),
+        "secondary": Variant(fill=fill, stroke=pal.get("secondary", "#6A9BCC"), text=text),
+        "tertiary": Variant(fill=fill, stroke=pal.get("tertiary", "#2F5B4F"), text=text),
+        "accent": Variant(fill=pastel_fill_from_stroke(clay), stroke=clay, text=text),
+        "highlight": Variant(fill=pastel_fill_from_stroke(clay), stroke=clay, text=text),
+        "plain": Variant(fill=fill, stroke=border, text=text),
+        "muted": Variant(fill=pal.get("section_bg", "#F2EDE4"), stroke=border, text=text),
+        "dark": Variant(fill=text, stroke=text, text="#FFFDF8"),
+    }
+
+
+def _variants_isosystem(pal: dict[str, str]) -> dict[str, Variant]:
+    """浅晒图系统风：白填 + 钢蓝描边；橙 accent 仅强调。"""
+    text = pal.get("text", "#1F2A37")
+    fill = pal.get("fill", "#FFFFFF")
+    primary = pal.get("primary", "#3D5A80")
+    accent = pal.get("secondary", "#EE6C4D")
+    border = pal.get("border", "#9AA8B8")
+    return {
+        "primary": Variant(fill=fill, stroke=primary, text=text, lw=0.30),
+        "secondary": Variant(fill=pastel_fill_from_stroke(accent), stroke=accent, text=text, lw=0.30),
+        "tertiary": Variant(fill=fill, stroke=pal.get("tertiary", "#293241"), text=text, lw=0.28),
+        "accent": Variant(fill=pastel_fill_from_stroke(accent), stroke=accent, text=text, lw=0.30),
+        "highlight": Variant(fill=pastel_fill_from_stroke(accent), stroke=accent, text=text, lw=0.32),
+        "plain": Variant(fill=fill, stroke=border, text=text, lw=0.25),
+        "muted": Variant(fill=pal.get("section_bg", "#E8EEF5"), stroke=border, text=text, lw=0.25),
+        "dark": Variant(fill=pal.get("tertiary", "#293241"), stroke=pal.get("tertiary", "#293241"),
+                        text="#FFFFFF", lw=0.28),
+    }
+
+
 _TOPCONF_VARIANTS = _variants_border_style(_TOPCONF_PALETTE)
 _AIRY_VARIANTS = _variants_airy(_AIRY_PALETTE)
+_NEURIPS_VARIANTS = _variants_pastel(_NEURIPS_PALETTE)
+_EDITORIAL_VARIANTS = _variants_editorial(_EDITORIAL_PALETTE)
+_ISOSYSTEM_VARIANTS = _variants_isosystem(_ISOSYSTEM_PALETTE)
+
+# 变体语言：决定 palette 覆盖时如何重建 variants
+_PASTEL_PRESETS = frozenset({"neurips"})
+_AIRY_PRESETS = frozenset({"airy"})
+_EDITORIAL_PRESETS = frozenset({"editorial"})
+_ISOSYSTEM_PRESETS = frozenset({"isosystem"})
 
 
 @dataclass
@@ -144,6 +330,16 @@ class Theme:
     default_shadow: bool = False
     palette: dict[str, str] = field(default_factory=dict)
 
+    # 箭头语义预设 / panel 编号 / 图例默认 / 画布
+    arrow_styles: dict[str, dict] = field(default_factory=dict)
+    panel_case: str = "ml"                 # ml | lower | upper
+    default_legend_style: str = "card"     # card | inline
+    canvas: str | None = None              # figure 级底色（未显式 background 时采用）
+    grid_bg: bool = False
+    grid_color: str = "#D0D7E2"
+    grid_step: float = 5.0
+    grid_lw: float = 0.12
+
 
 _PRESETS = {
     "sci": _SCI_VARIANTS,
@@ -151,11 +347,17 @@ _PRESETS = {
     "mono": _MONO_VARIANTS,
     "topconf": _TOPCONF_VARIANTS,
     "airy": _AIRY_VARIANTS,
+    "neurips": _NEURIPS_VARIANTS,
+    "editorial": _EDITORIAL_VARIANTS,
+    "isosystem": _ISOSYSTEM_VARIANTS,
 }
 
 _PRESET_PALETTES = {
     "topconf": _TOPCONF_PALETTE,
     "airy": _AIRY_PALETTE,
+    "neurips": _NEURIPS_PALETTE,
+    "editorial": _EDITORIAL_PALETTE,
+    "isosystem": _ISOSYSTEM_PALETTE,
 }
 
 _PRESET_DEFAULTS: dict[str, dict] = {
@@ -197,25 +399,127 @@ _PRESET_DEFAULTS: dict[str, dict] = {
         "box_pad_x": 2.4,
         "box_pad_y": 1.8,
     },
+    "neurips": {
+        "ink": "#333333",
+        "muted": "#666666",
+        "arrow": "#4D4D4D",
+        "group_stroke": "#DDDDDD",
+        "group_fill": "#F7F7F5",
+        "size_panel_label": 8.5,
+        "size_title": 7.2,
+        "size_body": 6.3,
+        "size_caption": 5.8,
+        "size_arrow_label": 5.8,
+        "size_group_label": 6.8,
+        "lw_box": 0.22,
+        "lw_arrow": 0.24,
+        "lw_group": 0.16,
+        "corner_radius": 1.2,
+        "box_pad_x": 2.0,
+        "box_pad_y": 1.4,
+        "arrow_head_len": 1.7,
+        "arrow_head_w": 1.3,
+        "default_shadow": False,
+        "arrow_styles": copy.deepcopy(_NEURIPS_ARROW_STYLES),
+        "panel_case": "ml",
+        "default_legend_style": "inline",
+        "canvas": "#FFFFFF",
+    },
+    "editorial": {
+        "ink": "#141413",
+        "muted": "#6A6A6A",
+        "arrow": "#4A4A4A",
+        "group_stroke": "#E8E4DC",
+        "group_fill": "#F2EDE4",
+        "size_panel_label": 9.0,
+        "size_title": 8.5,
+        "size_body": 7.0,
+        "size_caption": 6.5,
+        "size_arrow_label": 6.5,
+        "size_group_label": 7.0,
+        "lw_box": 0.22,
+        "lw_arrow": 0.24,
+        "lw_group": 0.18,
+        "corner_radius": 1.4,
+        "box_pad_x": 2.2,
+        "box_pad_y": 1.8,
+        "default_shadow": False,
+        "default_legend_style": "inline",
+        "canvas": "#FAF9F5",
+        "arrow_styles": {
+            "data": {"style": "solid", "color": "#4A4A4A", "width": 0.24},
+            "control": {"style": "solid", "color": "#6A6A6A", "width": 0.20},
+            "feedback": {"style": "dashed", "color": "#6A9BCC", "width": 0.20},
+            "optional": {"style": "dotted", "color": "#999999", "width": 0.16},
+            "error": {"style": "dashed", "color": "#D97757", "width": 0.22},
+        },
+    },
+    "isosystem": {
+        "ink": "#1F2A37",
+        "muted": "#5A6A7A",
+        "arrow": "#3D5A80",
+        "group_stroke": "#9AA8B8",
+        "group_fill": "#E8EEF5",
+        "size_panel_label": 9.0,
+        "size_title": 8.0,
+        "size_body": 6.5,
+        "size_caption": 6.0,
+        "size_arrow_label": 6.0,
+        "size_group_label": 7.0,
+        "lw_box": 0.30,
+        "lw_arrow": 0.32,
+        "lw_group": 0.18,
+        "corner_radius": 1.0,
+        "box_pad_x": 2.0,
+        "box_pad_y": 1.4,
+        "default_shadow": False,
+        "default_legend_style": "inline",
+        "canvas": "#F4F7FA",
+        "grid_bg": False,  # figure/theme 显式 grid_bg: true 开启
+        "grid_color": "#D0D7E2",
+        "grid_step": 5.0,
+        "grid_lw": 0.12,
+        "arrow_styles": {
+            "data": {"style": "solid", "color": "#3D5A80", "width": 0.32},
+            "control": {"style": "solid", "color": "#9AA8B8", "width": 0.22},
+            "feedback": {"style": "dashed", "color": "#3D5A80", "width": 0.24},
+            "optional": {"style": "dotted", "color": "#9AA8B8", "width": 0.16},
+            "error": {"style": "dashed", "color": "#EE6C4D", "width": 0.28},
+        },
+    },
 }
 
 
+def _rebuild_variants(name: str, pal: dict[str, str]) -> dict[str, Variant]:
+    if name in _AIRY_PRESETS:
+        return _variants_airy(pal)
+    if name in _PASTEL_PRESETS:
+        return _variants_pastel(pal)
+    if name in _EDITORIAL_PRESETS:
+        return _variants_editorial(pal)
+    if name in _ISOSYSTEM_PRESETS:
+        return _variants_isosystem(pal)
+    return _variants_border_style(pal)
+
+
 def _apply_palette(th: Theme, pal: dict[str, str]) -> None:
-    """用 8-role 语义色板重建 variants 与主题色。"""
+    """用语义色板重建 variants 与主题色。"""
     th.palette = dict(pal)
-    if th.name == "airy":
-        th.variants = _variants_airy(pal)
-    else:
-        # topconf 及任何"边框着色"预设；sci/warm/mono 若给 palette 也切到边框风
-        th.variants = _variants_border_style(pal)
+    th.variants = _rebuild_variants(th.name, pal)
     th.ink = pal.get("text", th.ink)
     th.arrow = pal.get("arrow", th.arrow)
     th.group_fill = pal.get("section_bg", th.group_fill)
     th.group_stroke = pal.get("border", th.group_stroke)
     th.muted = pal.get("muted_text", th.muted)
     if "muted_text" not in pal and "text" in pal:
-        # 次要注释色：略浅于正文字色
-        th.muted = "#666666" if th.name == "topconf" else th.muted
+        if th.name in ("topconf", "neurips"):
+            th.muted = "#666666"
+        elif th.name == "editorial":
+            th.muted = "#6A6A6A"
+    if "canvas" in pal:
+        th.canvas = pal["canvas"]
+    if "grid" in pal:
+        th.grid_color = pal["grid"]
 
 
 def load_theme(cfg: dict | str | None) -> Theme:
@@ -225,8 +529,9 @@ def load_theme(cfg: dict | str | None) -> Theme:
     也可写成字符串简写（`theme: warm`）。
 
     新能力：
-      - preset: topconf | airy（保留 sci/warm/mono）
+      - preset: topconf | airy | neurips | editorial | isosystem（保留 sci/warm/mono）
       - palette: {primary, secondary, ...} 语义色板覆盖
+      - arrow_styles / panel_case / default_legend_style / canvas / grid_bg
     """
     if isinstance(cfg, str):
         cfg = {"preset": cfg}
@@ -238,7 +543,7 @@ def load_theme(cfg: dict | str | None) -> Theme:
 
     # preset 专属默认（在用户覆盖之前）
     for key, val in _PRESET_DEFAULTS.get(preset, {}).items():
-        setattr(th, key, val)
+        setattr(th, key, copy.deepcopy(val) if isinstance(val, dict) else val)
 
     if preset in _PRESET_PALETTES:
         th.palette = dict(_PRESET_PALETTES[preset])
@@ -254,6 +559,12 @@ def load_theme(cfg: dict | str | None) -> Theme:
             continue
         if not hasattr(th, key):
             raise ValueError(f"未知主题字段: {key}")
+        if key == "arrow_styles" and isinstance(val, dict):
+            merged = dict(th.arrow_styles)
+            for sk, sv in val.items():
+                merged[str(sk)] = {**merged.get(str(sk), {}), **dict(sv)}
+            th.arrow_styles = merged
+            continue
         setattr(th, key, val)
 
     for vname, vcfg in (cfg.get("variants") or {}).items():

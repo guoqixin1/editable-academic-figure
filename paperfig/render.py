@@ -233,6 +233,10 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
             s = _render_panel_label(t, theme, fs, res)
         body.append(_wrap_el(t.id, s))
 
+    # 主题/figure 级浅网格底（isosystem 等）；studio 调试网格仍用 grid=True
+    use_theme_grid = spec.grid_bg if spec.grid_bg is not None else theme.grid_bg
+    if use_theme_grid:
+        body.insert(0, _render_theme_grid(spec, theme))
     if grid:
         body.append(_render_grid(spec))
 
@@ -839,8 +843,9 @@ def _place_auto_arrow_labels(
         w = measure_markup_mm(el.label, pt_size)
         asc = line_ascent_mm(el.label, pt_size)
         h = pt_size * PT_TO_MM * LINE_HEIGHT
+        _, _, arrow_width = _resolve_arrow_paint(el, th)
         weight_mul = {"thin": 0.65, "normal": 1.0, "heavy": 1.55}.get(el.weight, 1.0)
-        lw = el.width if el.width is not None else th.lw_arrow * weight_mul
+        lw = arrow_width if arrow_width is not None else th.lw_arrow * weight_mul
         scale = max(1.0, (lw / th.lw_arrow) ** 0.75)
         head_len = th.arrow_head_len * scale
         other_segs = []
@@ -1264,6 +1269,22 @@ def _ref_center(ep: str | tuple[float, float], rects: dict[str, Rect]) -> tuple[
     return r.cx, r.cy
 
 
+def _resolve_arrow_paint(el: ArrowEl, th: Theme) -> tuple[str, str, float | None]:
+    """解析箭头 style/color/width：semantic 预设 + 显式字段覆盖。"""
+    style = el.style
+    color = el.color
+    width = el.width
+    if el.semantic and th.arrow_styles:
+        preset = th.arrow_styles.get(el.semantic) or {}
+        if not el.style_explicit and preset.get("style"):
+            style = str(preset["style"])
+        if not el.color_explicit and preset.get("color"):
+            color = str(preset["color"])
+        if not el.width_explicit and preset.get("width") is not None:
+            width = float(preset["width"])
+    return style, (color or th.arrow), width
+
+
 def _render_arrow(
     el: ArrowEl,
     th: Theme,
@@ -1272,7 +1293,7 @@ def _render_arrow(
     precomputed: _ArrowGeom | None = None,
     precomputed_label: tuple["_TextSpan", Rect] | None = None,
 ) -> str:
-    color = el.color or th.arrow
+    style, color, arrow_width = _resolve_arrow_paint(el, th)
     if precomputed is None:
         precomputed = _resolve_arrow_geometry(el, res, {})
     x1, y1, s1 = precomputed.x1, precomputed.y1, precomputed.s1
@@ -1281,7 +1302,7 @@ def _render_arrow(
     flush = precomputed.flush
     arc_ctrl = precomputed.arc_ctrl
 
-    if el.style == "block":
+    if style == "block":
         return _render_block_arrow(el, (x1, y1), (x2, y2), color, th, fs, res)
 
     if precomputed.skip or len(pts) < 2:
@@ -1291,7 +1312,7 @@ def _render_arrow(
 
     out = []
     weight_mul = {"thin": 0.65, "normal": 1.0, "heavy": 1.55}.get(el.weight, 1.0)
-    lw = el.width if el.width is not None else th.lw_arrow * weight_mul
+    lw = arrow_width if arrow_width is not None else th.lw_arrow * weight_mul
     # 粗线时箭头头部按线宽比例放大，保持观感协调
     scale = max(1.0, (lw / th.lw_arrow) ** 0.75)
     head_len = th.arrow_head_len * scale
@@ -1304,9 +1325,9 @@ def _render_arrow(
             return a
         return b[0] - dx / L * d, b[1] - dy / L * d
 
-    if el.style == "dashed":
+    if style == "dashed":
         dash = ' stroke-dasharray="1.6,1.1"'
-    elif el.style == "dotted":
+    elif style == "dotted":
         dash = ' stroke-dasharray="0.35,0.95"'
     else:
         dash = ""
@@ -1553,10 +1574,20 @@ def _render_text(el: TextEl, th: Theme, fs: float, res: RenderResult) -> str:
 
 
 def _render_panel_label(el: PanelLabelEl, th: Theme, fs: float, res: RenderResult) -> str:
+    text = el.text
     pt = th.size_panel_label * fs
+    case = (th.panel_case or "ml").lower()
+    if case == "lower":
+        # Nature：小写 a/b/c，8 pt bold
+        text = text.strip().strip("()").rstrip(").").lower()
+        pt = 8.0 * fs
+    elif case == "upper":
+        # Science：大写 A/B/C，9 pt bold
+        text = text.strip().strip("()").rstrip(").").upper()
+        pt = 9.0 * fs
     x, y = el.at
-    asc = line_ascent_mm(el.text, pt, True)
-    span = _TextSpan(x=x, baseline=y + asc, text=el.text, pt=pt, bold=True, color=th.ink)
+    asc = line_ascent_mm(text, pt, True)
+    span = _TextSpan(x=x, baseline=y + asc, text=text, pt=pt, bold=True, color=th.ink)
     res.text_spans.append(span)
     return span.to_svg()
 
@@ -1863,6 +1894,26 @@ def _render_grid(spec: FigureSpec) -> str:
                    f'stroke="#FF00AA" stroke-width="0.08"/>')
         out.append(f'<text x="0.4" y="{y + 2.0}" font-size="1.8" fill="#FF00AA" '
                    f'font-family="DejaVu Sans">{y}</text>')
+    out.append("</g>")
+    return "".join(out)
+
+
+def _render_theme_grid(spec: FigureSpec, th: Theme) -> str:
+    """主题浅网格底（isosystem 晒图风）；无坐标标注。"""
+    step = max(th.grid_step, 1.0)
+    color = th.grid_color or "#D0D7E2"
+    lw = th.grid_lw
+    out = ['<g data-theme-grid="1">']
+    x = 0.0
+    while x <= spec.width + 1e-6:
+        out.append(f'<line x1="{x:.3f}" y1="0" x2="{x:.3f}" y2="{spec.height}" '
+                   f'stroke="{color}" stroke-width="{lw}"/>')
+        x += step
+    y = 0.0
+    while y <= spec.height + 1e-6:
+        out.append(f'<line x1="0" y1="{y:.3f}" x2="{spec.width}" y2="{y:.3f}" '
+                   f'stroke="{color}" stroke-width="{lw}"/>')
+        y += step
     out.append("</g>")
     return "".join(out)
 
@@ -2178,16 +2229,32 @@ _SKETCH_DRAWERS = {
 # ---------------------------------------------------------------- legend
 
 def _render_legend(el: LegendEl, th: Theme, fs: float, res: RenderResult) -> str:
-    pt = el.size * fs
-    cols = max(1, el.columns)
+    legend_style = el.style or th.default_legend_style or "card"
+    inline = legend_style == "inline"
+
+    if inline:
+        pt = (el.size if el.size_explicit else 6.0) * fs
+        cols = len(el.items) if el.columns == 1 else max(1, el.columns)
+        # 学术 inline：一行色键，色块 3×3mm + 6pt 标签，无框无底
+        sw = sh = 3.0
+        gap_x = 3.0
+        gap_y = 1.2
+        text_gap = 1.0
+        pad = 0.0
+        use_frame = el.frame if el.frame_explicit else False
+    else:
+        pt = el.size * fs
+        cols = max(1, el.columns)
+        sw = 3.2
+        sh = 2.2
+        gap_x = 2.0
+        gap_y = 1.6
+        text_gap = 1.2
+        pad = 2.0
+        use_frame = el.frame
+
     items = el.items
-    rows = math.ceil(len(items) / cols)
-    sw = 3.2          # swatch 宽 mm
-    sh = 2.2          # swatch 高 mm
-    gap_x = 2.0
-    gap_y = 1.6
-    text_gap = 1.2
-    pad = 2.0
+    rows = math.ceil(len(items) / cols) if cols else 1
 
     # 预计算每列最大文字宽
     col_text_w = [0.0] * cols
@@ -2203,7 +2270,7 @@ def _render_legend(el: LegendEl, th: Theme, fs: float, res: RenderResult) -> str
     out = []
     fill = el.fill or "#FAFAFA"
     stroke = el.stroke or th.group_stroke
-    if el.frame:
+    if use_frame:
         out.append(f'<rect x="{x0:.3f}" y="{y0:.3f}" width="{total_w:.3f}" height="{total_h:.3f}" '
                    f'rx="1.2" fill="{fill}" stroke="{stroke}" stroke-width="0.2"/>')
 

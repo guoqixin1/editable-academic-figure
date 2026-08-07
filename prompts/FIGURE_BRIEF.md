@@ -37,7 +37,8 @@ From the user request and optional paper text, extract:
 | 7 | **需要对比的变体**（baseline / ablation / ours） | Comparison columns |
 | 8 | **具象物件**（设备、器官、文档等 → AI asset）vs **抽象过程**（→ box+sketch） | Assets |
 | 9 | **真实实验图槽位**（必须 placeholder） | Assets → placeholder |
-| 10 | **配色偏好 / 参考图风格**（若无则默认 topconf + Okabe-Ito） | Style |
+| 10 | **配色偏好 / 参考图风格**（若无则默认 neurips Soft Pastel） | Style |
+| 11 | **具象锚点**（≤3，放输入/输出侧；中间保持抽象模块） | Assets → figurative_anchors |
 
 缺信息时，在 Brief 末尾列出「必须向用户确认的问题」（≤3），例如：
 - 画布是单栏（~85mm）还是双栏（~180mm）？
@@ -119,23 +120,34 @@ For each panel / major region:
 - **at_hint**: <e.g. bottom-right>
 
 ## 3. Style — 风格决策
-- **theme.preset**: topconf | airy   # 新图默认 topconf
-- **palette**: default Okabe-Ito | Teal+Amber | Navy+Coral | Slate+Violet | Forest+Gold | Minimal Grey | custom
-- **palette_overrides**（若非 default）: {primary, secondary, tertiary?, section_bg?}
+- **theme.preset**: neurips | topconf | airy | editorial | isosystem   # 论文方法图默认 neurips
+- **palette**: default Okabe Soft Pastel | Teal+Amber | Navy+Coral | … | custom
+- **palette_overrides**（若非 default）: {primary, secondary, tertiary?, sky?, purple?, vermillion?, section_bg?}
 - **variant 语义分配**:
-  - primary → <哪些模块>
-  - secondary → <…>
-  - tertiary / accent → <…>
+  - primary / secondary / tertiary / sky / purple / vermillion → <模块>
+  - trainable / frozen / ours / baseline → <状态或对比列>
   - muted / plain → <共享/常规结构>
-- **shadow / accent**: 核心卡是否 `shadow: true` + `accent: left|top`
+- **arrow.semantic**: data | control | feedback | optional | error（按需）
+- **panel_case**: ml | lower | upper（Nature 小写 / Science 大写）
+- **legend.style**: inline（学术默认）| card
+- **shadow / accent**: neurips 默认无阴影；仅核心卡可显式 `accent: left|top`
 
 ## 4. Assets — 素材清单
+### 具象锚点清单（figurative_anchors，≤3）
+| # | id | 放置侧 | 叙事角色 |
+|---|----|--------|----------|
+| 1 | … | input \| output | 谁在行动 / 场景缩影 |
+| ≤3 | … | … | … |
+
+规则：中间算法保持抽象 box+sketch；同一语义只用一种具象；禁止每盒塞插画。
+
+### 素材表
 | id | kind | prompt_draft | notes |
 |----|------|--------------|-------|
 | … | ai_object \| placeholder | 只写「是什么+形态」，禁止色调/文字 | placeholder 必填 src 建议路径 |
 
 - 顶层 `assets_style` 建议一句英文（风格锁）；色调交给 theme，不写进各 asset prompt。
-- 无 AI 物件时写「无」。
+- 无 AI 物件时写「无」；机检 `R-figurative-overload`：asset >3 或面积 >35% 告警。
 
 ## 5. Density self-check — 信息密度自检
 对照硬指标逐条勾选（见 SECTION 4），未通过项必须在写 YAML 前修 Brief。
@@ -153,11 +165,12 @@ SECTION 4: 质量自检清单（输出前必须过一遍）
 - [ ] **主箭头有标签**：所有 main 语义箭头有维度或含义 label
 - [ ] **有分区**：至少一处 panel（推荐 smallcaps）或带 fill 的 group
 - [ ] **色彩克制**：≤3 主色 + 灰系；白/近白主导
-- [ ] **边框着色**：topconf 下模块白填充 + 彩色/灰边框（不要给每个盒不同彩色填充）
-- [ ] **图例完备**：设计建议 ≥2 种非 muted 语义色时 legend.items 非空（机检 ≥3 色才报）
+- [ ] **填充语言**：neurips 下 Soft Pastel 浅填+同色描边；topconf 才是白填彩边
+- [ ] **图例完备**：设计建议 ≥2 种非 muted 语义色时 legend.items 非空（机检 ≥3 色才报）；学术主题用 `style: inline`
 - [ ] **灰度可读**：不靠颜色 alone 区分关键类别（配合 shape / dashed / label）
 - [ ] **数学记号**：上下标写成 `_{...}` / `^{...}` 形式，提醒 YAML 加引号
 - [ ] **素材边界**：AI prompt 无文字/公式/色调词；实验图全部 placeholder
+- [ ] **具象预算**：figurative_anchors ≤3，放 I/O 侧；面积直觉 ≤30%
 - [ ] **字段真实**：只用 paperfig 存在的 type/字段（box, panel, group, arrow, sketch, legend, tokens, marker, badge, network, scatter, text, panel_label, asset）
 - [ ] **无省略**：不用 "…" / "etc." 跳过模块清单
 

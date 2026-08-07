@@ -17,8 +17,9 @@ from paperfig.fonts import (measure_markup_mm, measure_mm, parse_markup, split_r
                           strip_markup, wrap_text)
 from paperfig.lint import lint
 from paperfig.render import render
-from paperfig.spec import FigureSpec, Rect, load_spec
-from paperfig.theme import load_theme
+from paperfig.spec import ArrowEl, FigureSpec, Rect, load_spec
+from paperfig.theme import load_theme, pastel_fill_from_stroke
+from paperfig.render import _resolve_arrow_paint
 
 
 def _write(tmp, text):
@@ -1228,9 +1229,15 @@ def test_style_pack_palette_override_and_presets():
 
     assert resolve_preset("topconf") == "topconf"
     assert resolve_preset("airy") == "airy"
+    assert resolve_preset("neurips") == "neurips"
+    assert resolve_preset("editorial") == "editorial"
+    assert resolve_preset("isosystem") == "isosystem"
     assert resolve_preset("unknown_preset_xyz") == "sci"
     assert resolve_asset_palette("topconf") == ["#0072B2", "#E69F00", "#009E73"]
     assert resolve_asset_palette("airy") == ["#BBDEFB", "#FFD0D0", "#C8E6C9"]
+    assert resolve_asset_palette("neurips")[0] == "#0072B2"
+    assert "#D97757" in resolve_asset_palette("editorial")
+    assert "#3D5A80" in resolve_asset_palette("isosystem")
 
     overridden = resolve_asset_palette({
         "preset": "sci",
@@ -1456,6 +1463,164 @@ elements:
     assert "R-no-section" not in codes2
     assert "R-no-legend" not in codes2
     assert not any(i.level == "E" for i in lint(spec2, res2))
+
+
+# ── neurips / editorial / isosystem 主题与 lint 阈值 ──────
+
+def test_theme_neurips_pastel_and_print_typo():
+    th = load_theme("neurips")
+    assert th.name == "neurips"
+    assert th.default_shadow is False
+    assert th.lw_box == 0.22
+    assert th.lw_arrow == 0.24
+    assert th.lw_group == 0.16
+    assert th.corner_radius == 1.2
+    assert th.size_panel_label == 8.5
+    assert th.size_title == 7.2
+    assert th.size_body == 6.3
+    assert th.size_caption == 5.8
+    assert th.size_arrow_label == 5.8
+    assert th.default_legend_style == "inline"
+    assert th.variants["primary"].fill.upper() == "#E8F4FD"
+    assert th.variants["primary"].stroke.upper() == "#0072B2"
+    assert th.variants["secondary"].fill.upper() == "#FFF3E0"
+    assert th.variants["sky"].stroke.upper() == "#56B4E9"
+    assert th.variants["purple"].stroke.upper() == "#CC79A7"
+    assert th.variants["vermillion"].stroke.upper() == "#D55E00"
+    assert th.variants["trainable"].stroke.upper() == "#E07A3D"
+    assert th.variants["frozen"].stroke.upper() == "#90A4AE"
+    assert th.variants["baseline"].fill.upper() == "#F5F5F5"
+    assert th.variants["baseline"].stroke.upper() == "#8C8C8C"
+    assert th.variants["ours"].stroke.upper() == "#0072B2"
+    assert "data" in th.arrow_styles
+    assert th.arrow_styles["error"]["color"].upper() == "#D94A4A"
+
+
+def test_pastel_fill_from_stroke_known_and_derived():
+    assert pastel_fill_from_stroke("#0072B2").upper() == "#E8F4FD"
+    assert pastel_fill_from_stroke("#E69F00").upper() == "#FFF3E0"
+    # 未知色：混白派生，应明显浅于描边
+    fill = pastel_fill_from_stroke("#123456", mix=0.14)
+    assert fill.startswith("#")
+    assert fill.upper() != "#123456"
+
+
+def test_theme_editorial_and_isosystem():
+    ed = load_theme("editorial")
+    assert ed.canvas.upper() == "#FAF9F5"
+    assert ed.ink.upper() == "#141413"
+    assert ed.default_shadow is False
+    assert ed.corner_radius == 1.4
+    assert ed.variants["highlight"].stroke.upper() == "#D97757"
+
+    iso = load_theme("isosystem")
+    assert iso.canvas.upper() == "#F4F7FA"
+    assert iso.palette["primary"].upper() == "#3D5A80"
+    assert iso.grid_color.upper() == "#D0D7E2"
+    assert iso.grid_step == 5.0
+    assert iso.default_shadow is False
+
+
+def test_arrow_semantic_mapping_and_override():
+    th = load_theme("neurips")
+    el = ArrowEl(id="a", from_="x", to="y", semantic="feedback")
+    style, color, width = _resolve_arrow_paint(el, th)
+    assert style == "dashed"
+    assert color.upper() == "#0072B2"
+    assert width == 0.20
+
+    el2 = ArrowEl(id="b", from_="x", to="y", semantic="error",
+                  style="solid", style_explicit=True,
+                  color="#111111", color_explicit=True)
+    style2, color2, _ = _resolve_arrow_paint(el2, th)
+    assert style2 == "solid"
+    assert color2.upper() == "#111111"
+
+    el3 = ArrowEl(id="c", from_="x", to="y", semantic="optional")
+    style3, color3, width3 = _resolve_arrow_paint(el3, th)
+    assert style3 == "dotted"
+    assert color3.upper() == "#999999"
+    assert width3 == 0.16
+
+
+def test_arrow_semantic_yaml_and_inline_legend(tmp_path):
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 50}
+theme: neurips
+elements:
+  - {type: box, id: a, rect: [8, 12, 28, 22], title: Enc, variant: primary, body: x}
+  - {type: box, id: b, rect: [50, 12, 28, 22], title: Dec, variant: secondary, body: y}
+  - {type: box, id: c, rect: [90, 12, 24, 22], title: Out, variant: ours, body: z}
+  - {type: arrow, id: dflow, from: a.right, to: b.left, semantic: data, label: h}
+  - {type: arrow, id: fb, from: c.left, to: b.right, semantic: feedback}
+  - {type: legend, id: lg, at: [8, 40], items: [
+      {swatch: box, color: "#0072B2", label: enc},
+      {swatch: box, color: "#E69F00", label: dec},
+    ]}
+  - {type: panel_label, id: pl, at: [2, 2], text: "(a)"}
+"""))
+    th = load_theme(spec.theme_cfg)
+    assert th.default_legend_style == "inline"
+    res = render(spec, out_png=tmp_path / "n.png", dpi=100)
+    # feedback → dashed
+    assert "stroke-dasharray" in res.svg
+    # inline legend：默认无外框（无 FAFAFA 卡片底）
+    assert 'fill="#FAFAFA"' not in res.svg
+    assert not any(i.level == "E" for i in lint(spec, res))
+
+
+def test_panel_case_lower_upper(tmp_path):
+    for case, expect in (("lower", ">a<"), ("upper", ">A<")):
+        d = tmp_path / case
+        d.mkdir()
+        spec = load_spec(_write(d, f"""
+figure: {{width: 40, height: 20}}
+theme: {{preset: neurips, panel_case: {case}}}
+elements:
+  - {{type: panel_label, id: pl, at: [4, 4], text: "A"}}
+"""))
+        res = render(spec, dpi=80)
+        assert expect in res.svg or expect[1] in res.svg
+
+
+def test_editorial_canvas_and_isosystem_grid(tmp_path):
+    spec_e = load_spec(_write(tmp_path, """
+figure: {width: 80, height: 40}
+theme: editorial
+elements:
+  - {type: box, id: a, rect: [10, 10, 30, 20], title: Idea, variant: highlight, body: clay}
+"""))
+    assert spec_e.background.upper() == "#FAF9F5"
+    res_e = render(spec_e, dpi=80)
+    assert "#FAF9F5" in res_e.svg
+
+    d = tmp_path / "iso"
+    d.mkdir()
+    spec_i = load_spec(_write(d, """
+figure: {width: 80, height: 40, grid_bg: true}
+theme: isosystem
+elements:
+  - {type: box, id: a, rect: [10, 10, 30, 20], title: Node, variant: primary, body: hw}
+"""))
+    assert spec_i.background.upper() == "#F4F7FA"
+    res_i = render(spec_i, dpi=80)
+    assert 'data-theme-grid="1"' in res_i.svg
+
+
+def test_lint_figurative_overload(tmp_path):
+    # 4 个大面积 asset 占位 → R-figurative-overload
+    els = "\n".join(
+        f'  - {{type: asset, id: a{i}, rect: [{5 + i * 35}, 5, 32, 32], src: miss{i}.png, placeholder: true}}'
+        for i in range(4)
+    )
+    spec = load_spec(_write(tmp_path, f"""
+figure: {{width: 160, height: 50}}
+theme: neurips
+elements:
+{els}
+"""))
+    res = render(spec, dpi=80)
+    assert any(i.code == "R-figurative-overload" for i in lint(spec, res))
 
 
 if __name__ == "__main__":

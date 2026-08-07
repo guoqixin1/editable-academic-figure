@@ -51,6 +51,9 @@ _ASSET_PALETTES: dict[str, list[str]] = {
     "mono": ["#3D3D3D", "#6E6E6E", "#2A2A2A", "#B5B5B5"],
     "topconf": ["#0072B2", "#E69F00", "#009E73"],  # Okabe-Ito
     "airy": ["#BBDEFB", "#FFD0D0", "#C8E6C9"],  # pastel
+    "neurips": ["#0072B2", "#E69F00", "#009E73", "#CC79A7"],  # Okabe Soft Pastel
+    "editorial": ["#D97757", "#6A9BCC", "#2F5B4F", "#6A6A6A"],  # clay accent
+    "isosystem": ["#3D5A80", "#EE6C4D", "#293241", "#9AA8B8"],  # steel + coral
 }
 
 _PALETTE_ROLE_ORDER = ("primary", "secondary", "accent", "highlight", "plain", "dark")
@@ -91,6 +94,27 @@ _STYLE_BY_PRESET: dict[str, str] = {
         "outline (#546E7A) on every edge, subtle flat shading (exactly two soft tones "
         "per color, no gradients), required three-quarter view, airy modern ML-paper "
         "look, consistent corner radius as if drawn by one illustrator"
+    ),
+    "neurips": (
+        "clean flat vector-style scientific illustration, icon-level abstraction, "
+        "uniform 2px dark outline (#333333), simple geometric shapes, "
+        "subtle flat shading (exactly two tones per color, no gradients), "
+        "three-quarter view, colorblind-friendly accents from palette "
+        "[#0072B2, #E69F00, #009E73], academic paper figure asset "
+        "(not children's book, not sticker), no neon, no glassmorphism"
+    ),
+    "editorial": (
+        "warm editorial scientific line illustration, thin ink lines, "
+        "museum-plate restraint, minimal hatching, clay accent #D97757 only on one "
+        "focal part, no fill gradients, no cartoon face, not children's book, "
+        "output background must be pure #FFFFFF for cutout"
+    ),
+    "isosystem": (
+        "isometric scientific illustration, true 30-degree axonometric, "
+        "flat vector shading (two tones), uniform 1.5–2px outline, "
+        "no perspective foreshortening, no photoreal materials, "
+        "palette [#3D5A80, #E8EEF5, #EE6C4D], white background, "
+        "single system module, academic schematic (not game asset, not voxels)"
     ),
 }
 

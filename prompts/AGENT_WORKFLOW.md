@@ -6,8 +6,17 @@
 
 ## Step 0：风格决策（写 spec 之前）
 
-**默认主题**：`theme: {preset: topconf}`（白填充 + Okabe-Ito 色边框，顶会克制风）。  
-现代 ML / RL 示意、柔彩浮动面板 → 用 `theme: {preset: airy}`（默认 soft shadow + pastel token）。
+**默认主题（论文方法图）**：`theme: {preset: neurips}`  
+—— Soft Pastel 浅填 + Okabe 描边、印刷字号、无阴影、inline 图例。  
+需要「白底彩框」旧顶会克制风时仍可用 `topconf`。
+
+| 场合 | 推荐 preset | 说明 |
+| --- | --- | --- |
+| **主文方法 / 架构图** | `neurips` | Soft Tech Pastels；印刷线宽与字号 |
+| **顶刊/色盲稳妥白底边框** | `topconf` | 白填 + 彩边；无浅色模块面 |
+| **演讲 / 博客 / 柔彩卡** | `airy` | 大圆角 + 默认阴影；**勿当论文默认** |
+| **博客隐喻 / 编辑型概念图** | `editorial` | 暖纸画布 + 单一 clay accent |
+| **系统 / 硬件 / 具身架构** | `isosystem` | 浅晒图；可选 `figure.grid_bg: true` |
 
 从用户的论文/描述里提取：
 - **画布**：目标是单栏（~85mm）还是双栏（~180mm）图？据此定 `figure.width`。高度按内容估。
@@ -24,16 +33,49 @@
 
 | 方案 | 风格定位 | YAML |
 | --- | --- | --- |
-| **Okabe-Ito（默认）** | Nature / CVPR，色盲友好 | `theme: {preset: topconf}` |
-| **Teal + Amber** | ICLR / NeurIPS 现代感 | `theme: {preset: topconf, palette: {primary: "#00897B", secondary: "#FFB300", section_bg: "#ECEFF1"}}` |
+| **NeurIPS Soft Pastel（默认）** | 顶会方法图 | `theme: {preset: neurips}` |
+| **Okabe 白底彩框** | Nature / CVPR 克制 | `theme: {preset: topconf}` |
+| **Teal + Amber** | ICLR 现代感 | `theme: {preset: neurips, palette: {primary: "#00897B", secondary: "#FFB300"}}` |
 | **Navy + Coral** | IEEE 期刊沉稳 | `theme: {preset: topconf, palette: {primary: "#1A3A5C", secondary: "#E05A47", section_bg: "#F9F6EE"}}` |
 | **Slate + Violet** | 医学 / 生物信息 | `theme: {preset: topconf, palette: {primary: "#3F51B5", secondary: "#7E57C2", section_bg: "#EDE7F6"}}` |
 | **Forest + Gold** | 自然科学厚重 | `theme: {preset: topconf, palette: {primary: "#2E7D32", secondary: "#C49A00", section_bg: "#F9F6EE"}}` |
 | **Minimal Grey** | arXiv 极简 + 单强调 | `theme: {preset: topconf, palette: {primary: "#263238", secondary: "#546E7A", tertiary: "#0072B2", section_bg: "#ECEFF1"}}` |
-| **Airy 柔彩** | 现代 ML/RL 示意 | `theme: {preset: airy}` |
+| **Airy 柔彩** | talk / blog，非论文默认 | `theme: {preset: airy}` |
+| **Editorial 暖纸** | 隐喻封面 / 解释附图 | `theme: {preset: editorial}` |
+| **IsoSystem 晒图** | 系统 / 硬件 / 机器人工作站 | `theme: {preset: isosystem}` + 可选 `figure.grid_bg: true` |
 
 用户已指定配色或给了参考图 → 跳过选色，直接按参考提取 hex 写入 `palette`。  
 旧主题 `sci` / `warm` / `mono` 仍可用，但**新图不要默认它们**。
+
+### 箭头语义与状态 variant（neurips）
+
+```yaml
+# 箭头一键语义（显式 style/color/width 仍可覆盖）
+- {type: arrow, from: enc, to: dec, semantic: data, label: "h_t", route: avoid}
+- {type: arrow, from: ctrl, to: enc, semantic: control, route: avoid}
+- {type: arrow, from: out, to: fuse, semantic: feedback, label: "grad", route: avoid}
+- {type: arrow, from: a, to: b, semantic: optional}
+- {type: arrow, from: bad, to: sink, semantic: error, label: "fail"}
+
+# 状态 / 对比
+- {type: box, id: train, title: "LoRA", variant: trainable, body: "updated"}
+- {type: box, id: base, title: "Frozen Enc", variant: frozen, body: "no grad"}
+- {type: box, id: ours, title: "Ours", variant: ours}
+- {type: box, id: base2, title: "Baseline", variant: baseline}
+```
+
+图例：学术主题默认 `style: inline`（无框色键）；需要卡片时写 `style: card`。
+
+### 踩雷清单（精选）
+
+1. PowerPoint 默认蓝橙 + 粗黑描边  
+2. 模块名用 Serif、变量用 Sans（应相反）  
+3. 无理由混用扁平 2D 与等距 3D  
+4. 分区用高饱和黄/蓝大底  
+5. 数据流与反馈用同一线型（应用 `semantic:`）  
+6. 整图 AI 生成还带乱码文字  
+7. 塑料 3D / 霓虹 / 玻璃拟态 / 紫粉发光  
+8. 每个盒子塞卡通角色（具象 ≤3，放 I/O 侧）
 
 ---
 

@@ -48,7 +48,7 @@ _RICHNESS_MIN_ELEMENTS = 8          # ≥ 此数才检查分区底
 _RICHNESS_MIN_SEMANTIC_COLORS = 3   # ≥ 此数非 muted 色需 legend
 _EMPTY_BOX_TITLE_EXEMPT_LEN = 18    # 长标题容器卡（含公式）豁免空盒检查
 _EMPTY_BOX_AREA_EXEMPT = 300.0      # mm²；小标签条 / 单行操作盒不要求塞子内容
-_MUTED_VARIANTS = frozenset({"muted", "plain"})
+_MUTED_VARIANTS = frozenset({"muted", "plain", "baseline", "section"})
 _NEUTRAL_HEX = frozenset({
     "#FFFFFF", "#FFF", "#FAFAFA", "#F7F7F7", "#F5F5F5", "#FBFCFE",
     "#EEEEEE", "#E0E0E0", "#CCCCCC", "#BDBDBD", "#B5B5B5", "#999999",
@@ -96,6 +96,7 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues += _check_density(spec, res)
     issues += _check_alignment(spec, res)
     issues += _check_visual_richness(spec, res)
+    issues += _check_figurative_overload(spec, res)
     return issues
 
 
@@ -357,6 +358,34 @@ def _check_arrow_label_occlusion(spec: FigureSpec, res: RenderResult) -> list[Is
                     f"箭头 '{aid}' 标签 “{label[:14]}” 压到文字 “{s.text[:14]}”",
                 ))
                 break
+    return issues
+
+
+# 具象素材过载（ai_era §2.2：锚点 ≤3，面积约 15–30%）
+_FIGURATIVE_MAX_ASSETS = 3
+_FIGURATIVE_MAX_AREA_RATIO = 0.35
+
+
+def _check_figurative_overload(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """R-figurative-overload：asset 数 >3 或总面积占画布 >35%。"""
+    assets = [e for e in spec.elements if isinstance(e, AssetEl)]
+    if not assets:
+        return []
+    issues: list[Issue] = []
+    n = len(assets)
+    area = 0.0
+    for a in assets:
+        shown = res.asset_boxes.get(a.src) or a.rect
+        if shown is not None:
+            area += shown.w * shown.h
+    canvas_area = max(spec.width * spec.height, 1e-6)
+    ratio = area / canvas_area
+    if n > _FIGURATIVE_MAX_ASSETS or ratio > _FIGURATIVE_MAX_AREA_RATIO:
+        issues.append(Issue(
+            "W", "R-figurative-overload",
+            f"具象素材 {n} 个、约占画布 {ratio:.0%}；建议 ≤{_FIGURATIVE_MAX_ASSETS} 个且面积 "
+            f"≤{_FIGURATIVE_MAX_AREA_RATIO:.0%}，放在输入/输出侧作锚点",
+        ))
     return issues
 
 
