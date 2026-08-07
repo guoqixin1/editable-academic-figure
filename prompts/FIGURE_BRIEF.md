@@ -76,17 +76,20 @@ Return the Brief as markdown with these sections **in order**. Do not wrap the w
 - **assumptions**: <bullet list, or "none">
 
 ## 1. Layout — 分区规划
+Prefer a **flex tree** (row/col/grid + gap/pad) over absolute mm; YAML step will use `layout:` then `resolve`. Absolute `rect` hints are optional fallbacks.
+
 For each panel / major region:
 
 ### Panel: <id> — <title>
 - **container**: panel | group
 - **header_style**: smallcaps | banner   # 新图默认 smallcaps
 - **fill**: <hex or theme section_bg>
-- **approx_rect_hint**: <e.g. left 45% | full width top band>  # 比例提示，非像素
+- **flex_hint**: <e.g. row of 5 equal cards | col(online row, offline row)>  # 结构关系
+- **approx_rect_hint**: <e.g. left 45% | full width top band>  # 可选比例提示，非必填绝对 mm
 - **boxes**:
-  | id | title | body | sketch | variant | notes |
-  |----|-------|------|--------|---------|-------|
-  | … | … | … | waveform\|heatmap\|…\|none | primary\|… | accent/shadow/icon/… |
+  | id | title | body | sketch | variant | w_mm | h_mm | notes |
+  |----|-------|------|--------|---------|------|------|-------|
+  | … | … | … | waveform\|heatmap\|…\|none | primary\|… | 22 | 16.5 | accent/shadow/icon/… |
 
 每个盒子必须写明：
 - **title**：显示标题（含 `_{}` / `^{}` 记号时加引号提醒）
@@ -101,9 +104,9 @@ For each panel / major region:
 ### Arrows
 | from | to | label | weight | style | route | semantic |
 |------|----|-------|--------|-------|-------|----------|
-| <id.side> | <id.side> | <dim or meaning> | heavy\|normal\|thin | solid\|dashed\|dotted | auto\|arc\|via… | main\|skip\|feedback\|aux |
+| <id.side> | <id.side> | <dim or meaning> | heavy\|normal\|thin | solid\|dashed\|dotted | avoid\|arc\|… | main\|skip\|feedback\|aux |
 
-规则：主数据流 `weight: heavy` 且必须有 label；skip/残差/反馈用 dashed/dotted。
+规则：主数据流 `weight: heavy` 且必须有 label；**默认 `route: avoid`**（勿先写 via）；skip/残差/反馈用 dashed/dotted。
 
 ### Markers / badges / free text（可选）
 - marker: fire|snow|… at <near which box> — 含义

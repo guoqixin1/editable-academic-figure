@@ -306,6 +306,8 @@ elements:
 
 ## Phase 1：需求拆解（Brief → YAML）
 
+**新图建议顺序**：`layout:` 树（row/col/grid）表达结构 + 箭头一律 `route: avoid`（零 via）→ `paperfig resolve` 物化为绝对坐标 → 个别 `rect`/`label_offset` 手调 → 定稿 `render`。不要一上来手写满页绝对坐标。
+
 以 Phase 0.5 的 Figure Brief 为权威输入（若已跳过 0.5，则直接从用户描述提取），在 Step 0 色系与四层分解之后落笔：
 
 - **画布 / 分区 / 节点 / 连接**：按 Brief 的 Layout / Annotations；分区优先 `panel`+`smallcaps`，节点按语义选 `shape`。
@@ -318,6 +320,10 @@ elements:
 产出：`{project}/figure.yaml` 初稿。复现论文图见 `examples/rep_*`。
 
 ## Phase 2：布局草稿（占位渲染）
+
+1. 用 `layout:` 写行列结构（叶子只写 `{ref, w, h}`，元素节不写 `rect`）。
+2. `python -m paperfig.cli render figure.yaml --grid -o draft.png --dpi 180`（内部自动 resolve）。
+3. 结构满意后：`python -m paperfig.cli resolve figure.yaml -o figure.resolved.yaml`，后续微调改 resolved 版。
 
 ```bash
 python -m paperfig.cli render {project}/figure.yaml --grid -o {project}/draft.png --dpi 150

@@ -1,6 +1,7 @@
 """paperfig 命令行入口。
 
   python -m paperfig.cli render  spec.yaml [-o out.png] [--grid] [--dpi 600] [--svg out.svg]
+  python -m paperfig.cli resolve spec.yaml -o resolved.yaml
   python -m paperfig.cli studio  spec.yaml [--port 8323] [--no-open]
   python -m paperfig.cli assets  spec.yaml --api-key KEY [--only id1,id2] [--force] [--no-auto-select]
   python -m paperfig.cli select  spec.yaml ASSET_ID INDEX
@@ -14,8 +15,11 @@ import os
 import sys
 from pathlib import Path
 
+import yaml
+
 from .assets import auto_select, gacha_generate, save_report, select_candidate
 from .cutout import cutout_white_bg
+from .layout import LayoutError, document_has_layout, materialize_yaml
 from .lint import lint
 from .render import render
 from .spec import load_spec
@@ -37,6 +41,44 @@ def cmd_render(args: argparse.Namespace) -> int:
         print(f"  {i}")
     print(f"体检: {len(errors)} 错误, {len(warns)} 警告")
     return 1 if errors and args.strict else 0
+
+
+def cmd_resolve(args: argparse.Namespace) -> int:
+    """结构化 layout → 纯绝对坐标 YAML（可供手改 / 直接 render）。"""
+    src = Path(args.spec)
+    try:
+        raw = yaml.safe_load(src.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"读取失败: {e}", file=sys.stderr)
+        return 2
+    if not isinstance(raw, dict):
+        print("spec 顶层必须是 mapping", file=sys.stderr)
+        return 2
+
+    if not document_has_layout(raw):
+        if args.output:
+            # 幂等：无 layout 时原样写出（或提示）
+            text = src.read_text(encoding="utf-8")
+            Path(args.output).write_text(text, encoding="utf-8")
+            print(f"无 layout 节可解，已原样写出: {args.output}")
+        else:
+            print("无 layout 节可解（已是绝对坐标 spec）")
+        return 0
+
+    try:
+        text = materialize_yaml(raw, force=args.force)
+    except LayoutError as e:
+        print(f"布局求解失败: {e}", file=sys.stderr)
+        return 1
+
+    out = Path(args.output) if args.output else src.with_suffix(".resolved.yaml")
+    header = (
+        f"# resolved from {src.name} — absolute coordinates; layout tree removed\n"
+        f"# edit rect / via freely; re-resolve from structured source to regenerate\n"
+    )
+    out.write_text(header + text, encoding="utf-8")
+    print(f"Resolved: {out}")
+    return 0
 
 
 def cmd_assets(args: argparse.Namespace) -> int:
@@ -106,6 +148,13 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--dpi", type=int, default=None)
     pr.add_argument("--strict", action="store_true", help="有 E 级问题时返回非零")
     pr.set_defaults(func=cmd_render)
+
+    pres = sub.add_parser("resolve", help="结构化 layout → 绝对坐标 YAML")
+    pres.add_argument("spec")
+    pres.add_argument("-o", "--output", help="输出路径（默认 *.resolved.yaml）")
+    pres.add_argument("--force", action="store_true",
+                      help="覆盖元素上已有的 rect（默认尊重手改）")
+    pres.set_defaults(func=cmd_resolve)
 
     pa = sub.add_parser("assets", help="按 spec 抽卡生成素材")
     pa.add_argument("spec")

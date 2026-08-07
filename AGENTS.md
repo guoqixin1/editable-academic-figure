@@ -12,7 +12,7 @@
 
 ## 0. 铁律（先读，别违反）
 
-1. **确定性优先**：布局是显式坐标，改哪个值就重渲对比。不要凭空大改，做**最小改动**满足需求。
+1. **确定性优先**：布局最终是显式 mm 坐标（可手改、可复现）。新图优先用 `layout:` 树 + `route: avoid` 起步，再 `resolve` 物化后微调；改哪个值就重渲对比。不要凭空大改，做**最小改动**满足需求。
 2. **真实实验图绝不生成**：频谱/波形/热图/生成样本/定量曲线等来自真实实验的图，**一律 `asset` + `placeholder: true` 占位**，让用户手动放文件。替用户 AI 生成这些 = 学术不端，禁止。
 3. **文字/公式/数字走代码**（`box`/`text`/`tokens`），**AI 素材只画"物件"**（设备/器官/文档/机器人），且 prompt 禁止文字。
 4. **改完必须验证**：每次改 `spec` 后跑 `render`、**读输出的体检（lint）**、**读渲染出的 PNG**（多模态目检）。E 级必须清零。
@@ -27,8 +27,45 @@
 - **绘制顺序（z 轴，后画的盖前面的）**：`panel` → `group` → `box`/`asset`/`tokens` → `arrow` → `marker` → `text`/`panel_label`。
   所以：分区容器 `panel` 放最前面写；标注 `marker`/`text` 放最后写才在最上层。
 - **锚点**：箭头端点最简写 `节点id`（**自动选朝向对方的那条边**，最省心，消除"箭头没对上"）；要精确控制某条边再写 `节点id.side`，side ∈ `left|right|top|bottom|center`，可加 `@t`(0~1) 指定边上位置，如 `enc.right@0.3`；也可直接写坐标 `[x, y]`。
-- **对齐靠共享坐标**：同一行的盒子写相同 `y`+`h`，同一列写相同 `x`+`w`，天然对齐。这是改图时保持整齐的关键手法。
-- **画布**：双栏 `width≈180`，单栏 `width≈85`（mm）；高度贴合内容（体检 `canvas-sparse` 提示留白过多）。
+- **对齐靠共享坐标或 layout 树**：手调时同一行写相同 `y`+`h`、同一列写相同 `x`+`w`；新图用 `layout:` 的 `row`/`col`/`grid` 天然对齐。
+- **画布**：双栏 `width≈180`，单栏 `width≈85`（mm）；高度贴合内容（体检 `canvas-sparse` 提示留白过多）。`figure.width/height` 可省略，由 layout 内容撑开。
+
+### 结构化布局 `layout:`（新图推荐）
+
+```yaml
+figure: {width: 180}          # height 可省略，由内容撑开
+layout:
+  kind: col                   # row | col | grid
+  gap: 4                      # 子项间距 mm（默认 4）
+  pad: [2.5, 3]               # 标量 | [y,x] | [t,r,b,l]
+  align: stretch              # 交叉轴：start|center|end|stretch
+  justify: start              # 主轴：start|center|end|space-between
+  children:
+    - id: p_online            # 可选：容器即 panel
+      type: panel
+      kind: row
+      gap: 3.5
+      pad: [8, 4, 4, 4]        # 顶部留给 smallcaps 标题
+      title: "Online Pipeline"
+      header_style: smallcaps
+      fill: "#F7F7F7"
+      children:
+        - {ref: q, w: 18, h: 36}
+        - kind: col
+          gap: 3
+          children:
+            - {ref: dense, w: 22, h: 16.5}
+            - {ref: sparse, w: 22, h: 16.5}
+        - {ref: fuse, w: 24, h: 36, flex: 1}   # flex 分剩余主轴空间
+elements:
+  - {type: box, id: q, title: "User Query", ...}   # 无 rect
+  - {type: arrow, from: q, to: dense, route: avoid, label: "…"}
+```
+
+- 叶子 `{ref: id, w, h}` 或 `{ref: id, flex, h}`（row 主轴）/`{ref: id, flex, w}`（col 主轴）。
+- 容器可纯布局（不渲染），或 `type: panel`/`group` 带标题底色（复用视觉字段）。
+- **工作流**：`layout` + `route: avoid` 写结构 → `python -m paperfig.cli resolve in.yaml -o in.resolved.yaml` 物化绝对坐标 → 手调单个 `rect`/`via` → `render`。`render` 也可直接吃带 `layout` 的 spec（内部先 resolve）。
+- 已有 `rect` 的元素默认**不覆盖**（尊重手改）；`--force` 才重算。无 `layout` 时 resolve 幂等原样输出。
 
 ---
 
@@ -92,8 +129,8 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 | --- | --- |
 | **挪某个盒子** | 改该元素 `rect` 的 `x`/`y`。若要整行/整列跟着动，把同 `y`（或同 `x`）的元素一起改，保持对齐。 |
 | **改大小** | 改 `rect` 的 `w`/`h`。文字放不下会报 `text-overflow` → 同时加高或调小 `body_size`。 |
-| **对齐一排盒子** | 统一它们的 `y` 和 `h`（横排）或 `x` 和 `w`（竖排）；等间距则让相邻 `x` 差值一致。 |
-| **加一个节点** | 新增一条 `box`，`id` 唯一，`rect` 放到空位；需要连线再加 `arrow`。 |
+| **对齐一排盒子** | 有 `layout:` → 放进同一个 `kind: row`（或 col）；已物化 → 统一 `y`/`h` 或 `x`/`w`，等间距对齐相邻差值。 |
+| **加一个节点** | 结构化：在 `layout` 树加 `{ref: id, w, h}` + `elements` 加视觉字段；已物化：新增 `box`+`rect`，再加 `arrow`。 |
 | **删节点** | 删该元素，并删掉所有 `from/to/members` 引用它的 `arrow`/`group`（否则报错）。 |
 | **加连线** | 最简 `- {type: arrow, from: a, to: b, label: ...}`——裸 id **自动选朝向对方的边**，多数情况最整齐、不会"没对上"；要精确控制某条边再写 `from: a.right, to: b.left`。 |
 | **箭头穿过了别的盒子**（`arrow-through-node`） | 优先改 `route: avoid`；仍不满意再手写 `via` 把线引到盒子外侧。 |
@@ -177,7 +214,8 @@ python -m paperfig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {pro
 
 | 命令 | 作用 |
 | --- | --- |
-| `render spec [-o png] [--svg svg] [--grid] [--dpi N] [--strict]` | 渲染 + 体检 |
+| `render spec [-o png] [--svg svg] [--grid] [--dpi N] [--strict]` | 渲染 + 体检（含 `layout:` 的 spec 会先内部 resolve） |
+| `resolve spec [-o out.yaml] [--force]` | 结构化 layout → 纯绝对坐标 YAML（无 layout 则原样写出） |
 | `studio spec [--port 8323] [--no-open]` | 用户的交互式调图界面（本地网页：即时重渲、拖拽/键盘微调） |
 | `assets spec --api-key KEY [--only ids] [--force] [--no-auto-select]` | 抽卡生成 AI 素材（`--force` 清旧重抽） |
 | `select spec ASSET_ID INDEX` | 把候选 #INDEX 提为正式素材（零成本换卡） |

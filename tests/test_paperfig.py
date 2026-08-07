@@ -944,6 +944,210 @@ elements:
     assert _use_auto_label(exp) is True
 
 
+def test_label_hard_rejects_foreign_arrow_pierce():
+    """其它箭头竖段穿过标签胶囊 → 硬碰撞；清空间候选可选中。"""
+    from paperfig.routing import pick_best_label, _label_hard_collision, _seg_crosses_cap
+    from paperfig.spec import Rect
+    pts = [(20.0, 40.0), (40.0, 40.0)]  # 短水平段在左半
+    boxes = [Rect(5, 30, 12, 20), Rect(80, 30, 15, 20)]
+    # 竖线在 x=55，远离本段；若标签漂到 x=55 会被硬拒
+    foreign = [((55.0, 10.0), (55.0, 70.0))]
+    cap_on_line = Rect(51.0, 38.0, 8.0, 4.0)
+    assert _label_hard_collision(cap_on_line, boxes, [], [], foreign) is True
+    clear = Rect(22.0, 36.0, 8.0, 4.0)
+    assert _label_hard_collision(clear, boxes, [], [], foreign) is False
+    best = pick_best_label(pts, 8.0, 3.5, 2.5, boxes, [], foreign, [])
+    assert best is not None
+    assert not _seg_crosses_cap(foreign[0][0], foreign[0][1], best.cap, pad=0.8)
+
+
+def test_label_hard_rejects_non_endpoint_box_border():
+    """非端点盒子边框重叠 → 硬碰撞。"""
+    from paperfig.routing import _label_hard_collision
+    from paperfig.spec import Rect
+    wall = Rect(40, 10, 20, 40)
+    endpoints = [Rect(5, 20, 20, 20), Rect(75, 20, 20, 20)]
+    cap = Rect(42, 25, 10, 4)  # 压在 wall 上
+    assert _label_hard_collision(cap, [wall] + endpoints, [], [], [],
+                                 endpoint_boxes=endpoints) is True
+    # 只压端点盒 → 不硬拒
+    cap_ep = Rect(8, 28, 10, 4)
+    assert _label_hard_collision(cap_ep, [wall] + endpoints, [], [], [],
+                                 endpoint_boxes=endpoints) is False
+
+
+# ── flex layout ─────────────────────────────────────────
+
+def test_flex_row_places_boxes(tmp_path):
+    """row + gap 求解后盒子等间距、无手写 rect。"""
+    from paperfig.layout import resolve_document
+    import yaml
+    raw = yaml.safe_load("""
+figure: {width: 100, height: 40}
+layout:
+  kind: row
+  gap: 6
+  pad: 4
+  align: center
+  children:
+    - {ref: a, w: 20, h: 16}
+    - {ref: b, w: 20, h: 16}
+    - {ref: c, w: 20, h: 16}
+elements:
+  - {type: box, id: a, title: A, body: x}
+  - {type: box, id: b, title: B, body: y}
+  - {type: box, id: c, title: C, body: z}
+""")
+    out = resolve_document(raw)
+    assert "layout" not in out
+    by = {e["id"]: e for e in out["elements"]}
+    assert by["a"]["rect"] == [4.0, 12.0, 20.0, 16.0] or abs(by["a"]["rect"][0] - 4.0) < 0.02
+    ra, rb, rc = by["a"]["rect"], by["b"]["rect"], by["c"]["rect"]
+    assert abs((rb[0] - (ra[0] + ra[2])) - 6.0) < 0.02
+    assert abs((rc[0] - (rb[0] + rb[2])) - 6.0) < 0.02
+    # 交叉轴居中：画布高 40，pad 4 → inner 32，盒高 16 → y = 4 + 8 = 12
+    assert abs(ra[1] - 12.0) < 0.02
+
+
+def test_flex_nested_col_in_row(tmp_path):
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 50}
+layout:
+  kind: row
+  gap: 4
+  pad: 5
+  align: center
+  children:
+    - {ref: a, w: 20, h: 30}
+    - kind: col
+      gap: 2
+      children:
+        - {ref: b, w: 22, h: 14}
+        - {ref: c, w: 22, h: 14}
+    - {ref: d, w: 20, h: 30}
+elements:
+  - {type: box, id: a, title: A}
+  - {type: box, id: b, title: B}
+  - {type: box, id: c, title: C}
+  - {type: box, id: d, title: D}
+"""))
+    assert abs(spec.find("b").rect.x - spec.find("c").rect.x) < 0.02
+    assert abs(spec.find("c").rect.y - (spec.find("b").rect.bottom + 2)) < 0.02
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    assert (tmp_path / "o.png").exists()
+    assert not any(i.level == "E" for i in lint(spec, res))
+
+
+def test_flex_overflow_error_readable():
+    from paperfig.layout import LayoutError, resolve_document
+    import yaml
+    import pytest
+    raw = yaml.safe_load("""
+figure: {width: 50, height: 30}
+layout:
+  kind: row
+  gap: 4
+  children:
+    - {ref: a, w: 30, h: 10}
+    - {ref: b, w: 30, h: 10}
+elements:
+  - {type: box, id: a, title: A}
+  - {type: box, id: b, title: B}
+""")
+    with pytest.raises(LayoutError) as ei:
+        resolve_document(raw)
+    msg = str(ei.value)
+    assert "塞不下" in msg or "固有宽" in msg
+
+
+def test_resolve_idempotent_without_layout(tmp_path):
+    """无 layout 的绝对坐标 spec：resolve 原样（CLI 幂等）。"""
+    from paperfig.layout import document_has_layout, resolve_document
+    import yaml
+    text = """
+figure: {width: 80, height: 40}
+elements:
+  - {type: box, id: a, rect: [5, 5, 30, 20], title: A}
+"""
+    raw = yaml.safe_load(text)
+    assert document_has_layout(raw) is False
+    out = resolve_document(raw)
+    assert out["elements"][0]["rect"] == [5, 5, 30, 20]
+
+
+def test_resolve_cli(tmp_path):
+    from paperfig.cli import main
+    src = _write(tmp_path, """
+figure: {width: 80, height: 40}
+layout:
+  kind: row
+  gap: 4
+  pad: 5
+  children:
+    - {ref: a, w: 25, h: 18}
+    - {ref: b, w: 25, h: 18}
+elements:
+  - {type: box, id: a, title: A, body: x}
+  - {type: box, id: b, title: B, body: y}
+""")
+    out = tmp_path / "out.yaml"
+    assert main(["resolve", str(src), "-o", str(out)]) == 0
+    import yaml
+    got = yaml.safe_load(out.read_text(encoding="utf-8"))
+    assert "layout" not in got
+    assert got["elements"][0]["rect"][2] == 25
+
+
+def test_render_structured_spec_direct(tmp_path):
+    """render 直接吃带 layout 的 spec（内部先 resolve）。"""
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 90, height: 40}
+theme: sci
+layout:
+  kind: row
+  gap: 5
+  pad: 6
+  children:
+    - {ref: a, w: 28, h: 20}
+    - {ref: b, w: 28, h: 20}
+elements:
+  - {type: box, id: a, title: A, body: in, variant: primary}
+  - {type: box, id: b, title: B, body: out, variant: secondary}
+  - {type: arrow, from: a, to: b, route: avoid, label: go}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    assert spec.find("a").rect.w == 28
+    assert not any(i.level == "E" for i in lint(spec, res))
+
+
+def test_flex_panel_container_materialized(tmp_path):
+    """layout 节点 type:panel 自动物化为 panel 元素。"""
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+layout:
+  kind: col
+  pad: 3
+  children:
+    - id: p1
+      type: panel
+      kind: row
+      gap: 4
+      pad: [8, 3, 3, 3]
+      title: "Stage"
+      header_style: smallcaps
+      children:
+        - {ref: a, w: 30, h: 20}
+        - {ref: b, w: 30, h: 20}
+elements:
+  - {type: box, id: a, title: A}
+  - {type: box, id: b, title: B}
+"""))
+    p = spec.find("p1")
+    assert p is not None
+    assert p.rect.w > 60
+    assert p.title == "Stage"
+
+
 # ── bug #2：抠图退化输入返回 False 不崩溃 ───────────────
 
 def test_cutout_all_white(tmp_path):

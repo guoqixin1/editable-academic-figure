@@ -391,7 +391,10 @@ def _endpoint(v, ctx: str) -> str | tuple[float, float]:
 
 def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
     """加载 spec。给定 text 时解析该文本（studio 预览未保存的编辑用），
-    但相对路径（assets_dir、素材引用）仍按 path 所在目录解析。"""
+    但相对路径（assets_dir、素材引用）仍按 path 所在目录解析。
+
+    若顶层含 `layout:`，先经 flex 布局树求解并物化 rect，再按经典绝对坐标解析。
+    """
     p = Path(path).resolve()
     if text is None:
         with open(p, encoding="utf-8") as f:
@@ -399,6 +402,11 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
     raw = yaml.safe_load(text)
     if not isinstance(raw, dict):
         raise SpecError("spec 顶层必须是 mapping")
+
+    # 结构化布局 → 绝对坐标（无 layout 时为深拷贝恒等）
+    if isinstance(raw.get("layout"), dict):
+        from .layout import resolve_document
+        raw = resolve_document(raw)
 
     fig = raw.get("figure") or {}
     width = float(fig.get("width", 180))
