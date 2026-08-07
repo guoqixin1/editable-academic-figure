@@ -125,6 +125,9 @@ class RenderResult:
         self.arrow_ends: list[tuple[str, str, str]] = []  # (id, start_side, end_side)
         # 箭头标签胶囊（含 padding），供 lint 查压字 / 盖尖端
         self.arrow_label_boxes: list[tuple[str, Rect, str]] = []
+        # box 内 sketch / accent 色条 / 独立 sketch：(owner_id, kind, rect)
+        # kind 为 sketch 名（waveform/…）或 accent-left / accent-top
+        self.sketch_rects: list[tuple[str, str, Rect]] = []
         self.asset_boxes: dict[str, Rect] = {}       # 素材实际显示区域
         self.missing_assets: list[str] = []
         self.placeholder_assets: list[str] = []      # 意图性占位槽（待手动插入实验图）
@@ -445,12 +448,17 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
     # accent 色条画在逻辑框*外侧*，与箭头视觉锚点一致（尖端落在色条外缘）
     if el.accent == "left":
         aw = _box_accent_thickness(el, r)
-        out.append(f'<rect x="{r.x - aw:.3f}" y="{r.y:.3f}" width="{aw:.3f}" height="{r.h:.3f}" '
+        accent_r = Rect(r.x - aw, r.y, aw, r.h)
+        res.sketch_rects.append((el.id, "accent-left", accent_r))
+        out.append(f'<rect x="{accent_r.x:.3f}" y="{accent_r.y:.3f}" width="{accent_r.w:.3f}" '
+                   f'height="{accent_r.h:.3f}" '
                    f'rx="{min(th.corner_radius, aw / 2):.3f}" fill="{stroke}"/>')
     elif el.accent == "top":
         ah = _box_accent_thickness(el, r)
-        out.append(f'<rect x="{r.x:.3f}" y="{r.y - ah:.3f}" width="{r.w:.3f}" height="{ah:.3f}" '
-                   f'fill="{stroke}"/>')
+        accent_r = Rect(r.x, r.y - ah, r.w, ah)
+        res.sketch_rects.append((el.id, "accent-top", accent_r))
+        out.append(f'<rect x="{accent_r.x:.3f}" y="{accent_r.y:.3f}" width="{accent_r.w:.3f}" '
+                   f'height="{accent_r.h:.3f}" fill="{stroke}"/>')
 
     inner_w, avail_h = _shape_inner(el.shape, r, th.box_pad_x, th.box_pad_y)
     # accent 已外置，内容区不再为色条让位
@@ -531,6 +539,7 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
         y += sketch_gap
         sk_rect = Rect(content_x0, y, inner_w, min(sketch_h, r.bottom - th.box_pad_y - y))
         if sk_rect.h > 2.0:
+            res.sketch_rects.append((el.id, el.sketch, sk_rect))
             out.append(_draw_sketch(el.sketch, sk_rect, stroke, stroke,
                                     _stable_seed(el.id, el.sketch, r.x, r.y), th))
 
@@ -663,7 +672,11 @@ def _estimate_text_bbox(el: TextEl, fs: float) -> Rect:
 
 def _collect_routing_obstacles(spec: FigureSpec, res: RenderResult
                                ) -> list[tuple[str, Rect]]:
-    """路由障碍：节点视觉外边界 + group + 独立 text；panel 为背景容器不计入。"""
+    """路由障碍：节点视觉外边界 + group + sketch/accent 内容 + 独立 text。
+
+    panel 为背景容器不计入。sketch/accent 用独立 id（owner@kind），即使端点盒
+    整盒豁免，路径仍不可穿过其内容区。
+    """
     out: list[tuple[str, Rect]] = []
     solid = (BoxEl, AssetEl, TokensEl, NetworkEl, ScatterEl, SketchEl, GroupEl)
     for el in spec.elements:
@@ -673,6 +686,8 @@ def _collect_routing_obstacles(spec: FigureSpec, res: RenderResult
                 out.append((el.id, vr))
         elif isinstance(el, TextEl) and el.text.strip():
             out.append((el.id, _estimate_text_bbox(el, spec.font_scale)))
+    for owner, kind, rect in res.sketch_rects:
+        out.append((f"{owner}@{kind}", rect))
     return out
 
 
@@ -820,6 +835,8 @@ def _place_auto_arrow_labels(
             vr = res.node_visual_rects.get(el.id) or res.node_rects.get(el.id)
             if vr is not None:
                 boxes.append(vr)
+    # sketch / accent 内容区：落标硬障（与整盒不同，端点盒内也拒）
+    content_obstacles = [rect for _, _, rect in res.sketch_rects]
     # 已渲染的盒子标题/正文 + 独立 text，都作为落标障碍
     texts: list[Rect] = []
     for sp in res.text_spans:
@@ -863,6 +880,7 @@ def _place_auto_arrow_labels(
             g.pts, w, h, asc, boxes, texts, other_segs, other_caps,
             head_keep=max(head_len + 1.2, 2.8),
             endpoint_boxes=endpoint_boxes,
+            content_obstacles=content_obstacles,
         )
         if best is None:
             continue
@@ -1924,6 +1942,7 @@ def _render_sketch(el: SketchEl, th: Theme, fs: float, res: RenderResult) -> str
     color = el.color or el.stroke_color or th.arrow
     stroke = el.stroke_color or color
     seed = el.seed if el.seed is not None else _stable_seed(el.id, el.kind, el.rect.x, el.rect.y)
+    res.sketch_rects.append((el.id, el.kind, el.rect))
     out = [_draw_sketch(el.kind, el.rect, color, stroke, seed, th)]
     if el.label:
         pt = max(th.size_caption * fs * 0.95, 5.5)

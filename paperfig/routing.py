@@ -2,8 +2,9 @@
 
 算法概要
 --------
-1. 障碍物：节点视觉外边界（accent/stack 已计入）与独立 text 包围盒，
-   各自外扩 CLEARANCE_MM；起/终点所在盒（及包含端点的容器）豁免。
+1. 障碍物：节点视觉外边界（accent/stack 已计入）、box 内 sketch/accent
+   内容区、独立 text 包围盒，各自外扩 CLEARANCE_MM；起/终点所在盒豁免，
+   但其 sketch/accent（owner@kind）仍计入，防止回穿内容区。
 2. 走廊网格：障碍物边线 + 锚点/stub + 画布边收集 H/V 通道坐标，
    交点为节点；边不穿障则连通。
 3. A*：四邻接正交；代价 = 段长 + TURN_PENALTY × 拐弯次数。
@@ -822,6 +823,23 @@ def _seg_crosses_cap(
     return _segment_hits_rect(a[0], a[1], b[0], b[1], cap.expanded(pad))
 
 
+# 端点盒边框带宽度（mm）：落标可贴边，深入 inner 硬拒
+_ENDPOINT_BORDER_MM = 1.0
+
+
+def _endpoint_inner(b: Rect, border: float = _ENDPOINT_BORDER_MM) -> Rect:
+    """端点盒去掉边框带后的 inner；过窄则退化为中心点附近小矩形。"""
+    return Rect(
+        b.x + border, b.y + border,
+        max(b.w - 2 * border, 0.1), max(b.h - 2 * border, 0.1),
+    )
+
+
+def _is_same_rect(a: Rect, b: Rect) -> bool:
+    return (abs(a.x - b.x) < 1e-6 and abs(a.y - b.y) < 1e-6
+            and abs(a.w - b.w) < 1e-6 and abs(a.h - b.h) < 1e-6)
+
+
 def _label_hard_collision(
     cap: Rect,
     boxes: list[Rect],
@@ -832,24 +850,41 @@ def _label_hard_collision(
     tip: tuple[float, float] | None = None,
     box_pad: float = 0.35,
     endpoint_boxes: list[Rect] | None = None,
+    content_obstacles: list[Rect] | None = None,
 ) -> bool:
-    """硬碰撞：压非端点盒子（含边框带）/文字/其它标签，或被其它箭头线段穿过。
+    """硬碰撞：压非端点盒子 / 端点盒 inner / sketch·accent / 文字 / 其它标签，或被箭头穿过。
 
-    端点盒子（箭头 from/to）只走软惩罚：窄缝标签几何上几乎必然贴近端点盒。
+    端点盒仅边框带（≈1mm）可用；深入 inner 或压本盒 sketch/accent 一律硬拒。
     """
     endpoints = endpoint_boxes or []
     for b in boxes:
-        if any(abs(b.x - e.x) < 1e-6 and abs(b.y - e.y) < 1e-6
-               and abs(b.w - e.w) < 1e-6 and abs(b.h - e.h) < 1e-6 for e in endpoints):
+        if any(_is_same_rect(b, e) for e in endpoints):
+            # 端点盒：边框带可叠；深入 inner → 硬拒
+            if cap.intersection_area(_endpoint_inner(b)) > 0.05:
+                return True
             continue
         if cap.intersection_area(b.expanded(box_pad)) > 0.02:
+            return True
+    # sketch / accent：任意相交即硬拒（含端点盒内缩略图）
+    for c in content_obstacles or []:
+        if cap.intersection_area(c) > 0.05:
             return True
     for t in texts:
         if cap.intersection_area(t) <= 0.05:
             continue
-        # 落在端点盒内的标题/正文：视为端点内容，不硬拒（否则窄缝标签全被挤走）
-        if endpoints and any(t.intersection_area(e) > 0.5 for e in endpoints):
-            continue
+        # 落在端点盒边框带内的标题/正文：不硬拒；深入 inner 的正文仍拒
+        if endpoints:
+            in_border_only = False
+            for e in endpoints:
+                if t.intersection_area(e) <= 0.5:
+                    continue
+                if t.intersection_area(_endpoint_inner(e)) <= 0.05:
+                    in_border_only = True
+                    break
+                # 正文在 inner → 仍硬拒
+                return True
+            if in_border_only:
+                continue
         return True
     for o in other_caps:
         if cap.intersection_area(o.expanded(0.3)) > 0.05:
@@ -884,30 +919,31 @@ def score_label_candidate(
     head_keep: float = 2.8,
     other_arrow_segs: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
     endpoint_boxes: list[Rect] | None = None,
+    content_obstacles: list[Rect] | None = None,
 ) -> float:
     """越高越好。硬碰撞大幅扣分；其它箭头线段穿标签为重罚。"""
     s = 100.0 + seg_pref
     endpoints = endpoint_boxes or []
 
     def _is_endpoint(b: Rect) -> bool:
-        return any(
-            abs(b.x - e.x) < 1e-6 and abs(b.y - e.y) < 1e-6
-            and abs(b.w - e.w) < 1e-6 and abs(b.h - e.h) < 1e-6
-            for e in endpoints
-        )
+        return any(_is_same_rect(b, e) for e in endpoints)
 
     for b in boxes:
         a = cap.intersection_area(b.expanded(0.35))
         if a <= 0:
             continue
         if _is_endpoint(b):
-            # 端点盒：轻罚，避免被赶到远处；边框带比深入盒内多罚一点
-            inner = Rect(b.x + 0.5, b.y + 0.5, max(b.w - 1.0, 0.1), max(b.h - 1.0, 0.1))
+            # 端点盒：边框带轻罚；深入 inner 重罚（硬拒已挡，此处兜底打分）
+            inner = _endpoint_inner(b)
             deep = cap.intersection_area(inner)
             border = max(0.0, a - deep)
-            s -= 8 + deep * 1.5 + border * 6
+            s -= 8 + deep * 40 + border * 6
         else:
             s -= 120 + a * 8
+    for c in content_obstacles or []:
+        a = cap.intersection_area(c)
+        if a > 0:
+            s -= 140 + a * 10
     for t in texts:
         a = cap.intersection_area(t)
         if a > 0:
@@ -953,6 +989,7 @@ def pick_best_label(
     other_caps: list[Rect],
     head_keep: float = 2.8,
     endpoint_boxes: list[Rect] | None = None,
+    content_obstacles: list[Rect] | None = None,
 ) -> LabelCandidate | None:
     tip = pts[-1]
     own_segs = list(zip(pts, pts[1:]))
@@ -964,15 +1001,19 @@ def pick_best_label(
         hard = _label_hard_collision(
             cap, boxes, texts, other_caps, other_arrow_segs,
             own_segs=own_segs, tip=tip, endpoint_boxes=endpoint_boxes,
+            content_obstacles=content_obstacles,
         )
         sc = score_label_candidate(
             cap, tip, pts, boxes, texts, all_segs, other_caps, pref, head_keep,
             other_arrow_segs=other_arrow_segs,
             endpoint_boxes=endpoint_boxes,
+            content_obstacles=content_obstacles,
         )
         cand = LabelCandidate(x=tx, baseline=ty, cap=cap, tag=tag, score=sc)
         if not hard and (best is None or sc > best.score):
             best = cand
         if best_soft is None or sc > best_soft.score:
             best_soft = cand
+    # 有硬碰撞自由候选时用它；否则不回退到压 sketch/inner 的 soft
+    # （避免「全撞仍硬塞」）；仅当全部硬撞时才退 soft 保兼容
     return best if best is not None else best_soft

@@ -9,14 +9,19 @@
     - 文本相互重叠
     - 文本超出画布
     - 素材缺失
-    - 箭头穿过无关节点
+    - 箭头穿过无关节点（含 legend / 独立 sketch / asset；端点仅豁免法向 stub）
+    - 箭头标签压 sketch/accent（arrow-label-over-sketch，交 >0.8mm²）
+    - 箭头标签深入节点 inner（arrow-label-in-node；显式 label_offset 不豁免）
   W 级（警告，建议修）
     - 字号低于下限（印刷缩放后 <6pt）
     - 节点重叠
     - 素材实际显示尺寸过小（槽位浪费）
-    - 画布利用率过低 / 元素过挤
+    - 画布利用率过低 / 元素过挤（覆盖率按叶元素，剔除 panel/背景 group）
+    - 九宫格空洞 / 失衡（region-empty / layout-imbalance）
     - 视觉丰度（R-*）：空盒子 / 无分区底 / 多色无图例
     - 箭头体检：末段不垂直进入（arrow-approach）/ 端点悬空或压入（arrow-gap）
+    - 箭头出口落在本盒 sketch 带且法向净空不足（arrow-exit-over-content）
+    - 绕行穿空场（arrow-route-awkward）
     - 箭头标签盖住尖端（arrow-label-tip）/ 压到其他文字（arrow-label-over-text）
 """
 
@@ -39,6 +44,20 @@ _ARROW_GAP_PENETRATE = 0.5   # 深入视觉边界内部超过此值 → W
 # 末段与锚定边法向夹角 >15° → arrow-approach（cos(15°)≈0.9659）
 _ARROW_APPROACH_MAX_DEG = 15.0
 _ARROW_APPROACH_MIN_COS = math.cos(math.radians(_ARROW_APPROACH_MAX_DEG))
+_ARROW_LABEL_SKETCH_MIN = 0.8   # mm²：标签∩sketch/accent → E
+_ARROW_LABEL_NODE_MIN = 0.8     # mm²：标签∩节点 inner → E
+_ENDPOINT_BORDER_MM = 1.0       # 端点盒边框带（与 routing 一致）
+_EXIT_SKETCH_CLEARANCE = 2.5    # mm：出口到本盒 sketch 法向净空
+_MIN_APPROACH_MM = 3.0          # 与 render/routing 法向 stub 一致
+
+# 构图：叶元素九宫格
+_REGION_EMPTY_OCC = 0.05
+_REGION_EMPTY_NEIGHBOR = 0.30
+_LAYOUT_IMBALANCE = 0.35
+_SMALL_CANVAS_W = 120.0         # 小于此宽放宽九宫格阈值
+_ROUTE_AWKWARD_DETOUR = 1.3
+_ROUTE_AWKWARD_SEG = 15.0       # mm：中段落在低占用格
+_ROUTE_AWKWARD_CELL_OCC = 0.08
 
 MIN_FONT_PT = 5.5   # 旧主题 font-too-small 下限（lint_min_font 未设时）
 IDEAL_MIN_FONT_PT = 6.0  # 旧主题 font-small 软下限（lint_min_font 未设时）
@@ -92,9 +111,14 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues += _check_node_overlap(spec, res)
     issues += _check_arrow_crossings(spec, res)
     issues += _check_arrow_geometry(spec, res)
+    issues += _check_arrow_exit_over_content(spec, res)
     issues += _check_arrow_label_occlusion(spec, res)
+    issues += _check_arrow_label_over_sketch(res)
+    issues += _check_arrow_label_in_node(spec, res)
+    issues += _check_arrow_route_awkward(spec, res)
     issues += _check_asset_scale(res)
     issues += _check_density(spec, res)
+    issues += _check_region_balance(spec, res)
     issues += _check_alignment(spec, res)
     issues += _check_visual_richness(spec, res)
     issues += _check_figurative_overload(spec, res)
@@ -180,35 +204,104 @@ def _check_node_overlap(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     return issues
 
 
+def _through_node_obstacles(spec: FigureSpec, res: RenderResult
+                            ) -> list[tuple[str, Rect]]:
+    """arrow-through-node 障碍集：box/asset/独立 sketch/legend 显示框。"""
+    out: list[tuple[str, Rect]] = []
+    for el in spec.elements:
+        if isinstance(el, BoxEl):
+            r = res.node_visual_rects.get(el.id) or el.rect
+            out.append((el.id, r))
+        elif isinstance(el, AssetEl):
+            shown = res.asset_boxes.get(el.src)
+            out.append((el.id, shown if shown is not None else el.rect))
+        elif isinstance(el, SketchEl):
+            out.append((el.id, el.rect))
+        elif isinstance(el, LegendEl):
+            r = res.node_rects.get(el.id)
+            if r is not None:
+                out.append((el.id, r))
+    return out
+
+
+def _is_normal_stub_segment(
+    a: tuple[float, float],
+    b: tuple[float, float],
+    tip: tuple[float, float],
+    side: str,
+    max_len: float = _MIN_APPROACH_MM,
+) -> bool:
+    """线段是否为端点处沿锚定边法向的 stub（长度 ≤ approach）。"""
+    if side not in ("left", "right", "top", "bottom"):
+        return False
+    # 一端必须是 tip
+    if (abs(a[0] - tip[0]) < 1e-6 and abs(a[1] - tip[1]) < 1e-6):
+        other = b
+    elif (abs(b[0] - tip[0]) < 1e-6 and abs(b[1] - tip[1]) < 1e-6):
+        other = a
+    else:
+        return False
+    dx, dy = other[0] - tip[0], other[1] - tip[1]
+    L = math.hypot(dx, dy)
+    if L < 1e-9 or L > max_len + 0.35:
+        return False
+    nx, ny = _side_normal(side)
+    # 外法向（离开盒子）
+    return (dx * nx + dy * ny) / L >= _ARROW_APPROACH_MIN_COS - 1e-9
+
+
 def _check_arrow_crossings(spec: FigureSpec, res: RenderResult) -> list[Issue]:
-    """箭头线段穿过既非起点也非终点的节点。"""
+    """箭头线段穿过无关节点；端点盒仅豁免出口法向 stub，回穿 inner 仍报。"""
     issues = []
     arrows = {el.id: el for el in spec.elements if isinstance(el, ArrowEl)}
+    side_by_id = {aid: (s1, s2) for aid, s1, s2 in getattr(res, "arrow_ends", [])}
+    obstacles = _through_node_obstacles(spec, res)
+
     for aid, pts in res.arrow_segments:
         el = arrows.get(aid)
-        exempt = set()
+        if not pts or len(pts) < 2:
+            continue
+        start, end = pts[0], pts[-1]
+        s1, s2 = side_by_id.get(aid, ("free", "free"))
+        endpoint_ids: set[str] = set()
         if el:
             for ep in (el.from_, el.to):
                 if isinstance(ep, str):
-                    exempt.add(ep.split(".")[0])
-        if not pts:
-            continue
-        start, end = pts[0], pts[-1]
-        for nid, r in res.node_rects.items():
-            if nid in exempt or nid.startswith("_group") or "@" in nid:
+                    endpoint_ids.add(parse_anchor(ep)[0])
+
+        for nid, r in obstacles:
+            if nid.startswith("_group") or "@" in nid:
                 continue
-            node_el = spec.find(nid)
-            if not isinstance(node_el, (BoxEl, AssetEl)):
-                continue
-            # 箭头起/终点落在该节点内部 → 端点节点是它的子元素（容器嵌套），
-            # 穿出容器边界是有意行为，不算穿线
+            # 容器嵌套：起/终点落在节点内部 → 穿出容器边界有意为之
             if r.contains_point(*start) or r.contains_point(*end):
-                continue
-            for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
-                if _segment_hits_rect(x1, y1, x2, y2, r.expanded(-0.4)):
-                    issues.append(Issue("E", "arrow-through-node",
-                                        f"箭头 '{aid}' 穿过节点 '{nid}'"))
-                    break
+                if nid not in endpoint_ids:
+                    continue
+            hit_inner = False
+            for i, ((x1, y1), (x2, y2)) in enumerate(zip(pts, pts[1:])):
+                core = r.expanded(-0.4)
+                if not _segment_hits_rect(x1, y1, x2, y2, core):
+                    continue
+                if nid in endpoint_ids:
+                    # 仅豁免端点法向 stub；回穿 inner 要报
+                    if i == 0 and _is_normal_stub_segment(
+                            (x1, y1), (x2, y2), start, s1):
+                        continue
+                    if i == len(pts) - 2 and _is_normal_stub_segment(
+                            (x1, y1), (x2, y2), end, s2):
+                        continue
+                    # 贴边框带滑行（未深入 inner）放过
+                    inner = Rect(
+                        r.x + _ENDPOINT_BORDER_MM, r.y + _ENDPOINT_BORDER_MM,
+                        max(r.w - 2 * _ENDPOINT_BORDER_MM, 0.1),
+                        max(r.h - 2 * _ENDPOINT_BORDER_MM, 0.1),
+                    )
+                    if not _segment_hits_rect(x1, y1, x2, y2, inner):
+                        continue
+                hit_inner = True
+                break
+            if hit_inner:
+                issues.append(Issue("E", "arrow-through-node",
+                                    f"箭头 '{aid}' 穿过节点 '{nid}'"))
     return issues
 
 
@@ -343,7 +436,11 @@ def _check_arrow_geometry(spec: FigureSpec, res: RenderResult) -> list[Issue]:
 
 
 def _check_arrow_label_occlusion(spec: FigureSpec, res: RenderResult) -> list[Issue]:
-    """箭头标签胶囊盖住尖端 / 压到其他元素文字（W 级）。"""
+    """箭头标签胶囊盖住尖端 / 压到其他元素文字（W 级）。
+
+    显式 label_offset 与 auto 落标一视同仁（渲染可按用户偏移，lint 不豁免）。
+    """
+    del spec
     issues: list[Issue] = []
     tip_by_id = {aid: pts[-1] for aid, pts in res.arrow_segments if len(pts) >= 2}
     label_texts = {lbl for _, _, lbl in getattr(res, "arrow_label_boxes", [])}
@@ -374,6 +471,116 @@ def _check_arrow_label_occlusion(spec: FigureSpec, res: RenderResult) -> list[Is
                     f"箭头 '{aid}' 标签 “{label[:14]}” 压到文字 “{s.text[:14]}”",
                 ))
                 break
+    return issues
+
+
+def _check_arrow_label_over_sketch(res: RenderResult) -> list[Issue]:
+    """箭头标签胶囊压到 sketch / accent → E（交 >0.8mm²）。
+
+    同一标签可对多个 owner/kind 各报一条（便于对照审计案例）。
+    """
+    issues: list[Issue] = []
+    sketches = getattr(res, "sketch_rects", []) or []
+    for aid, cap, label in getattr(res, "arrow_label_boxes", []):
+        for owner, kind, sk in sketches:
+            inter = cap.intersection_area(sk)
+            if inter > _ARROW_LABEL_SKETCH_MIN:
+                issues.append(Issue(
+                    "E", "arrow-label-over-sketch",
+                    f"箭头 '{aid}' 标签 “{label[:14]}” 压到 '{owner}' 的 {kind}"
+                    f"（交 {inter:.2f}mm²）",
+                ))
+    return issues
+
+
+def _check_arrow_label_in_node(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """箭头标签深入节点 inner（边框带≈1mm 外）→ E；显式 offset 不豁免。"""
+    issues: list[Issue] = []
+    nodes: list[tuple[str, Rect]] = []
+    for el in spec.elements:
+        if isinstance(el, (BoxEl, AssetEl, SketchEl)):
+            r = res.node_visual_rects.get(el.id) or res.node_rects.get(el.id) or el.rect
+            nodes.append((el.id, r))
+        elif isinstance(el, LegendEl):
+            r = res.node_rects.get(el.id)
+            if r is not None:
+                nodes.append((el.id, r))
+    for aid, cap, label in getattr(res, "arrow_label_boxes", []):
+        for nid, r in nodes:
+            inner = Rect(
+                r.x + _ENDPOINT_BORDER_MM, r.y + _ENDPOINT_BORDER_MM,
+                max(r.w - 2 * _ENDPOINT_BORDER_MM, 0.1),
+                max(r.h - 2 * _ENDPOINT_BORDER_MM, 0.1),
+            )
+            inter = cap.intersection_area(inner)
+            if inter > _ARROW_LABEL_NODE_MIN:
+                issues.append(Issue(
+                    "E", "arrow-label-in-node",
+                    f"箭头 '{aid}' 标签 “{label[:14]}” 深入节点 '{nid}' 内容区"
+                    f"（交 {inter:.2f}mm²）；边框带可叠、勿压 inner/sketch",
+                ))
+                break
+    return issues
+
+
+def _normal_clearance_to_rect(
+    x: float, y: float, side: str, r: Rect,
+) -> float | None:
+    """端点相对矩形在锚定边法向上的外侧净空；切向不在带内则 None。"""
+    if side == "right":
+        if not (r.y - 1e-6 <= y <= r.bottom + 1e-6):
+            return None
+        return x - r.right  # >0 在 sketch 右侧外侧
+    if side == "left":
+        if not (r.y - 1e-6 <= y <= r.bottom + 1e-6):
+            return None
+        return r.x - x
+    if side == "bottom":
+        if not (r.x - 1e-6 <= x <= r.right + 1e-6):
+            return None
+        return y - r.bottom
+    if side == "top":
+        if not (r.x - 1e-6 <= x <= r.right + 1e-6):
+            return None
+        return r.y - y
+    return None
+
+
+def _check_arrow_exit_over_content(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """出口贴边但切向落在本盒 sketch 带且法向净空 <2.5mm → W。"""
+    issues: list[Issue] = []
+    arrows = {el.id: el for el in spec.elements if isinstance(el, ArrowEl)}
+    side_by_id = {aid: (s1, s2) for aid, s1, s2 in getattr(res, "arrow_ends", [])}
+    sketches = getattr(res, "sketch_rects", []) or []
+    # 只看真正的 sketch（不含 accent 色条）
+    by_owner: dict[str, list[tuple[str, Rect]]] = {}
+    for owner, kind, rect in sketches:
+        if kind.startswith("accent"):
+            continue
+        by_owner.setdefault(owner, []).append((kind, rect))
+
+    for aid, pts in res.arrow_segments:
+        el = arrows.get(aid)
+        if el is None or len(pts) < 2:
+            continue
+        s1, s2 = side_by_id.get(aid, ("free", "free"))
+        for ep, side, tip in ((el.from_, s1, pts[0]), (el.to, s2, pts[-1])):
+            if not isinstance(ep, str) or side not in ("left", "right", "top", "bottom"):
+                continue
+            nid = parse_anchor(ep)[0]
+            for kind, sk in by_owner.get(nid, []):
+                clr = _normal_clearance_to_rect(tip[0], tip[1], side, sk)
+                if clr is None:
+                    continue
+                # 出口在 sketch 外侧但净空不足，或端点落在 sketch 投影带内
+                if clr < _EXIT_SKETCH_CLEARANCE:
+                    issues.append(Issue(
+                        "W", "arrow-exit-over-content",
+                        f"箭头 '{aid}' 在 '{nid}' 的 {side} 出口落在 {kind} 带内"
+                        f"（法向净空 {clr:.1f}mm < {_EXIT_SKETCH_CLEARANCE}mm）；"
+                        f"考虑改锚点 @t 或换边",
+                    ))
+                    break
     return issues
 
 
@@ -510,26 +717,46 @@ def _check_alignment(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     return issues
 
 
+def _leaf_element_rects(spec: FigureSpec, res: RenderResult) -> list[tuple[str, Rect]]:
+    """叶元素 bbox：box/asset/legend/独立 sketch/tokens/network/scatter；
+    排除 panel 与纯背景 group。"""
+    leaves: list[tuple[str, Rect]] = []
+    for el in spec.elements:
+        if isinstance(el, PanelEl):
+            continue
+        if isinstance(el, GroupEl):
+            continue  # group 作分区框/底，不算叶内容
+        if isinstance(el, (BoxEl, TokensEl, NetworkEl, ScatterEl, SketchEl)):
+            r = res.node_rects.get(el.id) or el.rect
+            leaves.append((el.id, r))
+        elif isinstance(el, AssetEl):
+            shown = res.asset_boxes.get(el.src)
+            leaves.append((el.id, shown if shown is not None else el.rect))
+        elif isinstance(el, LegendEl):
+            r = res.node_rects.get(el.id)
+            if r is not None:
+                leaves.append((el.id, r))
+    return leaves
+
+
 def _check_density(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     """两个独立信号：
-    - 内容包围盒对画布的覆盖率过低 → 四周留白太多（真正的"空"）；
-    - 节点面积占内容包围盒过高 → 元素挤成一团。
-    仅用节点面积占画布比会误伤连线密集的数据流/分布式图（大量留白是给箭头的）。
+    - 叶元素包围盒对画布的覆盖率过低 → 四周留白太多（真正的"空"）；
+    - 节点面积占画布过高 → 元素挤成一团。
+    覆盖率剔除 PanelEl 与背景 group，避免分区底把稀疏图撑满。
     """
     issues = []
     canvas_area = spec.width * spec.height
+    leaves = _leaf_element_rects(spec, res)
 
     xs0, ys0, xs1, ys1 = [], [], [], []
     node_area = 0.0
-    for el in spec.elements:
-        if isinstance(el, (BoxEl, AssetEl)):
-            r = el.rect
-            node_area += r.w * r.h
-            xs0.append(r.x); ys0.append(r.y); xs1.append(r.right); ys1.append(r.bottom)
-    for r in res.node_rects.values():  # 含 group 包围盒
+    for nid, r in leaves:
+        node_area += r.w * r.h
         xs0.append(r.x); ys0.append(r.y); xs1.append(r.right); ys1.append(r.bottom)
+    # 独立 text 仍计入包围盒（标注也是内容）
     for s in res.text_spans:
-        if s.text.strip():
+        if s.text.strip() and not getattr(s, "diagnostic", False):
             b = s.bbox()
             xs0.append(b.x); ys0.append(b.y); xs1.append(b.right); ys1.append(b.bottom)
 
@@ -542,11 +769,153 @@ def _check_density(spec: FigureSpec, res: RenderResult) -> list[Issue]:
 
     if coverage < 0.45:
         issues.append(Issue("W", "canvas-sparse",
-                            f"内容仅覆盖画布 {coverage:.0%}，四周留白过多，考虑缩小画布尺寸"))
+                            f"叶内容仅覆盖画布 {coverage:.0%}，四周留白过多，考虑缩小画布尺寸"))
 
     if node_area / canvas_area > 0.82:
         issues.append(Issue("W", "canvas-crowded",
                             f"节点面积占画布 {node_area / canvas_area:.0%}，画面偏挤，考虑加大画布"))
+    return issues
+
+
+def _grid_occupancy(
+    leaves: list[tuple[str, Rect]],
+    width: float,
+    height: float,
+    n: int = 3,
+) -> list[list[tuple[float, list[str]]]]:
+    """3×3 九宫格叶占用率（交面积/格面积）与落入的 id 列表。"""
+    cw, ch = width / n, height / n
+    grid: list[list[tuple[float, list[str]]]] = []
+    for row in range(n):
+        row_cells: list[tuple[float, list[str]]] = []
+        for col in range(n):
+            cell = Rect(col * cw, row * ch, cw, ch)
+            area = cell.w * cell.h
+            ids: list[str] = []
+            occ = 0.0
+            for nid, r in leaves:
+                inter = cell.intersection_area(r)
+                if inter > 0:
+                    ids.append(nid)
+                    occ += inter
+            row_cells.append((occ / area if area > 0 else 0.0, ids))
+        grid.append(row_cells)
+    return grid
+
+
+def _check_region_balance(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """九宫格空洞 / 失衡（叶元素，排除 panel 与背景 group）。"""
+    issues: list[Issue] = []
+    leaves = _leaf_element_rects(spec, res)
+    if len(leaves) < 3:
+        return issues
+    # 小画布放宽，避免单栏/小示意图误报
+    small = spec.width < _SMALL_CANVAS_W
+    empty_th = 0.02 if small else _REGION_EMPTY_OCC
+    neighbor_th = 0.40 if small else _REGION_EMPTY_NEIGHBOR
+    imbalance_th = 0.50 if small else _LAYOUT_IMBALANCE
+
+    grid = _grid_occupancy(leaves, spec.width, spec.height)
+    occs = [grid[r][c][0] for r in range(3) for c in range(3)]
+    spread = max(occs) - min(occs)
+    if spread > imbalance_th:
+        issues.append(Issue(
+            "W", "layout-imbalance",
+            f"叶元素九宫格占用极差 {spread:.2f}（>{imbalance_th:.2f}）；"
+            f"考虑把内容分散或裁掉空带",
+        ))
+
+    for r in range(3):
+        for c in range(3):
+            occ, _ids = grid[r][c]
+            if occ >= empty_th:
+                continue
+            # 四邻（含对角）有高占用才报空洞，避免整片留白误报
+            neighbors = []
+            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1),
+                           (-1, -1), (-1, 1), (1, -1), (1, 1)):
+                rr, cc = r + dr, c + dc
+                if 0 <= rr < 3 and 0 <= cc < 3:
+                    neighbors.append(grid[rr][cc][0])
+            if neighbors and max(neighbors) > neighbor_th:
+                issues.append(Issue(
+                    "W", "region-empty",
+                    f"九宫格 r{r}c{c} 叶占用 {occ:.3f}（<{empty_th}）且邻格较满；"
+                    f"考虑填内容或收画布",
+                ))
+    return issues
+
+
+def _path_length(pts: list[tuple[float, float]]) -> float:
+    return sum(
+        math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
+        for i in range(len(pts) - 1)
+    )
+
+
+def _corridor_leaf_occ(
+    x1: float, y1: float, x2: float, y2: float,
+    leaves: list[tuple[str, Rect]],
+    half_w: float = 5.0,
+) -> float:
+    """线段两侧 half_w 走廊内的叶占用率。"""
+    if abs(y2 - y1) <= abs(x2 - x1):
+        # 近水平
+        band = Rect(min(x1, x2), min(y1, y2) - half_w,
+                    max(abs(x2 - x1), 0.1), abs(y2 - y1) + 2 * half_w)
+    else:
+        band = Rect(min(x1, x2) - half_w, min(y1, y2),
+                    abs(x2 - x1) + 2 * half_w, max(abs(y2 - y1), 0.1))
+    area = max(band.w * band.h, 1e-6)
+    return sum(band.intersection_area(r) for _, r in leaves) / area
+
+
+def _check_arrow_route_awkward(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """route:avoid 绕行比高且长段穿过近空走廊 → W。"""
+    issues: list[Issue] = []
+    arrows = {el.id: el for el in spec.elements if isinstance(el, ArrowEl)}
+    leaves = _leaf_element_rects(spec, res)
+    if not leaves:
+        return issues
+    # 九宫格占用：辅助判断（长段中点落在低占用格）
+    grid = _grid_occupancy(leaves, spec.width, spec.height)
+    cw, ch = spec.width / 3, spec.height / 3
+
+    for aid, pts in res.arrow_segments:
+        el = arrows.get(aid)
+        if el is None or el.route != "avoid" or len(pts) < 2:
+            continue
+        path = _path_length(pts)
+        chord = math.hypot(pts[-1][0] - pts[0][0], pts[-1][1] - pts[0][1])
+        if chord < 1e-6:
+            continue
+        detour = path / chord
+        if detour <= _ROUTE_AWKWARD_DETOUR:
+            continue
+        # 中段：非首末 stub；仅两段时两段都查
+        segs = list(zip(pts, pts[1:]))
+        mid = segs[1:-1] if len(segs) >= 3 else segs
+        awkward = False
+        for (x1, y1), (x2, y2) in mid:
+            seg_len = math.hypot(x2 - x1, y2 - y1)
+            if seg_len < _ROUTE_AWKWARD_SEG:
+                continue
+            # 走廊叶占用 <8%，或中点落在九宫格低占用格
+            if _corridor_leaf_occ(x1, y1, x2, y2, leaves) < _ROUTE_AWKWARD_CELL_OCC:
+                awkward = True
+                break
+            mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+            col = min(2, max(0, int(mx / cw))) if cw > 0 else 0
+            row = min(2, max(0, int(my / ch))) if ch > 0 else 0
+            if grid[row][col][0] < _ROUTE_AWKWARD_CELL_OCC:
+                awkward = True
+                break
+        if awkward:
+            issues.append(Issue(
+                "W", "arrow-route-awkward",
+                f"箭头 '{aid}' route=avoid 绕行比 {detour:.2f}（>{_ROUTE_AWKWARD_DETOUR}）"
+                f"且长段穿过近空格；考虑换锚点边或直连",
+            ))
     return issues
 
 

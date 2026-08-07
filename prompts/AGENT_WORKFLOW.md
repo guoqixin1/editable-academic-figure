@@ -25,7 +25,7 @@
 - **专用示意元素**：神经网络内部 → `network`；数据聚类/嵌入空间 → `scatter`；token 序列/特征金字塔 → `tokens`（`colors` 掩码、`sizes` 递变）；步骤编号 → `badge`；⊕/⊗ 算子 → `marker: oplus/otimes`；无线链路 → `route: arc` + `marker: wifi`。
 - **数学记号**：模块名/损失里的下标上标一律用 `_{...}`/`^{...}`（`E_{s}`、`L_{InfoNCE}`、`ℝ^{(B V) H W C}`），别写伪记号。含 `_`/`^`/`{` 的 YAML 值要加引号。
 - **可训练/冻结标注**：🔥/❄ → `marker`（`fire`/`snow`），贴在模块角上。
-- **连接**：数据/控制流向 → `arrow`，端点直接写**裸节点 id**（`from: a, to: b`）即自动选朝向对方的边、不会"没对上"；只在需要精确指定某条边时才写 `a.right`。**箭头一律先写 `route: avoid`**（走廊 A* 正交避障，自动绕盒、垂直进出、平行错开；标签默认 `label_pos: auto` 碰撞打分）。只有对路径不满意时才删掉 `avoid`、改用手写 `via` 微调。强调主流向的粗箭头 → `style: block`。多语义流（前向/反馈）用双色区分并配图例（短 arrow + text 拼）。
+- **连接**：数据/控制流向 → `arrow`，端点直接写**裸节点 id**（`from: a, to: b`）即自动选朝向对方的边、不会"没对上"；只在需要精确指定某条边时才写 `a.right`。**箭头一律先写 `route: avoid`**（走廊 A* 正交避障，自动绕盒、垂直进出、平行错开；标签默认 `label_pos: auto` 碰撞打分，硬拒端点盒 inner 与 box 内 `sketch`/`accent`）。只有对路径不满意时才删掉 `avoid`、改用手写 `via` 微调。显式 `label_offset` 仍按坐标渲染，但 lint（`arrow-label-over-sketch` / `arrow-label-in-node`）不豁免。出口落在本盒 sketch 带会报 `arrow-exit-over-content` → 改 `@t` 或换边。强调主流向的粗箭头 → `style: block`。多语义流（前向/反馈）用双色区分并配图例（短 arrow + text 拼）。
 - **素材需求**：哪些概念用插画更直观（设备、器官、文档、机器人……）？这些进 `assets` 抽卡。**抽象概念、带文字的东西不要用 AI 素材**——用 box 或代码画。
 - **真实实验图**：频谱/波形/生成结果/热图/定量曲线等**来自真实实验的图，绝不能让 AI 生成（学术不端）**。用 `asset` + `placeholder: true` 占位，投稿前由用户手动放真实文件进去。
 
@@ -132,13 +132,14 @@ topconf 下卡片默认无投影；需要浮起时显式 `shadow: true`。airy �
 - [ ] **缩略图密度**：≥50% 的内容模块内嵌 `sketch` 或 `icon`
 - [ ] **箭头有标签**：主要数据流箭头都有 `label`（维度或语义）
 - [ ] **有分区底色**：存在 `panel` 或带 `fill` 的 `group`
-- [ ] **画布覆盖**：内容不呈「四周大片死白」（lint `canvas-sparse`）；也不挤爆（`canvas-crowded`）
+- [ ] **画布覆盖**：叶内容不呈「四周大片死白」（lint `canvas-sparse`，不计 panel 底）；也不挤爆（`canvas-crowded`）；九宫格无空洞（`region-empty` / `layout-imbalance`）
+- [ ] **标签不穿模**：箭头标签不压 `sketch`/`accent`（`arrow-label-over-sketch`），不深入节点 inner（`arrow-label-in-node`）
 - [ ] **数学记号**：一律 `_{...}` / `^{...}`，YAML 值加引号
 - [ ] **色彩克制**：同图最多 3 个主色 + 灰系；见配色禁忌表
 - [ ] **图例完备**：设计建议 ≥2 种非 muted 语义色加 `legend`（机检 ≥3 色才报，不报≠不需要）
 - [ ] **素材风格统一**：有 AI 素材时写顶层 `assets_style`，与 `theme` 色板一致
 
-机检会以 W 级提示部分项：`R-empty-box` / `R-no-section` / `R-no-legend`（不阻断，但新图应清零）。
+机检会以 W 级提示部分项：`R-empty-box` / `R-no-section` / `R-no-legend` / `region-empty` / `arrow-exit-over-content` / `arrow-route-awkward`（不阻断，但新图应清零相关项）。
 
 ---
 

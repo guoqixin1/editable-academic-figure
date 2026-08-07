@@ -963,7 +963,7 @@ def test_label_hard_rejects_foreign_arrow_pierce():
 
 
 def test_label_hard_rejects_non_endpoint_box_border():
-    """非端点盒子边框重叠 → 硬碰撞。"""
+    """非端点盒子边框重叠 → 硬碰撞；端点盒仅边框带可叠、深入 inner 硬拒。"""
     from paperfig.routing import _label_hard_collision
     from paperfig.spec import Rect
     wall = Rect(40, 10, 20, 40)
@@ -971,10 +971,14 @@ def test_label_hard_rejects_non_endpoint_box_border():
     cap = Rect(42, 25, 10, 4)  # 压在 wall 上
     assert _label_hard_collision(cap, [wall] + endpoints, [], [], [],
                                  endpoint_boxes=endpoints) is True
-    # 只压端点盒 → 不硬拒
-    cap_ep = Rect(8, 28, 10, 4)
-    assert _label_hard_collision(cap_ep, [wall] + endpoints, [], [], [],
+    # 端点盒边框带（贴左缘外侧条带）→ 不硬拒
+    cap_border = Rect(4.2, 28, 1.5, 4)  # 与 endpoint[0] 仅叠 ~0.8mm 边框
+    assert _label_hard_collision(cap_border, [wall] + endpoints, [], [], [],
                                  endpoint_boxes=endpoints) is False
+    # 深入端点盒 inner → 硬拒
+    cap_deep = Rect(8, 28, 10, 4)
+    assert _label_hard_collision(cap_deep, [wall] + endpoints, [], [], [],
+                                 endpoint_boxes=endpoints) is True
 
 
 # ── flex layout ─────────────────────────────────────────
@@ -1677,6 +1681,232 @@ elements:
     assert "font-small" in codes_tc
     codes_tc6 = {i.code for i in _issues("topconf", 6.0)}
     assert "font-small" not in codes_tc6 and "font-too-small" not in codes_tc6
+
+
+# ── sketch/accent 入库 + 新 lint（审计盲区补齐）────────────────
+
+def test_sketch_accent_recorded_in_render_result(tmp_path):
+    """box 内 sketch / accent 与独立 sketch 写入 res.sketch_rects。"""
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 5, 30, 36], title: A, body: x,
+     sketch: bars, accent: left, valign: top}
+  - {type: sketch, id: sk, rect: [50, 10, 20, 12], kind: waveform}
+  - {type: box, id: b, rect: [75, 10, 20, 16], title: B}
+"""))
+    res = render(spec, dpi=80)
+    kinds = {(o, k) for o, k, _ in res.sketch_rects}
+    assert ("a", "bars") in kinds
+    assert ("a", "accent-left") in kinds
+    assert ("sk", "waveform") in kinds
+
+
+def test_lint_arrow_label_over_sketch_trigger_and_clean(tmp_path):
+    """标签压 sketch → E；干净间隙不报。"""
+    from paperfig.lint import _check_arrow_label_over_sketch
+    from paperfig.render import RenderResult
+
+    res = RenderResult()
+    res.sketch_rects.append(("box", "heatmap", Rect(20, 10, 14, 20)))
+    res.arrow_label_boxes.append(("ar", Rect(22, 12, 8, 3.2), "lbl"))
+    bad = _check_arrow_label_over_sketch(res)
+    assert any(i.code == "arrow-label-over-sketch" and i.level == "E" for i in bad)
+
+    res2 = RenderResult()
+    res2.sketch_rects.append(("box", "heatmap", Rect(20, 10, 14, 20)))
+    res2.arrow_label_boxes.append(("ar", Rect(50, 12, 8, 3.2), "lbl"))
+    assert not _check_arrow_label_over_sketch(res2)
+
+
+def test_lint_arrow_label_in_node_explicit_offset(tmp_path):
+    """显式 label_offset 渲染照放，但 lint 仍报 arrow-label-in-node。"""
+    from paperfig.lint import _check_arrow_label_in_node
+    from paperfig.render import RenderResult
+
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 80, height: 40}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 8, 28, 24], title: SrcBox}
+  - {type: box, id: b, rect: [50, 8, 28, 24], title: DstBox}
+  - {type: arrow, id: ar, from: a.right, to: b.left, route: avoid,
+     label: deep, label_offset: -2.0}
+"""))
+    res = RenderResult()
+    res.node_rects = {"a": Rect(5, 8, 28, 24), "b": Rect(50, 8, 28, 24)}
+    res.node_visual_rects = dict(res.node_rects)
+    # 模拟显式 offset 把标签塞进 a 的 inner
+    res.arrow_label_boxes.append(("ar", Rect(10, 14, 10, 4), "deep"))
+    assert any(i.code == "arrow-label-in-node" for i in _check_arrow_label_in_node(spec, res))
+
+    # 干净：标签在线缝中、不深入 inner
+    res2 = RenderResult()
+    res2.node_rects = dict(res.node_rects)
+    res2.node_visual_rects = dict(res.node_rects)
+    res2.arrow_label_boxes.append(("ar", Rect(36, 16, 8, 3), "ok"))
+    assert not _check_arrow_label_in_node(spec, res2)
+
+
+def test_lint_arrow_exit_over_content(tmp_path):
+    """出口切向落在本盒 sketch 带且净空不足 → W；躲开则不报。"""
+    # sketch 几乎填满盒子，出口在 right@0.5 必落带内
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 50}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 5, 40, 40], title: A, sketch: tree, valign: top}
+  - {type: box, id: b, rect: [80, 15, 30, 20], title: B}
+  - {type: arrow, id: ar, from: a.right@0.55, to: b.left, route: straight}
+"""))
+    res = render(spec, dpi=80)
+    assert any(i.code == "arrow-exit-over-content" and "ar" in i.msg
+               for i in lint(spec, res))
+
+    # 无 sketch → 不报
+    spec2 = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 50}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 15, 30, 20], title: A, body: x}
+  - {type: box, id: b, rect: [80, 15, 30, 20], title: B}
+  - {type: arrow, id: ar, from: a.right, to: b.left, route: straight}
+"""))
+    res2 = render(spec2, dpi=80)
+    assert not any(i.code == "arrow-exit-over-content" for i in lint(spec2, res2))
+
+
+def test_lint_region_empty_and_imbalance(tmp_path):
+    """九宫格空洞 / 失衡触发与放宽。"""
+    # 大画布：内容全挤在左上，右下空
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 180, height: 90}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 5, 40, 25], title: A}
+  - {type: box, id: b, rect: [50, 5, 40, 25], title: B}
+  - {type: box, id: c, rect: [5, 35, 40, 25], title: C}
+"""))
+    res = render(spec, dpi=80)
+    codes = {i.code for i in lint(spec, res)}
+    assert "region-empty" in codes or "layout-imbalance" in codes
+
+    # 小画布且九宫格都有内容 → 不报 region-empty
+    spec2 = load_spec(_write(tmp_path, """
+figure: {width: 90, height: 60}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [2, 2, 28, 18], title: A}
+  - {type: box, id: b, rect: [31, 2, 28, 18], title: B}
+  - {type: box, id: c, rect: [60, 2, 28, 18], title: C}
+  - {type: box, id: d, rect: [2, 21, 28, 18], title: D}
+  - {type: box, id: e, rect: [31, 21, 28, 18], title: E}
+  - {type: box, id: f, rect: [60, 21, 28, 18], title: F}
+  - {type: box, id: g, rect: [2, 40, 28, 18], title: G}
+  - {type: box, id: h, rect: [31, 40, 28, 18], title: H}
+  - {type: box, id: i, rect: [60, 40, 28, 18], title: I}
+"""))
+    res2 = render(spec2, dpi=80)
+    assert not any(i.code == "region-empty" for i in lint(spec2, res2))
+
+
+def test_canvas_sparse_ignores_panel(tmp_path):
+    """大 panel 底不应撑满覆盖率而掩盖真正的稀疏。"""
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 200, height: 200}
+theme: sci
+elements:
+  - {type: panel, id: p, rect: [2, 2, 196, 196], title: Stage, fill: "#F7F7F7"}
+  - {type: box, id: a, rect: [90, 95, 20, 10], title: 孤岛}
+"""))
+    res = render(spec, dpi=60)
+    assert any(i.code == "canvas-sparse" for i in lint(spec, res))
+
+
+def test_lint_arrow_route_awkward(tmp_path):
+    """绕行比高且长段穿空走廊 → W；短直连不报。"""
+    from paperfig.lint import _check_arrow_route_awkward
+    from paperfig.render import RenderResult
+
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 180, height: 70}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [140, 8, 30, 20], title: A}
+  - {type: box, id: b, rect: [140, 45, 30, 18], title: B}
+  - {type: arrow, id: ar, from: a.bottom, to: b.top, route: avoid}
+"""))
+    res = RenderResult()
+    # 人为注入高绕行 + 穿空水平长段
+    res.arrow_segments.append(("ar", [
+        (155.0, 28.0), (80.0, 28.0), (80.0, 50.0), (155.0, 50.0), (155.0, 45.0),
+    ]))
+    # 叶节点只在右侧
+    res.node_rects = {"a": Rect(140, 8, 30, 20), "b": Rect(140, 45, 30, 18)}
+    issues = _check_arrow_route_awkward(spec, res)
+    assert any(i.code == "arrow-route-awkward" for i in issues)
+
+    res2 = RenderResult()
+    res2.arrow_segments.append(("ar", [(155.0, 28.0), (155.0, 45.0)]))
+    res2.node_rects = dict(res.node_rects)
+    assert not any(i.code == "arrow-route-awkward"
+                   for i in _check_arrow_route_awkward(spec, res2))
+
+
+def test_label_auto_hard_rejects_endpoint_inner_and_sketch():
+    """端点盒 inner / sketch 硬拒；边框带仍可落。"""
+    from paperfig.routing import _label_hard_collision
+    box = Rect(10, 10, 40, 30)
+    sketch = Rect(14, 20, 30, 16)
+    # 深入 inner
+    deep = Rect(20, 18, 10, 4)
+    assert _label_hard_collision(
+        deep, [box], [], [], [], endpoint_boxes=[box],
+        content_obstacles=[sketch],
+    )
+    # 压 sketch
+    on_sk = Rect(16, 22, 8, 3)
+    assert _label_hard_collision(
+        on_sk, [box], [], [], [], endpoint_boxes=[box],
+        content_obstacles=[sketch],
+    )
+    # 胶囊在 box 右缘外 → 不硬拒
+    outside = Rect(51, 20, 6, 3)
+    assert not _label_hard_collision(
+        outside, [box], [], [], [], endpoint_boxes=[box],
+        content_obstacles=[sketch],
+    )
+
+
+def test_arrow_through_node_endpoint_stub_ok_reentry_bad(tmp_path):
+    """端点法向 stub 豁免；回穿端点盒 inner 仍报。"""
+    from paperfig.lint import _check_arrow_crossings
+    from paperfig.render import RenderResult
+
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [10, 15, 25, 20], title: A}
+  - {type: box, id: b, rect: [70, 15, 25, 20], title: B}
+  - {type: arrow, id: ar, from: a.right, to: b.left}
+"""))
+    res = RenderResult()
+    res.node_rects = {"a": Rect(10, 15, 25, 20), "b": Rect(70, 15, 25, 20)}
+    res.node_visual_rects = dict(res.node_rects)
+    # 正常：仅 stub 离开
+    res.arrow_segments = [("ar", [(35.0, 25.0), (38.0, 25.0), (67.0, 25.0), (70.0, 25.0)])]
+    res.arrow_ends = [("ar", "right", "left")]
+    assert not _check_arrow_crossings(spec, res)
+
+    # 回穿 a 的 inner
+    res.arrow_segments = [("ar", [
+        (35.0, 25.0), (50.0, 25.0), (50.0, 5.0), (20.0, 5.0), (20.0, 22.0),
+        (50.0, 22.0), (70.0, 25.0),
+    ])]
+    assert any(i.code == "arrow-through-node" and "a" in i.msg
+               for i in _check_arrow_crossings(spec, res))
 
 
 if __name__ == "__main__":

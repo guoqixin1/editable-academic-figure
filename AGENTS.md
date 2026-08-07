@@ -113,7 +113,7 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 - **legend.swatch**：`box | line | dashed | arrow | dot`。
 - **marker.icon**：`fire snow lock check cross oplus otimes wifi`。
 - **arrow.route**：`auto straight hv vh z zv arc avoid`；**优先 `route: avoid`**（走廊网格 A* 正交避障，忽略手写 `via`；失败回退 `auto` 并报 `route-avoid-fallback`）。仅当路径不满意时再用 `via` 微调。
-- **arrow.label_pos**：`auto` = 碰撞打分落标；`route: avoid` 时默认开启。显式 `label_offset` 或非 avoid 箭头保持旧落标（兼容旧图逐像素不变）。
+- **arrow.label_pos**：`auto` = 碰撞打分落标；`route: avoid` 时默认开启。显式 `label_offset` 或非 avoid 箭头保持旧落标（兼容旧图逐像素不变）。**auto 落标**会硬拒端点盒 inner（边框带≈1mm 可用）与 box 内 `sketch`/`accent`；显式 `label_offset` 仍按用户坐标渲染，但 lint 全套碰撞检查不豁免。
 - **arrow.weight**：`thin|normal|heavy`；**arrow.style** 含 `dotted`；**arrow.label_bg**：标签胶囊底。
 - **group.fill / hatch / shadow**：分区浅底、斜线底纹、投影。
 - **text.smallcaps**：大写+字距；**text.rotate: -90**：竖排。
@@ -181,15 +181,20 @@ python -m paperfig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {pro
 | `text-overflow` | E | 加高 `rect` / 缩短文字 / 调小 `body_size`（diamond 文字区仅 ~60%） |
 | `text-overlap` | E | 挪 `at` 或错开元素 |
 | `out-of-canvas` | E | 调坐标或加大 `figure.width/height`（注意 `tokens.sizes` 居中可能越界） |
-| `arrow-through-node` | E | 优先 `route: avoid`；仍穿再用 `via` |
+| `arrow-through-node` | E | 优先 `route: avoid`；仍穿再用 `via`。障碍含 box/asset/独立 sketch/legend；端点仅豁免法向 stub，回穿 inner 仍报 |
+| `arrow-label-over-sketch` | E | 标签胶囊压到 `sketch`/`accent`（交>0.8mm²）→ 挪 `label_offset` / 开 `label_pos: auto` / 加大线缝 |
+| `arrow-label-in-node` | E | 标签深入节点 inner（边框带≈1mm 外）→ 同上；**显式 `label_offset` 不豁免** |
 | `route-avoid-fallback` | W | A* 无解已回退 `auto`；检查障碍/间隙或改手写 `via` |
+| `arrow-exit-over-content` | W | 出口贴边但落在本盒 sketch 带且法向净空<2.5mm → 改锚点 `@t` 或换边 |
+| `arrow-route-awkward` | W | `route: avoid` 绕行比>1.3 且长段穿空场 → 换锚点边或直连 |
 | `asset-placeholder` | W | **正常**，实验图待用户手动插入；不用管 |
 | `font-too-small`/`font-small` | W | 调大字号或 `font_scale` |
 | `node-overlap` | W | 调 `rect` |
 | `row-misaligned`/`col-misaligned` | W | 同排/列节点**几乎对齐却差 0.5–2mm**（多半是手滑）→ 统一它们的 `y`+`h`（横排）或 `x`+`w`（竖排）snap 齐；明显有意的错落（>2mm）不会报 |
 | `uneven-gap` | W | 同排/列节点**中心间距几乎相等却差一点** → 微调相邻坐标成等距（按中心距算，宽度不一也不误报） |
 | `asset-tiny` | W | 加大槽位或裁素材空白 |
-| `canvas-sparse`/`canvas-crowded` | W | 调 `figure` 尺寸贴合内容 |
+| `canvas-sparse`/`canvas-crowded` | W | 调 `figure` 尺寸贴合内容（覆盖率按叶元素，不计 panel/背景 group） |
+| `region-empty`/`layout-imbalance` | W | 叶元素九宫格空洞（占用<0.05 且邻格>0.3）或极差>0.35 → 填内容/收画布/分散布局；宽<120mm 放宽 |
 | `R-empty-box` | W | 给 box 加 `body`/`sketch`/`icon`，或把子元素放进容器卡 |
 | `R-no-section` | W | 加 `panel`（smallcaps）或带 `fill` 的 `group` |
 | `R-no-legend` | W | 加 `legend`，或把次要色改回 `muted`/`plain` |
