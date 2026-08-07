@@ -25,31 +25,42 @@
 
 ## 效果预览
 
-下列四张图均由对应 YAML spec **完全复现**。spec 均为结构化布局——**内容元素零手写坐标**（盒子由 `layout:` 树求解摆位，箭头由 `route: avoid` 自动绕障）；需要精调时可用 `paperfig resolve` 物化成绝对坐标后再逐值修改。个别图含隐形辅助元素带手写坐标，属正常，并非全图零坐标。
+下列四张图均由对应 YAML spec **完全复现**。spec 均为结构化布局——**内容元素零手写坐标**（盒子由 `layout:` 树求解摆位，箭头由 `route: avoid` 自动绕障）；需要精调时可用 `paperfig resolve` 物化成绝对坐标后再逐值修改。个别图含隐形辅助元素带手写坐标，属正常，并非全图零坐标。图为 `neurips` 主题（Soft Pastel 学术风：浅填 + 细线 + 印刷字号，含 trainable/frozen 状态与箭头语义线型）。
 
-**RAG 推理管线框架图**（`topconf`，上下双 section + 图例）：
+**RAG 推理管线框架图**（`neurips`，上下双 section + inline 图例 + 箭头语义）：
 
 ![RAG framework](docs/images/showcase-rag-framework.png)
 
 → [`examples/showcase/rag_framework.yaml`](examples/showcase/rag_framework.yaml)
 
-**多任务视觉主干**（macro + micro 双面板，Teal + Amber 配色）：
+**多任务视觉主干**（`neurips`，macro + micro 双面板，trainable/frozen 状态语义）：
 
 ![Vision backbone](docs/images/showcase-vision-backbone.png)
 
 → [`examples/showcase/vision_backbone.yaml`](examples/showcase/vision_backbone.yaml)
 
-**LLM Agent 强化学习闭环**（`airy` 柔彩主题，五分区 + 底部公式）：
+**LLM Agent 强化学习闭环**（`neurips` Soft Pastel，五分区 + 底部公式）：
 
 ![Agent RL loop](docs/images/showcase-agent-rl.png)
 
 → [`examples/showcase/agent_rl.yaml`](examples/showcase/agent_rl.yaml)
 
-**医学影像 CAD 管线**（内嵌 AI 生成素材；`assets_style` 风格包保证多素材风格统一）：
+**医学影像 CAD 管线**（`neurips`；内嵌 AI 素材，`assets_style` 风格包保证多素材统一）：
 
 ![Medical CAD](docs/images/showcase-medical-cad.png)
 
 → [`examples/showcase/medical_cad.yaml`](examples/showcase/medical_cad.yaml)
+
+### 主题选用
+
+| 主题 | 适用 | 说明 |
+| --- | --- | --- |
+| `neurips` | **论文默认** | Soft Pastel 学术风：浅填、细线、印刷字号；状态 variant 与箭头语义 |
+| `airy` | 演示 / 博客 | 柔彩分区，偏展示与科普 |
+| `editorial` | 编辑隐喻 | 杂志/叙事配图气质；样例 [`examples/themes/editorial_concept.yaml`](examples/themes/editorial_concept.yaml) |
+| `isosystem` | 系统图 | 等距/系统架构示意；样例 [`examples/themes/isosystem_stack.yaml`](examples/themes/isosystem_stack.yaml) |
+
+另有 `topconf`（经典顶会密度）等历史预设，可按稿件风格选用。
 
 | 示例 | 领域 | 看点 |
 | --- | --- | --- |

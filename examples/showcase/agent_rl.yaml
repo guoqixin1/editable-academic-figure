@@ -1,8 +1,9 @@
-# B1 — LLM Agent RL Training Loop (airy) · flex + route: avoid（重修 v2）
-# 避障：绝对坐标 group + fill/stroke none + shadow:false（不占 layout 高度、画面不可见）
+# B1 — LLM Agent RL Training Loop · neurips Soft Pastel
+# 自 examples/showcase/agent_rl.yaml 迁移：theme→neurips + variant/semantic 新语义
+# 避障护栏墙（绝对坐标 group + fill/stroke none）原样保留
 figure: {width: 172, dpi: 600, background: "#FFFFFF"}
 theme:
-  preset: airy
+  preset: neurips
 
 layout:
   kind: col
@@ -22,9 +23,9 @@ layout:
           align: stretch
           title: "Environment & Agent"
           header_style: smallcaps
-          fill: "#F3F8FE"
-          title_size: 6.8
-          header_h: 5.2
+          fill: "#E8F4FD"
+          title_size: 6.4
+          header_h: 5.0
           w: 45
           children:
             - {ref: env, h: 13}
@@ -53,9 +54,9 @@ layout:
                   align: center
                   title: "Trajectory Sampling"
                   header_style: smallcaps
-                  fill: "#FFF8F5"
-                  title_size: 6.8
-                  header_h: 5.2
+                  fill: "#FFF3E0"
+                  title_size: 6.4
+                  header_h: 5.0
                   flex: 1
                   children:
                     - {ref: roll, w: 23, h: 18}
@@ -76,9 +77,9 @@ layout:
                   align: stretch
                   title: "Advantage & Update"
                   header_style: smallcaps
-                  fill: "#F8F4FC"
-                  title_size: 6.8
-                  header_h: 5.2
+                  fill: "#F3E5F5"
+                  title_size: 6.4
+                  header_h: 5.0
                   w: 48
                   children:
                     - {ref: adv, h: 12}
@@ -96,9 +97,9 @@ layout:
                   align: center
                   title: "Reward Model"
                   header_style: smallcaps
-                  fill: "#F7FBF6"
-                  title_size: 6.8
-                  header_h: 5.2
+                  fill: "#E6F5F0"
+                  title_size: 6.4
+                  header_h: 5.0
                   flex: 1
                   children:
                     - {ref: rm, w: 22, h: 22}
@@ -121,12 +122,12 @@ layout:
                   align: stretch
                   title: "Side Path"
                   header_style: smallcaps
-                  fill: "#FFFBF0"
-                  title_size: 6.8
-                  header_h: 5.2
+                  fill: "#F7F7F5"
+                  title_size: 6.4
+                  header_h: 5.0
                   w: 48
                   children:
-                    - {ref: buf, h: 11}
+                    - {ref: buf, h: 12}
                     - {ref: ref, h: 10}
 
     - kind: row
@@ -134,125 +135,125 @@ layout:
       align: center
       children:
         - {ref: t_loss, h: 7, flex: 1}
-        - {ref: lg, w: 68, h: 11}
+        - {ref: lg, w: 72, h: 11}
 
 elements:
   - {type: box, id: env, title: "Task Dispatcher",
      body: "prompt · schema · tools", variant: secondary, shape: parallelogram,
-     sketch: tree, valign: top, title_size: 6.6, body_size: 6.0}
+     sketch: tree, valign: top, title_size: 6.2, body_size: 5.8}
   - {type: box, id: policy, title: "Agent Policy π_θ",
-     body: "LLM decoder + tool API", variant: primary, accent: left,
-     sketch: waveform, valign: top, title_size: 7.0, body_size: 6.0}
+     body: "LLM decoder + tool API", variant: trainable, accent: left,
+     sketch: waveform, valign: top, title_size: 6.6, body_size: 5.8}
   - {type: box, id: tool_s, title: "Search",
-     body: "web/RAG", variant: accent, sketch: spectrum, valign: top,
-     title_size: 6.0, body_size: 6.0}
+     body: "web/RAG", variant: sky, sketch: spectrum, valign: top,
+     title_size: 5.8, body_size: 5.6}
   - {type: box, id: tool_c, title: "Code",
-     body: "sandbox", variant: accent, sketch: grid, valign: top,
-     title_size: 6.0, body_size: 6.0}
+     body: "sandbox", variant: purple, sketch: grid, valign: top,
+     title_size: 5.8, body_size: 5.6}
   - {type: box, id: tool_m, title: "Memory",
-     body: "KV R/W", variant: highlight, sketch: heatmap, valign: top,
-     title_size: 6.0, body_size: 6.0}
+     body: "KV R/W", variant: tertiary, sketch: heatmap, valign: top,
+     title_size: 5.8, body_size: 5.6}
 
   - {type: box, id: roll, title: "G Rollouts",
      body: "multi-turn tools", variant: primary, accent: left,
-     sketch: curve, valign: top, title_size: 6.8, body_size: 6.0}
+     sketch: curve, valign: top, title_size: 6.4, body_size: 5.8}
   - {type: tokens, id: tok_traj, n: 7, direction: h, variant: primary, gap: 0.4}
   - {type: tokens, id: tok_tool, n: 6, direction: h, variant: secondary, gap: 0.45,
-     colors: ["#FFD0D0", "#FFD0D0", "#E0E0E0", "#FFD0D0", "#E0E0E0", "#FFD0D0"]}
-  - {type: text, id: t_tok, text: "tau · tool-call tokens", size: 6.0,
-     color: "#6A5ACD", anchor: start}
-  - {type: text, id: t_g, text: "G∥ · T steps", size: 6.0,
-     color: "#6A5ACD", anchor: start}
+     colors: ["#FCE8E6", "#FCE8E6", "#F0F0F0", "#FCE8E6", "#F0F0F0", "#FCE8E6"]}
+  - {type: text, id: t_tok, text: "tau · tool-call tokens", size: 5.8,
+     color: "#0072B2", anchor: start}
+  - {type: text, id: t_g, text: "G∥ · T steps", size: 5.8,
+     color: "#0072B2", anchor: start}
 
   - {type: box, id: rm, title: "Reward Model",
      body: "r(τ) composite", variant: secondary, accent: left,
-     sketch: bars, valign: top, title_size: 6.6, body_size: 6.0}
+     sketch: bars, valign: top, title_size: 6.2, body_size: 5.8}
   - {type: box, id: r_succ, title: "Success",
      body: "task hit", variant: tertiary, sketch: distribution, valign: top,
-     title_size: 6.0, body_size: 6.0}
+     title_size: 5.8, body_size: 5.6}
   - {type: box, id: r_step, title: "−λT",
      body: "steps", variant: muted, sketch: curve_desc, valign: top,
-     title_size: 6.0, body_size: 6.0}
+     title_size: 5.8, body_size: 5.6}
   - {type: box, id: r_fmt, title: "Format Check",
      body: "schema / JSON", variant: accent, sketch: matrix, valign: top,
-     title_size: 6.0, body_size: 6.0}
+     title_size: 5.8, body_size: 5.6}
 
   - {type: box, id: adv, title: "Advantage Ahat",
      body: "group-relative", variant: primary, accent: left,
-     sketch: heatmap, valign: top, title_size: 6.4, body_size: 6.0}
+     sketch: heatmap, valign: top, title_size: 6.2, body_size: 5.8}
   - {type: box, id: upd, title: "GRPO / PPO",
-     body: "policy gradient Δθ", variant: highlight, accent: left,
-     sketch: curve, valign: top, title_size: 6.6, body_size: 6.0}
+     body: "policy gradient Δθ", variant: trainable, accent: left,
+     sketch: curve, valign: top, title_size: 6.2, body_size: 5.8}
 
   - {type: box, id: buf, title: "Replay Buffer",
      body: "store τ · batch", variant: accent, shape: cylinder,
-     title_size: 6.2, body_size: 6.0}
+     title_size: 6.0, body_size: 5.8}
   - {type: box, id: ref, title: "π_ref (frozen)",
-     body: "β·KL region", variant: muted, sketch: scatter, valign: top,
-     title_size: 6.0, body_size: 6.0}
+     body: "β·KL region", variant: frozen, sketch: scatter, valign: top,
+     title_size: 5.8, body_size: 5.6}
 
-  # ── 不可见避障（绝对 rect；fill/stroke none + shadow:false → 无卡片无阴影）──
-  # 顶护栏：挡住上排 panel 标题带，逼 Δθ 横段走画布 pad（y≈2）
+  # ── 不可见避障（绝对 rect；fill/stroke none → 无卡片无阴影）──
   - {type: group, id: header_guard, rect: [50.0, 6.5, 118.0, 5.5],
      style: solid, fill: "none", color: "none", lw: 0, shadow: false}
-  # 中缝墙：堵住 y≈39 的 panel 间横穿（否则 Δθ 会穿 upd 盒体走中缝）
-  # tip-safe：与 upd.right / r_step.right 保持 >clearance
-  # 右缘止于 ~114，不堵列间缝（否则 store/batch/KL/rτ avoid 全失败）
   - {type: group, id: mid_wall, rect: [54.0, 34.5, 60.0, 8.0],
      style: solid, fill: "none", color: "none", lw: 0, shadow: false}
-  # REWARD MODEL 标题字宽约到 x≈83；右缘止于 110，勿与 aux_header 焊死封死列间缝
   - {type: group, id: rew_header_guard, rect: [54.0, 42.0, 56.0, 7.0],
      style: solid, fill: "none", color: "none", lw: 0, shadow: false}
-  # 右侧内容墙：x≥126，列间缝留给 store/KL/batch/r(τ)
   - {type: group, id: mid_wall_r, rect: [126.0, 36.0, 42.0, 36.0],
      style: solid, fill: "none", color: "none", lw: 0, shadow: false}
-  # 底廊护栏：禁止长箭头从公式区绕行
   - {type: group, id: bot_guard, rect: [50.0, 72.0, 118.0, 12.0],
      style: solid, fill: "none", color: "none", lw: 0, shadow: false}
-  # SIDE PATH 标题带：左缘 118.5，竖线落在 ~117 的盒间缝（不可再左扩，否则通道堵死）
   - {type: group, id: aux_header_guard, rect: [118.5, 42.0, 49.5, 7.0],
      style: solid, fill: "none", color: "none", lw: 0, shadow: false}
 
   - {type: text, id: t_loss,
      text: "L = −Ahat log π_θ − β KL(π_θ ‖ π_ref)",
-     size: 6.0, bold: true, color: "#6A5ACD", anchor: start}
-  - {type: legend, id: lg, columns: 2, size: 6.0, frame: true,
+     size: 5.8, bold: true, color: "#0072B2", anchor: start}
+  - {type: legend, id: lg, columns: 2, size: 5.8, style: inline,
      items: [
-       {swatch: box, color: "#90CAF9", label: "policy / update"},
-       {swatch: box, color: "#EF9A9A", label: "reward / env"},
-       {swatch: dashed, color: "#6A5ACD", label: "Δθ feedback"},
-       {swatch: dashed, color: "#9E9E9E", label: "KL / replay"},
+       {swatch: box, color: "#E07A3D", label: "trainable (π_θ / update)"},
+       {swatch: box, color: "#90A4AE", label: "frozen π_ref"},
+       {swatch: dashed, color: "#0072B2", label: "Δθ feedback"},
+       {swatch: dashed, color: "#999999", label: "KL / replay (optional)"},
      ]}
 
-  - {type: badge, id: b1, at: [9.0, 14.5], text: "1", size: 4.0, color: "#E05555"}
-  - {type: badge, id: b2, at: [9.0, 30.5], text: "2", size: 4.0, color: "#1A9988"}
-  - {type: badge, id: b3, at: [56.5, 18.0], text: "3", size: 4.0, color: "#6A5ACD"}
-  - {type: badge, id: b4, at: [56.5, 51.0], text: "4", size: 4.0, color: "#E05555"}
-  - {type: badge, id: b5, at: [124.0, 14.5], text: "5", size: 4.0, color: "#1A9988"}
-  - {type: marker, id: m_fire1, at: [44.5, 30.5], icon: fire, size: 3.4}
-  - {type: marker, id: m_fire2, at: [162.5, 28.5], icon: fire, size: 3.4}
-  - {type: marker, id: m_snow, at: [162.5, 63.5], icon: snow, size: 3.2}
+  - {type: badge, id: b1, at: [9.0, 14.5], text: "1", size: 3.6, color: "#D55E00"}
+  - {type: badge, id: b2, at: [9.0, 30.5], text: "2", size: 3.6, color: "#E07A3D"}
+  - {type: badge, id: b3, at: [56.5, 18.0], text: "3", size: 3.6, color: "#0072B2"}
+  - {type: badge, id: b4, at: [56.5, 51.0], text: "4", size: 3.6, color: "#D55E00"}
+  - {type: badge, id: b5, at: [124.0, 14.5], text: "5", size: 3.6, color: "#009E73"}
+  - {type: marker, id: m_fire1, at: [44.5, 30.5], icon: fire, size: 3.2}
+  - {type: marker, id: m_fire2, at: [162.5, 28.5], icon: fire, size: 3.2}
+  - {type: marker, id: m_snow, at: [162.5, 63.5], icon: snow, size: 3.0}
 
-  - {type: arrow, from: env.bottom, to: policy.top, label: "task", weight: heavy, route: avoid}
-  - {type: arrow, from: tool_s.top, to: policy.bottom@0.2, weight: thin, style: dotted, label: "api", route: avoid}
-  - {type: arrow, from: tool_c.top, to: policy.bottom@0.5, weight: thin, style: dotted, route: avoid}
-  - {type: arrow, from: tool_m.top, to: policy.bottom@0.8, weight: thin, style: dotted, route: avoid}
-  - {type: arrow, from: policy.right@0.25, to: roll.left@0.55, label: "act", weight: heavy, route: avoid}
-  # 进 rm.left：绕开 REWARD MODEL 标题带（直连 top 会穿字）
-  - {type: arrow, from: roll.bottom@0.2, to: rm.left@0.45, label: "τ_1:G", weight: heavy, route: avoid}
+  # 主链 data
+  - {type: arrow, from: env.bottom, to: policy.top, label: "task",
+     weight: heavy, semantic: data, route: avoid}
+  - {type: arrow, from: tool_s.top, to: policy.bottom@0.2,
+     weight: thin, semantic: control, label: "api", route: avoid}
+  - {type: arrow, from: tool_c.top, to: policy.bottom@0.5,
+     weight: thin, semantic: control, route: avoid}
+  - {type: arrow, from: tool_m.top, to: policy.bottom@0.8,
+     weight: thin, semantic: control, route: avoid}
+  - {type: arrow, from: policy.right@0.25, to: roll.left@0.55, label: "act",
+     weight: heavy, semantic: data, route: avoid}
+  - {type: arrow, from: roll.bottom@0.2, to: rm.left@0.45, label: "τ_1:G",
+     weight: heavy, semantic: data, route: avoid}
+  - {type: arrow, from: r_step.right, to: adv.left@0.55, label: "r(τ)",
+     weight: heavy, semantic: data, route: avoid}
+  - {type: arrow, from: adv.bottom, to: upd.top, label: "Ahat",
+     weight: heavy, semantic: data, route: avoid}
 
-  # 从奖励子盒右侧出廊，竖段走 SIDE PATH 左侧列间缝
-  - {type: arrow, from: r_step.right, to: adv.left@0.55, label: "r(τ)", weight: heavy, route: avoid}
-  - {type: arrow, from: adv.bottom, to: upd.top, label: "Ahat", weight: heavy, route: avoid}
-
+  # Δθ 反馈
   - {type: arrow, from: upd.right, to: policy.left,
-     weight: heavy, style: dashed, color: "#6A5ACD", route: avoid}
-  - {type: text, id: t_dtheta, at: [86.0, 4.0], text: "Δθ feedback", size: 6.0,
-     color: "#6A5ACD", anchor: middle, bold: true}
+     weight: heavy, semantic: feedback, route: avoid}
+  - {type: text, id: t_dtheta, at: [86.0, 4.0], text: "Δθ feedback", size: 5.8,
+     color: "#0072B2", anchor: middle, bold: true}
 
+  # KL / replay 侧路
   - {type: arrow, from: tok_tool.right, to: buf.left,
-     label: "store", weight: thin, style: dotted, route: avoid}
-  # 左侧进出，避开 SIDE PATH 标题带
-  - {type: arrow, from: buf.left, to: upd.left, label: "batch", weight: thin, style: dotted, route: avoid}
+     label: "store", weight: thin, semantic: optional, route: avoid}
+  - {type: arrow, from: buf.left, to: upd.left, label: "batch",
+     weight: thin, semantic: optional, route: avoid}
   - {type: arrow, from: ref.left, to: upd.left@0.75,
-     label: "KL", weight: thin, style: dashed, route: avoid}
+     label: "KL", weight: thin, semantic: optional, route: avoid}

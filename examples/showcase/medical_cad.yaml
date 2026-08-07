@@ -1,12 +1,8 @@
-# C2 — Medical imaging CAD pipeline · flex layout + route: avoid
-# 零手写 rect / via；复用现成 AI 素材（不重抽）。
+# C2 — Medical imaging CAD pipeline · neurips Soft Pastel
+# AI 素材：neurips 风格包抽卡，落盘于本目录 assets/
 figure: {width: 204, dpi: 600, assets_dir: assets}
 theme:
-  preset: topconf
-
-assets_style: >
-  clean academic sticker icons, uniform 2px charcoal outline,
-  two-tone flat fill, three-quarter view, icon-level abstraction
+  preset: neurips
 
 assets:
   - id: microscope
@@ -28,65 +24,63 @@ assets:
 layout:
   kind: col
   gap: 0
-  pad: [1.5, 2.5]
+  pad: [1.2, 2.2]
   align: stretch
   children:
     - id: p_pipe
       type: panel
       kind: col
-      gap: 2.5
-      pad: [7.5, 3.0, 3.0, 3.0]
+      gap: 2.2
+      pad: [6.8, 2.6, 2.6, 2.6]
       align: stretch
       title: "Medical Imaging CAD Pipeline"
       header_style: smallcaps
-      fill: "#F7F7F7"
-      title_size: 7.0
-      header_h: 5.8
+      fill: "#F0F4F8"
+      title_size: 6.6
+      header_h: 5.2
       children:
         - kind: row
-          gap: 2.0
+          gap: 1.8
           align: start
           children:
-            - {ref: mic, w: 19, h: 28}
-            - {ref: prep, w: 19, h: 28}
-            # 加宽走廊：胶囊宽约 9–12mm，两侧各留 ≥2mm 不压框
+            - {ref: mic, w: 19, h: 26}
+            - {ref: prep, w: 19, h: 26}
             - {ref: sp_hwc, w: 12, h: 8}
-            - {ref: seg, w: 21, h: 28}
+            - {ref: seg, w: 21, h: 26}
             - {ref: sp_mask, w: 14, h: 8}
-            - {ref: feat, w: 17, h: 28}
+            - {ref: feat, w: 17, h: 26}
             - {ref: sp_rd, w: 10, h: 8}
-            - {ref: clf, w: 16, h: 28}
+            - {ref: clf, w: 16, h: 26}
             - {ref: sp_logits, w: 12, h: 8}
             - kind: col
               gap: 0
-              w: 34
+              w: 38
               align: stretch
               children:
                 - kind: row
-                  gap: 2.0
+                  gap: 1.6
                   align: center
                   children:
-                    - {ref: report, w: 16, h: 16.5}
-                    - {ref: doctor, w: 16, h: 16.5}
-                - {ref: sp_rf, h: 2.75}
-                - {ref: findings, h: 12.5}
-                - {ref: sp_fo, h: 4.5}
-                - {ref: out_note, h: 12.5}
-        - {ref: lg, h: 10}
+                    - {ref: report, w: 18, h: 18}
+                    - {ref: doctor, w: 18, h: 18}
+                - {ref: sp_rf, h: 2.0}
+                - {ref: findings, h: 11.5}
+                - {ref: sp_fo, h: 5.25}
+                - {ref: out_note, h: 11.5}
+        - {ref: lg, h: 9}
 
 elements:
   - {type: asset, id: mic, src: microscope, caption: "Acquisition",
      halign: center, valign: middle}
   - {type: box, id: prep, title: "Preprocess",
      body: "denoise + norm", variant: muted,
-     sketch: waveform, valign: top, title_size: 6.4, body_size: 6.0}
+     sketch: waveform, valign: top, title_size: 6.0, body_size: 5.6}
   - {type: box, id: seg, title: "Segmentation",
-     body: "U-Net / SAM", variant: primary, accent: left,
-     sketch: heatmap, valign: top, shadow: true, title_size: 6.5, body_size: 6.0}
+     body: "U-Net / SAM", variant: trainable, accent: left,
+     sketch: heatmap, valign: top, title_size: 6.2, body_size: 5.6}
   - {type: box, id: feat, title: "Feature Extract",
      body: "morph + CNN emb", variant: secondary, accent: left,
-     sketch: scatter, valign: top, title_size: 6.2, body_size: 6.0}
-  # 空 spacer：不进 avoid 障碍
+     sketch: scatter, valign: top, title_size: 5.8, body_size: 5.6}
   - {type: text, id: sp_hwc, text: "", size: 1.0, color: "#FFFFFF", anchor: start}
   - {type: text, id: sp_mask, text: "", size: 1.0, color: "#FFFFFF", anchor: start}
   - {type: text, id: sp_rd, text: "", size: 1.0, color: "#FFFFFF", anchor: start}
@@ -94,8 +88,8 @@ elements:
   - {type: text, id: sp_rf, text: "", size: 1.0, color: "#FFFFFF", anchor: start}
   - {type: text, id: sp_fo, text: "", size: 1.0, color: "#FFFFFF", anchor: start}
   - {type: box, id: clf, title: "Diagnosis",
-     body: "multi-label head", variant: primary, accent: left,
-     sketch: bars, valign: top, shadow: true, title_size: 6.4, body_size: 6.0}
+     body: "multi-label head", variant: trainable, accent: left,
+     sketch: bars, valign: top, title_size: 6.0, body_size: 5.6}
 
   - {type: asset, id: report, src: report_doc, caption: "report",
      halign: center, valign: middle}
@@ -103,35 +97,42 @@ elements:
      halign: center, valign: middle}
   - {type: box, id: findings, title: "Findings",
      body: "ROI descriptors", variant: tertiary, sketch: bars, valign: top,
-     title_size: 6.2, body_size: 6.0}
+     title_size: 5.8, body_size: 5.6}
   - {type: box, id: out_note, title: "Structured Output",
      body: "ICD + confidence", variant: tertiary, sketch: matrix, valign: top,
-     title_size: 6.2, body_size: 6.0}
+     title_size: 5.8, body_size: 5.6}
 
-  - {type: legend, id: lg, columns: 4, size: 6.0, items: [
-      {swatch: box, color: "#0072B2", label: "neural / trainable"},
+  - {type: legend, id: lg, columns: 4, size: 5.8, style: inline, items: [
+      {swatch: box, color: "#E07A3D", label: "neural / trainable"},
       {swatch: box, color: "#E69F00", label: "feature stage"},
-      {swatch: box, color: "#CCCCCC", label: "preprocess"},
-      {swatch: dashed, color: "#4D4D4D", label: "clinician feedback"},
+      {swatch: box, color: "#DDDDDD", label: "preprocess"},
+      {swatch: dashed, color: "#0072B2", label: "clinician feedback"},
     ]}
 
-  - {type: badge, id: bd1, at: [7.0, 9.5], text: "1", size: 4.0, color: "#0072B2"}
-  - {type: badge, id: bd2, at: [28.0, 9.5], text: "2", size: 4.0, color: "#666666"}
-  - {type: badge, id: bd3, at: [63.0, 9.5], text: "3", size: 4.0, color: "#0072B2"}
-  - {type: badge, id: bd4, at: [102.0, 9.5], text: "4", size: 4.0, color: "#E69F00"}
-  - {type: badge, id: bd5, at: [133.0, 9.5], text: "5", size: 4.0, color: "#0072B2"}
-  - {type: badge, id: bd6, at: [165.0, 9.5], text: "6", size: 3.6, color: "#009E73"}
-  - {type: marker, id: m_fire_seg, at: [80.5, 11.0], icon: fire, size: 3.8}
-  - {type: marker, id: m_fire_clf, at: [145.5, 11.0], icon: fire, size: 3.8}
+  - {type: badge, id: bd1, at: [6.5, 7.6], text: "1", size: 3.4, color: "#0072B2"}
+  - {type: badge, id: bd2, at: [27.3, 7.6], text: "2", size: 3.4, color: "#666666"}
+  - {type: badge, id: bd3, at: [61.9, 7.6], text: "3", size: 3.4, color: "#E07A3D"}
+  - {type: badge, id: bd4, at: [100.5, 7.6], text: "4", size: 3.4, color: "#E69F00"}
+  - {type: badge, id: bd5, at: [131.1, 7.6], text: "5", size: 3.4, color: "#E07A3D"}
+  - {type: badge, id: bd6, at: [162.7, 7.6], text: "6", size: 3.2, color: "#009E73"}
+  - {type: marker, id: m_fire_seg, at: [79.0, 9.2], icon: fire, size: 3.2}
+  - {type: marker, id: m_fire_clf, at: [143.2, 9.2], icon: fire, size: 3.2}
 
-  # 短直连用默认中点落标（avoid 的 auto 会贴源端导致压框）
-  - {type: arrow, from: mic.right, to: prep.left, label: "raw FOV", weight: heavy}
-  - {type: arrow, from: prep.right, to: seg.left, label: "H×W×C", weight: heavy}
-  - {type: arrow, from: seg.right, to: feat.left, label: "mask+ROI", weight: heavy}
-  - {type: arrow, from: feat.right, to: clf.left, label: "R^{B×D}", weight: heavy}
-  - {type: arrow, from: clf.right, to: report.left, label: "logits", weight: heavy}
-  - {type: arrow, from: report.right, to: doctor.left, weight: normal, route: avoid}
-  - {type: arrow, from: doctor.bottom, to: findings.top@0.72, weight: thin, route: avoid}
-  - {type: arrow, from: findings.bottom, to: out_note.top, label: "encode", weight: normal, route: avoid}
+  - {type: arrow, from: mic.right, to: prep.left, label: "raw FOV",
+     weight: heavy, semantic: data}
+  - {type: arrow, from: prep.right, to: seg.left, label: "H×W×C",
+     weight: heavy, semantic: data}
+  - {type: arrow, from: seg.right, to: feat.left, label: "mask+ROI",
+     weight: heavy, semantic: data}
+  - {type: arrow, from: feat.right, to: clf.left, label: "R^{B×D}",
+     weight: heavy, semantic: data}
+  - {type: arrow, from: clf.right, to: report.left, label: "logits",
+     weight: heavy, semantic: data}
+  - {type: arrow, from: report.right, to: doctor.left,
+     weight: normal, semantic: data, route: avoid}
+  - {type: arrow, from: doctor.bottom, to: findings.top@0.72,
+     weight: thin, semantic: data, route: avoid}
+  - {type: arrow, from: findings.bottom, to: out_note.top, label: "encode",
+     weight: normal, semantic: data, route: avoid}
   - {type: arrow, from: out_note.left, to: clf.bottom,
-     style: dotted, label: "feedback", weight: thin, route: avoid}
+     label: "feedback", weight: thin, semantic: feedback, route: avoid}

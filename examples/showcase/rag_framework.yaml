@@ -1,36 +1,34 @@
-# A1 — RAG pipeline: flex layout tree + route: avoid（零手写坐标）
+# A1 — RAG pipeline · neurips Soft Pastel（由 examples/showcase/rag_framework.yaml 迁移）
 figure: {width: 180, height: 91, dpi: 600}
 theme:
-  preset: topconf
+  preset: neurips
 
 layout:
   kind: col
-  gap: 7.0          # 两 panel 间隙：供 index 横走（勿穿 offline 标题）
-  pad: [2.5, 3.0]
+  gap: 5.5          # 字号偏印刷档后略收紧；仍留 index 横走走廊
+  pad: [2.0, 2.5]
   align: stretch
   children:
     # ── Online ──
     - id: p_online
       type: panel
       kind: row
-      gap: 3.0
-      pad: [9.0, 3.5, 2.0, 3.5]   # 底 pad 收紧，使 rewrite.bottom  stub 落入间隙
+      gap: 2.5
+      pad: [8.5, 3.0, 1.8, 3.0]
       align: center
       justify: start
       title: "Online Inference Pipeline"
       header_style: smallcaps
-      fill: "#F7F7F7"
-      title_size: 7.0
-      header_h: 6.5
+      fill: "#F7F7F5"
+      title_size: 7.5
+      header_h: 6.0
       children:
         - {ref: q, w: 16, h: 36}
-        # rewrite | 768(贴顶) | 检索 | top-k走廊 | fuse
         - kind: row
-          gap: 1.5
+          gap: 1.2
           align: center
           children:
             - {ref: rewrite, w: 18, h: 36}
-            # h=36 + align:start → 768 贴顶，下方竖走廊空出
             - kind: col
               gap: 0
               align: start
@@ -38,57 +36,56 @@ layout:
               h: 36
               children:
                 - {ref: lbl_768, w: 9, h: 4.5}
-            # 检索 | 宽走廊 | fuse：走廊供 top-k=50 胶囊贴线居中
             - kind: row
-              gap: 14.0
+              gap: 12.0
               align: center
               children:
                 - kind: col
-                  gap: 3.0
+                  gap: 2.5
                   children:
                     - {ref: dense, w: 18, h: 16.5}
                     - {ref: sparse, w: 18, h: 16.5}
                 - {ref: fuse, w: 18, h: 36}
         - {ref: compress, w: 15, h: 36}
         - kind: row
-          gap: 4.5
+          gap: 3.5
           align: center
           children:
             - {ref: llm, w: 19, h: 36}
             - kind: col
-              gap: 3.0
+              gap: 2.5
               children:
                 - {ref: verify, w: 16, h: 16.5}
                 - {ref: ans, w: 16, h: 16.5}
 
     # ── Offline + legend ──
     - kind: row
-      gap: 5
+      gap: 4.0
       align: start
       children:
         - id: p_offline
           type: panel
           kind: row
-          gap: 4
-          pad: [7.5, 4.0, 3.5, 4.0]
+          gap: 3.5
+          pad: [7.0, 3.5, 3.0, 3.5]
           align: center
           title: "Offline Index Build"
           header_style: smallcaps
           fill: "#F0F4F8"
-          title_size: 7.0
-          header_h: 6.0
+          title_size: 7.5
+          header_h: 5.5
           children:
             - {ref: docs, w: 20, h: 17}
             - {ref: chunk, w: 20, h: 17}
             - {ref: embed, w: 21, h: 17}
             - {ref: vdb, w: 25, h: 17}
         - kind: col
-          gap: 2.5
+          gap: 2.0
           flex: 1
           align: stretch
           children:
             - {ref: fb_note, h: 10}
-            - {ref: lg, h: 14}
+            - {ref: lg, h: 16}
 
 elements:
   - {type: box, id: q, title: "User Query",
@@ -99,7 +96,7 @@ elements:
      body: "HyDE + multi-q", variant: secondary, accent: left,
      sketch: tree, valign: top, title_size: 6.6, body_size: 6.0}
 
-  - {type: text, id: lbl_768, text: "768-d vec", size: 6.0, color: "#4D4D4D",
+  - {type: text, id: lbl_768, text: "768-d vec", size: 5.8, color: "#666666",
      anchor: start}
 
   - {type: box, id: dense, title: "Dense Retriever",
@@ -112,34 +109,43 @@ elements:
 
   - {type: box, id: fuse, title: "Fusion + Rerank",
      body: "RRF + cross-enc", variant: primary, accent: left,
-     sketch: heatmap, valign: top, shadow: true, title_size: 6.6, body_size: 6.0}
+     sketch: heatmap, valign: top, title_size: 6.6, body_size: 6.0}
 
   - {type: box, id: compress, title: "Compress",
-     body: "MMR + dedup", variant: muted,
+     body: "MMR + dedup", variant: vermillion,
      sketch: dots_flow, valign: top, title_size: 6.6, body_size: 6.0}
 
   - {type: box, id: llm, title: "LLM Generate",
      body: "token decode", variant: primary, accent: left,
-     sketch: spectrum, valign: top, shadow: true, title_size: 6.6, body_size: 6.0}
+     sketch: spectrum, valign: top, title_size: 6.6, body_size: 6.0}
 
   - {type: box, id: verify, title: "Cite+Verify",
      body: "NLI check", variant: tertiary,
      sketch: matrix, valign: top, title_size: 6.2, body_size: 6.0}
 
   - {type: box, id: ans, title: "Answer",
-     body: "cited text", variant: accent, shape: stadium,
+     body: "cited text", variant: purple, shape: stadium,
      sketch: nested, valign: top, title_size: 6.4, body_size: 6.0}
 
-  - {type: arrow, from: q.right, to: rewrite.left, label: "raw q", weight: heavy, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: rewrite.right@0.28, to: dense.left@0.61, weight: heavy, route: straight}
-  - {type: arrow, from: rewrite.right@0.78, to: sparse.left, label: "tok q", weight: heavy, route: avoid, label_offset: -2.2}
-  # top-k=50 胶囊贴 dense/sparse→fuse 走廊中段（走廊已加宽）
-  - {type: arrow, from: dense.right, to: fuse.left@0.23, label: "top-k=50", weight: heavy, route: straight, label_offset: 0.0}
-  - {type: arrow, from: sparse.right, to: fuse.left@0.77, label: "top-k=50", weight: heavy, route: straight, label_offset: 0.0}
-  - {type: arrow, from: fuse.right, to: compress.left, label: "top-k=8", weight: heavy, route: avoid, label_offset: 2.2}
-  - {type: arrow, from: compress.right, to: llm.left, label: "≤4k tok", weight: heavy, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: llm.right@0.23, to: verify.left, label: "draft", weight: heavy, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: verify.bottom, to: ans.top, label: "ok", weight: heavy, route: avoid, label_offset: 1.4}
+  # 主链 data；显式 style 会挡住 semantic 线型映射，故不写 style
+  - {type: arrow, from: q.right, to: rewrite.left, label: "raw q", weight: heavy,
+     semantic: data, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: rewrite.right@0.28, to: dense.left@0.61, weight: heavy,
+     semantic: data, route: straight}
+  - {type: arrow, from: rewrite.right@0.78, to: sparse.left, label: "tok q", weight: heavy,
+     semantic: data, route: avoid, label_offset: -2.2}
+  - {type: arrow, from: dense.right, to: fuse.left@0.23, label: "top-k=50", weight: heavy,
+     semantic: data, route: straight, label_offset: 0.0}
+  - {type: arrow, from: sparse.right, to: fuse.left@0.77, label: "top-k=50", weight: heavy,
+     semantic: data, route: straight, label_offset: 0.0}
+  - {type: arrow, from: fuse.right, to: compress.left, label: "top-k=8", weight: heavy,
+     semantic: data, route: avoid, label_offset: 2.2}
+  - {type: arrow, from: compress.right, to: llm.left, label: "≤4k tok", weight: heavy,
+     semantic: data, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: llm.right@0.23, to: verify.left, label: "draft", weight: heavy,
+     semantic: data, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: verify.bottom, to: ans.top, label: "ok", weight: heavy,
+     semantic: data, route: avoid, label_offset: 1.4}
 
   - {type: box, id: docs, title: "Doc Corpus",
      body: "PDF / wiki", variant: muted,
@@ -150,30 +156,37 @@ elements:
      sketch: bars, valign: top, title_size: 6.2, body_size: 6.0}
 
   - {type: box, id: embed, title: "Embedding",
-     body: "E5 / BGE", variant: secondary, accent: left,
+     body: "E5 / BGE", variant: sky, accent: left,
      sketch: scatter, valign: top, title_size: 6.2, body_size: 6.0}
 
   - {type: box, id: vdb, title: "Vector Store",
      body: "HNSW index", variant: primary, shape: cylinder,
      sketch: grid, valign: top, title_size: 6.2, body_size: 6.0}
 
-  - {type: arrow, from: docs.right, to: chunk.left, label: "docs", style: dashed, weight: normal, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: chunk.right, to: embed.left, label: "chunks", style: dashed, weight: normal, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: embed.right, to: vdb.left, label: "768-d", style: dashed, weight: normal, route: avoid, label_offset: 1.4}
-  # index：vdb 上竖段 → 两 panel 间隙横段 → rewrite 底边（检索区左侧），不穿 offline 标题
-  - {type: arrow, from: vdb.top, to: rewrite.bottom@1.0,
-     style: dashed, weight: thin, label: "index", route: avoid, label_offset: 1.4}
-  - {type: arrow, from: ans.bottom, to: fuse.bottom,
-     style: dotted, weight: thin, label: "feedback", route: avoid, label_offset: 1.4}
+  # offline 索引链：optional（dotted 灰）
+  - {type: arrow, from: docs.right, to: chunk.left, label: "docs", weight: normal,
+     semantic: optional, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: chunk.right, to: embed.left, label: "chunks", weight: normal,
+     semantic: optional, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: embed.right, to: vdb.left, label: "768-d", weight: normal,
+     semantic: optional, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: vdb.top, to: rewrite.bottom@1.0, label: "index", weight: thin,
+     semantic: optional, route: avoid, label_offset: 1.4}
+  # 在线反馈：feedback（dashed 蓝）
+  - {type: arrow, from: ans.bottom, to: fuse.bottom, label: "feedback", weight: thin,
+     semantic: feedback, route: avoid, label_offset: 1.4}
 
   - {type: box, id: fb_note, title: "Feedback loop",
      body: "click / rating → reranker FT", variant: muted,
      title_size: 6.2, body_size: 6.0, sketch: curve, valign: top}
 
-  - {type: legend, id: lg, columns: 2, size: 6.0, items: [
+  - {type: legend, id: lg, style: inline, columns: 2, size: 5.8, items: [
       {swatch: box, color: "#0072B2", label: "neural / core"},
       {swatch: box, color: "#E69F00", label: "lexical / rewrite"},
-      {swatch: box, color: "#009E73", label: "verify / answer"},
-      {swatch: dashed, color: "#4D4D4D", label: "offline index"},
-      {swatch: dot, color: "#4D4D4D", label: "feedback (dotted)"},
+      {swatch: box, color: "#56B4E9", label: "embedding"},
+      {swatch: box, color: "#D55E00", label: "compress"},
+      {swatch: box, color: "#009E73", label: "verify"},
+      {swatch: box, color: "#CC79A7", label: "answer"},
+      {swatch: dot, color: "#999999", label: "offline index"},
+      {swatch: dashed, color: "#0072B2", label: "feedback"},
     ]}

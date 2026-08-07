@@ -1,57 +1,58 @@
-# A2 — Multi-task vision backbone: flex layout + route: avoid（零手写坐标）
+# A2 — Multi-task vision backbone · neurips Soft Pastel
+# 设定：backbone/Transformer frozen；任务头 trainable（三色区分 + fire/snow）
 figure: {width: 180, height: 94, dpi: 600}
 theme:
-  preset: topconf
-  palette:
-    primary: "#00897B"
-    secondary: "#FFB300"
-    section_bg: "#ECEFF1"
+  preset: neurips
 
 layout:
   kind: row
-  gap: 4.0
-  pad: [2.5, 3.0]
+  gap: 3.5
+  pad: [2.0, 2.5]
   align: stretch
   children:
     # ── Macro: Overall Architecture ──
     - id: p_macro
       type: panel
       kind: row
-      gap: 4.0
-      pad: [8.0, 3.0, 3.0, 3.0]
+      gap: 3.5
+      # 顶 pad 加大：标题带与 ×N 组框之间留出 skip 走廊（~6mm）
+      pad: [12.0, 2.5, 2.5, 2.5]
       align: start
       title: "Overall Architecture"
       header_style: smallcaps
-      fill: "#ECEFF1"
-      title_size: 7.0
-      header_h: 6.5
+      fill: "#F7F7F5"
+      title_size: 7.5
+      header_h: 6.0
       w: 100
       children:
-        # 左列：输入栈 + 图例（B×3×H×W 改挂 img→patch 箭头，贴竖段）
         - kind: col
-          gap: 7.0
+          gap: 4.5
           children:
             - {ref: img, w: 17, h: 22}
             - {ref: patch, w: 17, h: 22}
-            - {ref: lg, w: 28, h: 18}
-        # 中：×N Transformer group
+            # inline + columns:1 = 强制单行；拆两行并用 layout gap≥3mm 避免项间压叠
+            - kind: col
+              gap: 3.5
+              align: start
+              children:
+                - {ref: lg1, w: 34, h: 6}
+                - {ref: lg2, w: 34, h: 6}
         - id: vit_grp
           type: group
           kind: col
           gap: 0
-          pad: [7.0, 1.5, 3.0, 1.5]
+          pad: [6.5, 1.5, 2.5, 1.5]
           align: center
           fill: "#FFFFFF"
           style: dashed
-          color: "#00897B"
+          color: "#90A4AE"
           label: "×N"
-          label_pos: inside-top
-          label_size: 7.5
+          label_pos: inside-bottom   # 避开顶部 skip 走廊
+          label_size: 7.0
           children:
             - {ref: vit, w: 18, h: 40}
-        # 右：FPN + 三任务头
         - kind: col
-          gap: 4.0
+          gap: 3.5
           children:
             - {ref: fpn, w: 20, h: 14}
             - {ref: h_cls, w: 20, h: 14}
@@ -62,26 +63,27 @@ layout:
     - id: p_micro
       type: panel
       kind: col
-      gap: 2.5
-      pad: [8.0, 3.5, 3.0, 7.0]   # 左侧加宽：残差走廊
+      gap: 2.2
+      # 与 p_macro 同步下移，避免跨面板 row-misaligned
+      pad: [12.0, 3.0, 2.5, 6.5]
       align: stretch
       title: "Transformer Block (detail)"
       header_style: smallcaps
-      fill: "#F7F7F7"
-      title_size: 7.0
-      header_h: 6.5
+      fill: "#F7F7F5"
+      title_size: 7.5
+      header_h: 6.0
       flex: 1
       children:
         - {ref: x_in, h: 10}
         - kind: row
-          gap: 4.0
+          gap: 3.5
           align: start
           children:
             - {ref: ln1, w: 20, h: 12}
             - {ref: mhsa, w: 30, h: 20, flex: 1}
         - {ref: add1, h: 10}
         - kind: row
-          gap: 4.0
+          gap: 3.5
           align: start
           children:
             - {ref: ln2, w: 20, h: 12}
@@ -95,44 +97,52 @@ elements:
      sketch: grid, valign: top, title_size: 6.6, body_size: 6.0}
 
   - {type: box, id: patch, title: "Patch Embed",
-     body: "16×16 tokens", variant: secondary, accent: left,
+     body: "16×16 tokens", variant: frozen, accent: left,
      sketch: grid, valign: top, title_size: 6.6, body_size: 6.0}
 
   - {type: box, id: vit, title: "Transformer",
-     body: "MHSA+FFN", variant: primary, accent: left,
-     sketch: heatmap, valign: top, shadow: true, title_size: 6.4, body_size: 6.0}
+     body: "MHSA+FFN", variant: frozen, accent: left,
+     sketch: heatmap, valign: top, title_size: 6.4, body_size: 6.0}
 
   - {type: box, id: fpn, title: "Feat. Pyramid",
-     body: "P3–P5", variant: primary, accent: left,
-     sketch: bars, valign: top, shadow: true, title_size: 6.2, body_size: 6.0}
+     body: "P3–P5", variant: sky, accent: left,
+     sketch: bars, valign: top, title_size: 6.2, body_size: 6.0}
 
+  # 三任务头：trainable 语义用 fire；色相用 secondary/purple/vermillion 区分
   - {type: box, id: h_cls, title: "Cls · GAP→FC",
-     variant: secondary, sketch: bars, valign: top, title_size: 6.2}
+     body: "trainable", variant: secondary, sketch: bars, valign: top,
+     title_size: 6.2, body_size: 5.8}
 
   - {type: box, id: h_det, title: "Det · box+cls",
-     variant: secondary, sketch: grid, valign: top, title_size: 6.2}
+     body: "trainable", variant: purple, sketch: grid, valign: top,
+     title_size: 6.2, body_size: 5.8}
 
   - {type: box, id: h_seg, title: "Seg · mask",
-     variant: secondary, sketch: heatmap, valign: top, title_size: 6.2}
+     body: "trainable", variant: vermillion, sketch: heatmap, valign: top,
+     title_size: 6.2, body_size: 5.8}
 
-  # Macro arrows — route: avoid，零 via
-  # B×3×H×W 贴 img→patch 竖段右侧
-  - {type: arrow, from: img.bottom, to: patch.top, label: "B×3×H×W", weight: heavy, route: straight, label_offset: 1.8}
-  - {type: arrow, from: patch.right, to: vit.left@0.70, label: "196×768", weight: heavy, route: avoid, label_offset: 1.4}
-  # 对齐 FPN 高度，避免从 Transformer 中腰折到顶部
-  - {type: arrow, from: vit.right@0.06, to: fpn.left, label: "B×L×D", weight: heavy, route: avoid, label_pos: auto}
-  - {type: arrow, from: fpn.bottom, to: h_cls.top, label: "P3–P5", weight: normal, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: h_cls.bottom, to: h_det.top, weight: normal, route: avoid}
-  - {type: arrow, from: h_det.bottom, to: h_seg.top, weight: normal, route: avoid}
-  # skip：内容区上沿横走，label auto 避开标题
-  - {type: arrow, from: img.right@0.06, to: fpn.left@0.08,
-     style: dashed, weight: thin, label: "skip", route: avoid, label_pos: auto}
-  # block detail：label_pos auto → 落到底部横段走廊，避开 Seg 标题
-  - {type: arrow, from: vit_grp.right@0.85, to: p_micro.left@0.92,
-     style: dashed, weight: thin, label: "block detail", color: "#00897B",
-     route: avoid, label_pos: auto}
+  # Macro arrows
+  - {type: arrow, from: img.bottom, to: patch.top, label: "B×3×H×W", weight: heavy,
+     semantic: data, route: straight, label_offset: 1.8}
+  - {type: arrow, from: patch.right, to: vit.left@0.70, label: "196×768", weight: heavy,
+     semantic: data, route: avoid, label_offset: 1.4}
+  # 显式 offset；锚点略下移以免压 Transformer 标题
+  - {type: arrow, from: vit.right@0.20, to: fpn.left, label: "B×L×D", weight: heavy,
+     semantic: data, route: avoid, label_offset: 2.0}
+  - {type: arrow, from: fpn.bottom, to: h_cls.top, label: "P3–P5", weight: normal,
+     semantic: data, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: h_cls.bottom, to: h_det.top, weight: normal,
+     semantic: data, route: avoid}
+  - {type: arrow, from: h_det.bottom, to: h_seg.top, weight: normal,
+     semantic: data, route: avoid}
+  # skip：水平段走标题带下方、×N 组框上方的走廊（via y=9.8）；末段垂直接入 fpn.left
+  - {type: arrow, from: img.right@0.06, to: fpn.left@0.08, label: "skip", weight: thin,
+     semantic: feedback, route: auto,
+     via: [[34, 9.8], [66.8, 9.8], [66.8, 15.2]], label_offset: -1.8}
+  - {type: arrow, from: vit_grp.right@0.85, to: p_micro.left@0.92, label: "block detail",
+     weight: thin, semantic: optional, route: avoid, label_pos: auto}
 
-  # Micro nodes
+  # Micro nodes — backbone 内部：MHSA/FFN frozen；Add 为结构算子
   - {type: box, id: x_in, title: "X_{in}",
      body: "R^{B×L×D} · L=196 · D=768", variant: plain, title_size: 6.6, body_size: 6.0}
 
@@ -140,8 +150,8 @@ elements:
      body: "pre-norm", variant: muted, title_size: 6.2, body_size: 6.0}
 
   - {type: box, id: mhsa, title: "MHSA",
-     body: "h=12 heads", variant: secondary, accent: left,
-     sketch: heatmap, valign: top, shadow: true, title_size: 6.8, body_size: 6.0}
+     body: "h=12 heads", variant: frozen, accent: left,
+     sketch: heatmap, valign: top, title_size: 6.8, body_size: 6.0}
 
   - {type: box, id: add1, title: "Add & Norm",
      body: "X + MHSA(X)", variant: tertiary, title_size: 6.4, body_size: 6.0}
@@ -150,26 +160,45 @@ elements:
      body: "pre-norm", variant: muted, title_size: 6.2, body_size: 6.0}
 
   - {type: box, id: ffn, title: "FFN",
-     body: "GELU · 4D", variant: primary, accent: left,
-     sketch: bars, valign: top, shadow: true, title_size: 6.8, body_size: 6.0}
+     body: "GELU · 4D", variant: frozen, accent: left,
+     sketch: bars, valign: top, title_size: 6.8, body_size: 6.0}
 
   - {type: box, id: add2, title: "Add & Norm",
      body: "Y + FFN(Y) → X_{out}", variant: tertiary, title_size: 6.4, body_size: 6.0}
 
   # Micro arrows
-  - {type: arrow, from: x_in.bottom@0.18, to: ln1.top, weight: heavy, route: avoid}
-  - {type: arrow, from: ln1.right, to: mhsa.left, label: "Q,K,V", weight: heavy, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: mhsa.bottom, to: add1.top@0.78, weight: heavy, route: avoid}
-  - {type: arrow, from: x_in.left, to: add1.left,
-     style: dashed, weight: thin, label: "res", route: avoid, label_offset: 1.4}
-  - {type: arrow, from: add1.bottom@0.18, to: ln2.top, weight: heavy, route: avoid}
-  - {type: arrow, from: ln2.right, to: ffn.left, label: "B×L×D", weight: heavy, route: avoid, label_offset: 2.2}
-  - {type: arrow, from: ffn.bottom, to: add2.top@0.78, weight: heavy, route: avoid}
-  - {type: arrow, from: add1.left, to: add2.left,
-     style: dashed, weight: thin, label: "res", route: avoid, label_offset: 1.4}
+  - {type: arrow, from: x_in.bottom@0.18, to: ln1.top, weight: heavy,
+     semantic: data, route: avoid}
+  - {type: arrow, from: ln1.right, to: mhsa.left, label: "Q,K,V", weight: heavy,
+     semantic: data, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: mhsa.bottom, to: add1.top@0.78, weight: heavy,
+     semantic: data, route: avoid}
+  - {type: arrow, from: x_in.left, to: add1.left, label: "res", weight: thin,
+     semantic: feedback, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: add1.bottom@0.18, to: ln2.top, weight: heavy,
+     semantic: data, route: avoid}
+  - {type: arrow, from: ln2.right, to: ffn.left, label: "B×L×D", weight: heavy,
+     semantic: data, route: avoid, label_offset: 2.2}
+  - {type: arrow, from: ffn.bottom, to: add2.top@0.78, weight: heavy,
+     semantic: data, route: avoid}
+  - {type: arrow, from: add1.left, to: add2.left, label: "res", weight: thin,
+     semantic: feedback, route: avoid, label_offset: 1.4}
 
-  - {type: legend, id: lg, columns: 1, size: 6.0, items: [
-      {swatch: box, color: "#00897B", label: "backbone"},
-      {swatch: box, color: "#FFB300", label: "attn / heads"},
-      {swatch: dashed, color: "#4D4D4D", label: "residual / skip"},
+  # 短标签 + 3+2 两行；行距由 layout gap: 3.5 保证（inline 内建 gap_y 仅 1.2）
+  - {type: legend, id: lg1, style: inline, columns: 3, size: 5.8, items: [
+      {swatch: box, color: "#90A4AE", label: "frozen"},
+      {swatch: box, color: "#E69F00", label: "cls"},
+      {swatch: box, color: "#CC79A7", label: "det"},
     ]}
+  - {type: legend, id: lg2, style: inline, columns: 2, size: 5.8, items: [
+      {swatch: box, color: "#D55E00", label: "seg"},
+      {swatch: dashed, color: "#0072B2", label: "residual"},
+    ]}
+
+  # fire/snow：layout 解算后贴右上角（绝对坐标；布局变后需重对）
+  - {type: marker, id: m_snow_vit, at: [60.5, 22.0], icon: snow, size: 3.4}
+  - {type: marker, id: m_snow_patch, at: [29.0, 42.0], icon: snow, size: 3.2}
+  - {type: marker, id: m_fire_fpn, at: [85.5, 15.5], icon: fire, size: 3.2}
+  - {type: marker, id: m_fire_cls, at: [85.5, 33.0], icon: fire, size: 3.2}
+  - {type: marker, id: m_fire_det, at: [85.5, 50.5], icon: fire, size: 3.2}
+  - {type: marker, id: m_fire_seg, at: [85.5, 68.0], icon: fire, size: 3.2}
