@@ -10,20 +10,24 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import io
 import math
+import random
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import cairosvg
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 
 from .fonts import (FAMILY_SVG, PT_TO_MM, LINE_HEIGHT, SCRIPT_SCALE, SUB_SHIFT,
                     SUP_SHIFT, line_ascent_mm, measure_markup_mm, measure_mm,
                     parse_markup, split_runs, text_block_height_mm, wrap_text)
 from .spec import (ArrowEl, AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl,
-                   MarkerEl, NetworkEl, PanelEl, PanelLabelEl, Rect, ScatterEl,
-                   TextEl, TokensEl, parse_anchor)
-from .theme import Theme, load_theme
+                   LegendEl, MarkerEl, NetworkEl, PanelEl, PanelLabelEl, Rect,
+                   ScatterEl, SketchEl, TextEl, TokensEl, parse_anchor)
+from .theme import Theme, Variant, load_theme
 
 
 def _esc(s: str) -> str:
@@ -50,10 +54,17 @@ class _TextSpan:
     rotate: float = 0.0       # 绕 (rot_cx, rot_cy) 旋转（度）
     rot_cx: float = 0.0
     rot_cy: float = 0.0
+    smallcaps: bool = False
+    letter_spacing: float = 0.0  # mm，字符间距（smallcaps 用）
 
     @property
     def width(self) -> float:
-        return measure_markup_mm(self.text, self.pt, self.bold)
+        w = measure_markup_mm(self.text, self.pt, self.bold)
+        if self.letter_spacing and self.text:
+            # 约 n-1 个间距（markup 标记字符忽略，按可见字符近似）
+            n = max(len(self.text.replace("_{", "").replace("^{", "").replace("}", "")) - 1, 0)
+            w += n * self.letter_spacing
+        return w
 
     def bbox(self) -> Rect:
         asc = line_ascent_mm(self.text, self.pt, self.bold)
@@ -75,7 +86,8 @@ class _TextSpan:
         base_mm = self.pt * PT_TO_MM
         style = (" font-weight=\"bold\"" if self.bold else "") + \
                 (" font-style=\"italic\"" if self.italic else "")
-        parts = [f'<text fill="{self.color}"{style}>']
+        ls = f' letter-spacing="{self.letter_spacing:.4f}"' if self.letter_spacing else ""
+        parts = [f'<text fill="{self.color}"{style}{ls}>']
         x = self.x
         for seg, mode in parse_markup(self.text):
             if not seg:
@@ -89,6 +101,8 @@ class _TextSpan:
                     f'<tspan x="{x:.3f}" y="{y:.3f}" font-size="{pt * PT_TO_MM:.4f}" '
                     f'font-family="{_esc(fam)}" xml:space="preserve">{_esc(run)}</tspan>')
                 x += measure_mm(run, pt, self.bold)
+                if self.letter_spacing and run:
+                    x += max(len(run) - 1, 0) * self.letter_spacing
         parts.append("</text>")
         svg = "".join(parts)
         if self.rotate:
@@ -104,11 +118,50 @@ class RenderResult:
         self.svg: str = ""
         self.text_spans: list[_TextSpan] = []
         self.node_rects: dict[str, Rect] = {}
+        # 视觉外边界（含 accent 外扩、stack 叠影）；箭头锚点用这个，不用逻辑 rect
+        self.node_visual_rects: dict[str, Rect] = {}
         self.arrow_segments: list[tuple[str, list[tuple[float, float]]]] = []
+        self.arrow_ends: list[tuple[str, str, str]] = []  # (id, start_side, end_side)
+        # 箭头标签胶囊（含 padding），供 lint 查压字 / 盖尖端
+        self.arrow_label_boxes: list[tuple[str, Rect, str]] = []
         self.asset_boxes: dict[str, Rect] = {}       # 素材实际显示区域
         self.missing_assets: list[str] = []
         self.placeholder_assets: list[str] = []      # 意图性占位槽（待手动插入实验图）
         self.overflow_boxes: list[str] = []          # 文本溢出的 box id
+
+
+# 叠影每层向右下错位（与 _render_box 一致）
+_STACK_OFF_MM = 1.5
+# 折线首/末段沿锚定边法向离开/进入的最短长度（mm）
+_MIN_APPROACH_MM = 3.0
+
+
+def _box_accent_thickness(el: BoxEl, r: Rect) -> float:
+    """accent 色条厚度 mm（与绘制逻辑一致）。"""
+    if el.accent == "left":
+        return min(1.1, r.w * 0.08)
+    if el.accent == "top":
+        return min(1.1, r.h * 0.12)
+    return 0.0
+
+
+def visual_rect_for(el) -> Rect:
+    """元素视觉外边界：accent 向外扩、stack 叠影扩 right/bottom。"""
+    r = el.rect
+    x, y, w, h = r.x, r.y, r.w, r.h
+    if isinstance(el, BoxEl):
+        aw = _box_accent_thickness(el, r)
+        if el.accent == "left" and aw > 0:
+            x -= aw
+            w += aw
+        elif el.accent == "top" and aw > 0:
+            y -= aw
+            h += aw
+        if el.stack > 0:
+            off = _STACK_OFF_MM * el.stack
+            w += off
+            h += off
+    return Rect(x, y, w, h)
 
 
 def render(spec: FigureSpec, out_png: str | Path | None = None,
@@ -121,17 +174,18 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
 
     # 先解析全部节点矩形（箭头锚点、group 需要）
     for el in spec.elements:
-        if isinstance(el, (BoxEl, AssetEl, PanelEl, TokensEl, NetworkEl, ScatterEl)):
+        if isinstance(el, (BoxEl, AssetEl, PanelEl, TokensEl, NetworkEl, ScatterEl, SketchEl)):
             res.node_rects[el.id] = el.rect
+            res.node_visual_rects[el.id] = visual_rect_for(el)
 
-    # 绘制顺序：panel 最底 → group → box/asset/tokens/network/scatter → arrow → 标注层
+    # 绘制顺序：panel 最底 → group → box/asset/tokens/network/scatter/sketch → arrow → 标注层
     panels = [e for e in spec.elements if isinstance(e, PanelEl)]
     groups = [e for e in spec.elements if isinstance(e, GroupEl)]
     nodes = [e for e in spec.elements
-             if isinstance(e, (BoxEl, AssetEl, TokensEl, NetworkEl, ScatterEl))]
+             if isinstance(e, (BoxEl, AssetEl, TokensEl, NetworkEl, ScatterEl, SketchEl))]
     arrows = [e for e in spec.elements if isinstance(e, ArrowEl)]
     texts = [e for e in spec.elements
-             if isinstance(e, (TextEl, PanelLabelEl, MarkerEl, BadgeEl))]
+             if isinstance(e, (TextEl, PanelLabelEl, MarkerEl, BadgeEl, LegendEl))]
 
     for p in panels:
         body.append(_wrap_el(p.id, _render_panel(p, theme, fs, res)))
@@ -146,6 +200,8 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
             s = _render_network(n, theme)
         elif isinstance(n, ScatterEl):
             s = _render_scatter(n)
+        elif isinstance(n, SketchEl):
+            s = _render_sketch(n, theme, fs, res)
         else:
             s = _render_asset(n, spec, theme, fs, res)
         body.append(_wrap_el(n.id, s))
@@ -158,6 +214,8 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
             s = _render_marker(t)
         elif isinstance(t, BadgeEl):
             s = _render_badge(t, theme, fs, res)
+        elif isinstance(t, LegendEl):
+            s = _render_legend(t, theme, fs, res)
         else:
             s = _render_panel_label(t, theme, fs, res)
         body.append(_wrap_el(t.id, s))
@@ -183,6 +241,88 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
                          output_width=round(spec.width * scale),
                          output_height=round(spec.height * scale))
     return res
+
+
+# ---------------------------------------------------------------- helpers (shadow / seed / lw)
+
+def _use_shadow(el_shadow: bool | None, th: Theme) -> bool:
+    return th.default_shadow if el_shadow is None else el_shadow
+
+
+def _variant_lw(v: Variant, th: Theme) -> float:
+    return v.lw if v.lw is not None else th.lw_box
+
+
+def _stable_seed(*parts) -> int:
+    """由 id / 坐标等生成可复现 seed。"""
+    h = hashlib.md5("|".join(str(p) for p in parts).encode()).hexdigest()
+    return int(h[:8], 16)
+
+
+# soft-shadow 光栅参数（mm）；cairosvg 不支持 feDropShadow/feGaussianBlur
+_SHADOW_BLUR_MM = 0.85
+_SHADOW_Y_OFF_MM = 0.30       # ≤0.4mm
+_SHADOW_X_OFF_MM = 0.0
+_SHADOW_OPACITY = 0.16        # 模糊前峰值；模糊后外缘更淡，密集排布不脏
+_SHADOW_PPM = 24.0            # px/mm，保证 600dpi 下晕边仍平滑
+
+
+@lru_cache(maxsize=256)
+def _shadow_png_data(w_mm: float, h_mm: float, corner: float) -> tuple[str, float, float]:
+    """生成高斯模糊投影 PNG（base64）及图像尺寸（mm）。按 (w,h,corner) 缓存。"""
+    pad = _SHADOW_BLUR_MM * 2.4
+    img_w_mm = w_mm + 2.0 * pad + abs(_SHADOW_X_OFF_MM)
+    img_h_mm = h_mm + 2.0 * pad + abs(_SHADOW_Y_OFF_MM)
+    iw = max(1, int(math.ceil(img_w_mm * _SHADOW_PPM)))
+    ih = max(1, int(math.ceil(img_h_mm * _SHADOW_PPM)))
+
+    mask = Image.new("L", (iw, ih), 0)
+    draw = ImageDraw.Draw(mask)
+    x0 = pad * _SHADOW_PPM
+    y0 = pad * _SHADOW_PPM
+    x1 = (pad + w_mm) * _SHADOW_PPM
+    y1 = (pad + h_mm) * _SHADOW_PPM
+    rad = max(0.0, corner) * _SHADOW_PPM
+    fill_v = max(0, min(255, int(round(255 * _SHADOW_OPACITY))))
+    draw.rounded_rectangle([x0, y0, x1, y1], radius=rad, fill=fill_v)
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=_SHADOW_BLUR_MM * _SHADOW_PPM))
+
+    shadow = Image.new("RGBA", (iw, ih), (0, 0, 0, 0))
+    shadow.putalpha(mask)
+    buf = io.BytesIO()
+    shadow.save(buf, format="PNG", optimize=True)
+    return base64.b64encode(buf.getvalue()).decode("ascii"), img_w_mm, img_h_mm
+
+
+def _soft_shadow_svg(r: Rect, corner: float) -> str:
+    """PIL 高斯模糊 soft drop-shadow，base64 嵌入 SVG。
+
+    cairosvg 对 feDropShadow / feGaussianBlur 支持极差；矢量多层半透明
+    rect/stroke 会留下可辨的灰卡/环状边缘。改为光栅模糊光晕后嵌入，
+    边缘平滑渐隐，整体仅保留很小的 y 向偏移。
+    """
+    # 量化尺寸以便缓存命中（0.05mm）
+    w_q = round(r.w * 20) / 20
+    h_q = round(r.h * 20) / 20
+    c_q = round(max(0.0, corner) * 20) / 20
+    data, img_w, img_h = _shadow_png_data(w_q, h_q, c_q)
+    pad = _SHADOW_BLUR_MM * 2.4
+    ix = r.x - pad + _SHADOW_X_OFF_MM
+    iy = r.y - pad + _SHADOW_Y_OFF_MM
+    return (
+        f'<image x="{ix:.3f}" y="{iy:.3f}" width="{img_w:.3f}" height="{img_h:.3f}" '
+        f'preserveAspectRatio="none" '
+        f'xlink:href="data:image/png;base64,{data}" '
+        f'xmlns:xlink="http://www.w3.org/1999/xlink"/>'
+    )
+
+
+def _hatch_pattern_svg(pid: str, color: str) -> str:
+    return (
+        f'<defs><pattern id="{pid}" patternUnits="userSpaceOnUse" width="2.4" height="2.4" '
+        f'patternTransform="rotate(45)">'
+        f'<line x1="0" y1="0" x2="0" y2="2.4" stroke="{color}" stroke-width="0.18" '
+        f'stroke-opacity="0.45"/></pattern></defs>')
 
 
 # ---------------------------------------------------------------- shapes
@@ -265,7 +405,10 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
     r = el.rect
     fill = el.fill or v.fill
     stroke = el.stroke or v.stroke
+    lw = _variant_lw(v, th)
     out = []
+    if _use_shadow(el.shadow, th):
+        out.append(_soft_shadow_svg(r, th.corner_radius))
     if el.gradient:
         gid = f"grad_{el.id}"
         x2, y2 = ("100%", "0%") if el.gradient_dir == "h" else ("0%", "100%")
@@ -279,10 +422,22 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
     for k in range(el.stack, 0, -1):
         off = 1.5 * k
         sr = Rect(r.x + off, r.y + off, r.w, r.h)
-        out.append(_shape_svg(el.shape, sr, el.fill or v.fill, stroke, th.lw_box, th.corner_radius))
-    out.append(_shape_svg(el.shape, r, fill, stroke, th.lw_box, th.corner_radius))
+        out.append(_shape_svg(el.shape, sr, el.fill or v.fill, stroke, lw, th.corner_radius))
+    out.append(_shape_svg(el.shape, r, fill, stroke, lw, th.corner_radius))
+
+    # accent 色条画在逻辑框*外侧*，与箭头视觉锚点一致（尖端落在色条外缘）
+    if el.accent == "left":
+        aw = _box_accent_thickness(el, r)
+        out.append(f'<rect x="{r.x - aw:.3f}" y="{r.y:.3f}" width="{aw:.3f}" height="{r.h:.3f}" '
+                   f'rx="{min(th.corner_radius, aw / 2):.3f}" fill="{stroke}"/>')
+    elif el.accent == "top":
+        ah = _box_accent_thickness(el, r)
+        out.append(f'<rect x="{r.x:.3f}" y="{r.y - ah:.3f}" width="{r.w:.3f}" height="{ah:.3f}" '
+                   f'fill="{stroke}"/>')
 
     inner_w, avail_h = _shape_inner(el.shape, r, th.box_pad_x, th.box_pad_y)
+    # accent 已外置，内容区不再为色条让位
+    content_x0 = r.x + th.box_pad_x
     title_pt = (el.title_size or th.size_title) * fs
     body_pt = (el.body_size or th.size_body) * fs
 
@@ -295,10 +450,34 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
     text_h = (text_block_height_mm(len(title_lines), title_pt)
               + (0.6 if title_lines and body_lines else 0.0)
               + text_block_height_mm(len(body_lines), body_pt))
-    content_h = icon_h + icon_gap + text_h
+    has_sketch = bool(el.sketch)
+    sketch_gap = 1.0 if has_sketch and (title_lines or body_lines or has_icon) else 0.0
+    # sketch 占用标题/正文下方剩余空间
+    sketch_h = 0.0
+    if has_sketch:
+        used = icon_h + icon_gap + text_h + sketch_gap
+        sketch_h = max(avail_h - used, min(8.0, avail_h * 0.35))
+        if el.valign == "top":
+            sketch_h = max(avail_h - used, 6.0)
+    content_h = icon_h + icon_gap + text_h + sketch_gap + sketch_h
 
-    if content_h > avail_h + 0.05:
+    if content_h > avail_h + 0.05 and not has_sketch:
         res.overflow_boxes.append(el.id)
+    elif has_sketch and (icon_h + icon_gap + text_h) > avail_h + 0.05:
+        res.overflow_boxes.append(el.id)
+
+    # header_fill：标题区浅底 + 分隔线
+    if el.header_fill and title_lines:
+        hh = text_block_height_mm(len(title_lines), title_pt) + th.box_pad_y + 0.8
+        hh = min(hh, r.h * 0.45)
+        out.append(f'<path d="M {r.x + th.corner_radius:.3f},{r.y:.3f} '
+                   f'H {r.right - th.corner_radius:.3f} '
+                   f'A {th.corner_radius},{th.corner_radius} 0 0 1 {r.right:.3f},{r.y + th.corner_radius:.3f} '
+                   f'V {r.y + hh:.3f} H {r.x:.3f} V {r.y + th.corner_radius:.3f} '
+                   f'A {th.corner_radius},{th.corner_radius} 0 0 1 {r.x + th.corner_radius:.3f},{r.y:.3f} Z" '
+                   f'fill="{stroke}" fill-opacity="0.10"/>')
+        out.append(f'<line x1="{r.x + 0.4:.3f}" y1="{r.y + hh:.3f}" x2="{r.right - 0.4:.3f}" '
+                   f'y2="{r.y + hh:.3f}" stroke="{stroke}" stroke-width="0.15" stroke-opacity="0.55"/>')
 
     if el.valign == "top":
         # 标题贴顶：box 作容器/子卡（内部再放其它元素）
@@ -310,7 +489,7 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
 
     if has_icon:
         icon_path = spec.resolve_asset(el.icon)
-        slot = Rect(r.x + th.box_pad_x, y, inner_w, icon_h)
+        slot = Rect(content_x0, y, inner_w, icon_h)
         out.append(_embed_image(icon_path, slot, "center", "middle", el.icon + "@" + el.id, res))
         y += icon_h + icon_gap
 
@@ -322,14 +501,21 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
         for ln in lines:
             asc = line_ascent_mm(ln.text or "x", pt, bold)
             if el.align == "left":
-                x = r.x + th.box_pad_x
+                x = content_x0
             else:
-                x = r.cx - ln.width_mm / 2
+                x = content_x0 + inner_w / 2 - ln.width_mm / 2
             span = _TextSpan(x=x, baseline=y + asc, text=ln.text, pt=pt, bold=bold,
                              color=el.text_color or v.text)
             res.text_spans.append(span)
             out.append(span.to_svg())
             y += lh
+
+    if has_sketch and sketch_h > 2.0:
+        y += sketch_gap
+        sk_rect = Rect(content_x0, y, inner_w, min(sketch_h, r.bottom - th.box_pad_y - y))
+        if sk_rect.h > 2.0:
+            out.append(_draw_sketch(el.sketch, sk_rect, stroke, stroke,
+                                    _stable_seed(el.id, el.sketch, r.x, r.y), th))
 
     return "".join(out)
 
@@ -411,52 +597,73 @@ def _embed_image(path: Path, slot: Rect, halign: str, valign: str, ref: str,
 
 # ---------------------------------------------------------------- arrow
 
-def _anchor_point(ep: str | tuple[float, float], rects: dict[str, Rect],
-                  toward: tuple[float, float] | None = None) -> tuple[float, float, str]:
-    """返回 (x, y, side)。side 用于路由决策，坐标端点 side='free'。
+def _anchor_point(ep: str | tuple[float, float],
+                  visual_rects: dict[str, Rect],
+                  logical_rects: dict[str, Rect] | None = None,
+                  toward: tuple[float, float] | None = None,
+                  ) -> tuple[float, float, str]:
+    """返回 (x, y, side)。锚在视觉外边界；t 比例仍按逻辑 rect 边长。
 
-    ep 为裸节点 id（未写 .side）时按 `toward`（对方端点参考点）方向**自动选朝向对方的那条边**，
-    落在该边中点——这是消除"箭头没对上"的主力：调用方只写 `from: enc, to: dec` 即可。
+    ep 为裸节点 id（未写 .side）时按 `toward`（对方端点参考点）相对逻辑中心
+    自动选朝向对方的边，落在该边中点——调用方只写 `from: enc, to: dec` 即可。
     """
     if not isinstance(ep, str):
         return ep[0], ep[1], "free"
     node, side, t = parse_anchor(ep)
-    r = rects[node]
+    vr = visual_rects[node]
+    lr = (logical_rects or visual_rects)[node]
     if side is None:
-        tx, ty = toward if toward is not None else (r.cx, r.cy)
-        dx, dy = tx - r.cx, ty - r.cy
+        tx, ty = toward if toward is not None else (lr.cx, lr.cy)
+        dx, dy = tx - lr.cx, ty - lr.cy
         if abs(dx) >= abs(dy):
             side = "right" if dx >= 0 else "left"
         else:
             side = "bottom" if dy >= 0 else "top"
         t = 0.5
     if side == "left":
-        return r.x, r.y + t * r.h, "left"
+        return vr.x, lr.y + t * lr.h, "left"
     if side == "right":
-        return r.right, r.y + t * r.h, "right"
+        return vr.right, lr.y + t * lr.h, "right"
     if side == "top":
-        return r.x + t * r.w, r.y, "top"
+        return lr.x + t * lr.w, vr.y, "top"
     if side == "bottom":
-        return r.x + t * r.w, r.bottom, "bottom"
-    return r.cx, r.cy, "center"
+        return lr.x + t * lr.w, vr.bottom, "bottom"
+    return lr.cx, lr.cy, "center"
 
 
-def _route_points(x1: float, y1: float, s1: str, x2: float, y2: float, s2: str,
-                  route: str) -> list[tuple[float, float]]:
-    if route == "auto":
-        horiz = {"left", "right"}
-        vert = {"top", "bottom"}
-        if s1 in horiz and s2 in horiz:
-            route = "straight" if abs(y1 - y2) < 0.5 else "z"
-        elif s1 in vert and s2 in vert:
-            route = "straight" if abs(x1 - x2) < 0.5 else "zv"
-        elif s1 in horiz and s2 in vert:
-            route = "hv"
-        elif s1 in vert and s2 in horiz:
-            route = "vh"
-        else:
-            route = "straight"
+def _side_outward(side: str) -> tuple[float, float]:
+    return {
+        "left": (-1.0, 0.0), "right": (1.0, 0.0),
+        "top": (0.0, -1.0), "bottom": (0.0, 1.0),
+    }.get(side, (0.0, 0.0))
 
+
+def _resolve_route(s1: str, s2: str, x1: float, y1: float, x2: float, y2: float,
+                   route: str) -> str:
+    if route != "auto":
+        return route
+    horiz = {"left", "right"}
+    vert = {"top", "bottom"}
+    if s1 in horiz and s2 in horiz:
+        return "straight" if abs(y1 - y2) < 0.5 else "z"
+    if s1 in vert and s2 in vert:
+        return "straight" if abs(x1 - x2) < 0.5 else "zv"
+    if s1 in horiz and s2 in vert:
+        return "hv"
+    if s1 in vert and s2 in horiz:
+        return "vh"
+    # free/center：仍走正交折线（避免 auto 退化成斜线）
+    if s1 in horiz or s2 in horiz:
+        return "straight" if abs(y1 - y2) < 0.5 else "z"
+    if s1 in vert or s2 in vert:
+        return "straight" if abs(x1 - x2) < 0.5 else "zv"
+    if abs(y1 - y2) < 0.5 or abs(x1 - x2) < 0.5:
+        return "straight"
+    return "z"
+
+
+def _route_points_raw(x1: float, y1: float, x2: float, y2: float,
+                      route: str) -> list[tuple[float, float]]:
     if route == "straight":
         return [(x1, y1), (x2, y2)]
     if route == "hv":
@@ -470,6 +677,303 @@ def _route_points(x1: float, y1: float, s1: str, x2: float, y2: float, s2: str,
         my = (y1 + y2) / 2
         return [(x1, y1), (x1, my), (x2, my), (x2, y2)]
     raise ValueError(f"未知 route: {route}")
+
+
+def _approach_point(tip: tuple[float, float], side: str, min_len: float) -> tuple[float, float]:
+    """锚定边外侧、用于垂直进入/离开的拐点。"""
+    ox, oy = _side_outward(side)
+    return tip[0] + ox * min_len, tip[1] + oy * min_len
+
+
+def _fit_stub_len(side: str, tip: tuple[float, float], other: tuple[float, float],
+                  min_len: float) -> float:
+    """法向 stub 长度：优先 min_len；两端过近时对称缩小，极近则 0。"""
+    if side not in ("left", "right", "top", "bottom"):
+        return 0.0
+    if side in ("left", "right"):
+        avail = abs(other[0] - tip[0])
+    else:
+        avail = abs(other[1] - tip[1])
+    if avail < 1.0:
+        return 0.0
+    # 两侧对称预留，中间至少 1mm 走廊，单侧不超过 min_len
+    return min(min_len, max(0.0, (avail - 1.0) / 2.0))
+
+
+def _is_flush_pair(x1: float, y1: float, s1: str, x2: float, y2: float, s2: str) -> bool:
+    """相对边锚点在法向上间距 <0.5mm（stack 外缘贴邻盒）。"""
+    if s1 == "right" and s2 == "left" and abs(x1 - x2) < 0.5:
+        return True
+    if s1 == "left" and s2 == "right" and abs(x1 - x2) < 0.5:
+        return True
+    if s1 == "bottom" and s2 == "top" and abs(y1 - y2) < 0.5:
+        return True
+    if s1 == "top" and s2 == "bottom" and abs(y1 - y2) < 0.5:
+        return True
+    return False
+
+
+def _last_segment_parallel_to_side(a: tuple[float, float], b: tuple[float, float],
+                                   side: str) -> bool:
+    """末段是否平行于锚定边（贴边滑行）。对角斜线不算。"""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    if side in ("left", "right"):
+        return abs(dx) <= 1e-6 and abs(dy) > 1e-6  # 竖直 = 平行于左右边
+    if side in ("top", "bottom"):
+        return abs(dy) <= 1e-6 and abs(dx) > 1e-6  # 水平 = 平行于上下边
+    return False
+
+
+def _adjust_via_ortho_end(pts: list[tuple[float, float]], s2: str,
+                          min_len: float = _MIN_APPROACH_MM) -> list[tuple[float, float]]:
+    """via 路径：末段改为垂直进入目标边，并保证 tip 仍是视觉锚点。
+
+    - 末段平行于锚定边（贴边滑行）→ 扳最后一个 via，使末段做法向进入
+    - 末段已是斜线 → 不改路（保留用户 via 意图；lint 报 arrow-approach）
+    - 末段已正交但 tip 微偏 → 仅把 tip 坐标钉回（由调用方传入的 tip）
+    """
+    if len(pts) < 3 or s2 not in ("left", "right", "top", "bottom"):
+        return pts
+    tip = pts[-1]
+    prev = pts[-2]
+    if not _last_segment_parallel_to_side(prev, tip, s2):
+        return pts
+    if s2 in ("left", "right"):
+        # 保持 via 的 x，把 y 扳到与终点齐平 → 末段水平；tip 不变
+        nx, ny = prev[0], tip[1]
+        ox, _ = _side_outward(s2)
+        if (nx - tip[0]) * ox < min_len - 1e-6:
+            nx = tip[0] + ox * min_len
+        return pts[:-2] + [(nx, ny), tip]
+    nx, ny = tip[0], prev[1]
+    _, oy = _side_outward(s2)
+    if (ny - tip[1]) * oy < min_len - 1e-6:
+        ny = tip[1] + oy * min_len
+    return pts[:-2] + [(nx, ny), tip]
+
+
+def _resnap_endpoints(pts: list[tuple[float, float]],
+                      p1: tuple[float, float], p2: tuple[float, float],
+                      s1: str = "free", s2: str = "free",
+                      tol: float = 0.08) -> list[tuple[float, float]]:
+    """路径改写后强制首尾回到视觉锚点。
+
+    仅当邻段已接近轴对齐时，才把相邻拐点扳齐（吸收微漂）；
+    真斜线 via 原样保留，避免把用户故意的斜线改成正交。
+    """
+    if len(pts) < 2:
+        return pts
+    out = list(pts)
+    out[0] = p1
+    out[-1] = p2
+    # 单段微斜：沿边滑动使轴对齐（真斜线两向都 >tol 则保留）
+    if len(out) == 2:
+        dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+        if abs(dx) > tol and abs(dy) > tol:
+            return _dedupe(out)
+        if abs(dy) <= abs(dx):
+            if s2 in ("left", "right"):
+                out[0] = (p1[0], p2[1])
+            elif s1 in ("left", "right"):
+                out[-1] = (p2[0], p1[1])
+            else:
+                out[0] = (p1[0], p2[1])
+        else:
+            if s2 in ("top", "bottom"):
+                out[0] = (p2[0], p1[1])
+            elif s1 in ("top", "bottom"):
+                out[-1] = (p1[0], p2[1])
+            else:
+                out[0] = (p2[0], p1[1])
+        return _dedupe(out)
+    prev = out[-2]
+    dx, dy = p2[0] - prev[0], p2[1] - prev[1]
+    if abs(dy) <= tol and abs(dx) > tol and s2 in ("left", "right", "free"):
+        out[-2] = (prev[0], p2[1])
+    elif abs(dx) <= tol and abs(dy) > tol and s2 in ("top", "bottom", "free"):
+        out[-2] = (p2[0], prev[1])
+    nxt = out[1]
+    dx, dy = nxt[0] - p1[0], nxt[1] - p1[1]
+    if abs(dy) <= tol and abs(dx) > tol:
+        out[1] = (nxt[0], p1[1])
+    elif abs(dx) <= tol and abs(dy) > tol:
+        out[1] = (p1[0], nxt[1])
+    return _dedupe(out)
+
+
+def _arrow_label_layout(
+    pts: list[tuple[float, float]],
+    label: str,
+    label_offset: float,
+    pt_size: float,
+    head_len: float,
+    color: str,
+) -> tuple["_TextSpan", Rect]:
+    """在折线上放置标签，避开箭头尖端/起点保护区（防止胶囊盖住尖端造成悬空错觉）。"""
+    tip = pts[-1]
+    start = pts[0]
+    nseg = len(pts) - 1
+    scored: list[tuple[float, int]] = []
+    for i in range(nseg):
+        a, b = pts[i], pts[i + 1]
+        length = math.hypot(b[0] - a[0], b[1] - a[1])
+        mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+        d_tip = math.hypot(mx - tip[0], my - tip[1])
+        penalty = 0.0
+        if i == nseg - 1 and nseg >= 2:
+            penalty += 12.0  # 绝不优先放在末段进入 stub 上
+        if i == 0 and nseg >= 3:
+            penalty += 2.0
+        scored.append((length + 0.4 * min(d_tip, 14.0) - penalty, i))
+    scored.sort(reverse=True)
+
+    w = measure_markup_mm(label, pt_size)
+    asc = line_ascent_mm(label, pt_size)
+    keep = max(head_len + 1.2, 2.8)
+
+    def _try(i: int, offset: float) -> tuple[_TextSpan, Rect] | None:
+        a, b = pts[i], pts[i + 1]
+        mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+        horiz = abs(b[0] - a[0]) >= abs(b[1] - a[1])
+        if horiz:
+            tx, ty = mx - w / 2, my - offset
+        else:
+            tx = mx + offset
+            ty = my + asc / 2 - 0.2
+        span = _TextSpan(x=tx, baseline=ty, text=label, pt=pt_size, bold=False, color=color)
+        bb = span.bbox()
+        cap = Rect(bb.x - 0.7, bb.y - 0.25, bb.w + 1.4, bb.h + 0.5)
+        # 尖端落入胶囊 → 拒绝（这正是 8 sents「悬空」的根因）
+        if cap.x - 0.05 <= tip[0] <= cap.right + 0.05 and cap.y - 0.05 <= tip[1] <= cap.bottom + 0.05:
+            return None
+        # 胶囊中心离 tip 过近也拒
+        cx, cy = cap.x + cap.w / 2, cap.y + cap.h / 2
+        if math.hypot(cx - tip[0], cy - tip[1]) < keep * 0.55:
+            return None
+        return span, cap
+
+    offsets = [label_offset, -label_offset,
+               abs(label_offset) + 1.2, -(abs(label_offset) + 1.2)]
+    for _, i in scored:
+        for off in offsets:
+            got = _try(i, off)
+            if got is not None:
+                return got
+    # 兜底：最长段 + 原 offset（与旧行为一致）
+    best_i = scored[0][1] if scored else 0
+    a, b = pts[best_i], pts[best_i + 1]
+    mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+    horiz = abs(b[0] - a[0]) >= abs(b[1] - a[1])
+    if horiz:
+        tx, ty = mx - w / 2, my - label_offset
+    else:
+        tx, ty = mx + label_offset, my + asc / 2 - 0.2
+    span = _TextSpan(x=tx, baseline=ty, text=label, pt=pt_size, bold=False, color=color)
+    bb = span.bbox()
+    return span, Rect(bb.x - 0.7, bb.y - 0.25, bb.w + 1.4, bb.h + 0.5)
+
+
+def _segments_axis_aligned(pts: list[tuple[float, float]], tol: float = 1e-6) -> bool:
+    """折线是否全部由水平/垂直段组成（无斜线）。"""
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if abs(x0 - x1) > tol and abs(y0 - y1) > tol:
+            return False
+    return True
+
+
+def _snap_axis_segments(pts: list[tuple[float, float]], tol: float = 0.05
+                        ) -> list[tuple[float, float]]:
+    """消除浮点/锚点取样造成的亚毫米微斜线，强制轴对齐（不改动真斜线）。
+
+    端点保留精确锚点坐标；微偏差通过沿锚定边滑动起点/拐点吸收，
+    避免留下 <tol 的退化残段（否则会触发 arrow-approach 误报）。
+    """
+    if len(pts) < 2:
+        return pts
+    start, end = pts[0], pts[-1]
+    # 单段：微斜 → 滑到轴对齐，端点取精确 end
+    if len(pts) == 2:
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        if abs(dx) > tol and abs(dy) > tol:
+            return [(start[0], start[1]), end]  # 真斜线
+        if abs(dy) <= tol:
+            return _dedupe([(start[0], end[1]), end])  # 水平，起点沿边滑动
+        if abs(dx) <= tol:
+            return _dedupe([(end[0], start[1]), end])  # 垂直
+        return _dedupe([(start[0], start[1]), end])
+
+    out: list[tuple[float, float]] = [start]
+    for p in pts[1:-1]:
+        prev = out[-1]
+        dx, dy = p[0] - prev[0], p[1] - prev[1]
+        if abs(dx) > tol and abs(dy) > tol:
+            out.append(p)
+        elif abs(dy) <= tol and abs(dx) > tol:
+            out.append((p[0], prev[1]))
+        elif abs(dx) <= tol and abs(dy) > tol:
+            out.append((prev[0], p[1]))
+
+    prev = out[-1]
+    dx, dy = end[0] - prev[0], end[1] - prev[1]
+    if abs(dx) > tol and abs(dy) > tol:
+        # 真需要拐点
+        if abs(dx) >= abs(dy):
+            out.append((end[0], prev[1]))
+        else:
+            out.append((prev[0], end[1]))
+        out.append(end)
+    elif abs(dy) <= tol:
+        # 水平进入：把 prev 的 y 扳到 end.y，避免微竖残段
+        out[-1] = (prev[0], end[1])
+        out.append(end)
+    elif abs(dx) <= tol:
+        out[-1] = (end[0], prev[1])
+        out.append(end)
+    else:
+        out.append(end)
+    return _dedupe(out)
+
+
+def _ortho_route(x1: float, y1: float, s1: str, x2: float, y2: float, s2: str,
+                 connector: str, min_len: float = _MIN_APPROACH_MM
+                 ) -> list[tuple[float, float]]:
+    """构造整条正交折线：首段沿出发边法向离开、末段沿到达边法向进入，
+    中间用 hv/vh/z/zv 消化落差——绝不出现斜线段。
+    """
+    slen = _fit_stub_len(s1, (x1, y1), (x2, y2), min_len)
+    elen = _fit_stub_len(s2, (x2, y2), (x1, y1), min_len)
+
+    ax, ay = (x1, y1) if slen <= 1e-6 else _approach_point((x1, y1), s1, slen)
+    bx, by = (x2, y2) if elen <= 1e-6 else _approach_point((x2, y2), s2, elen)
+
+    conn = connector if connector in ("hv", "vh", "z", "zv") else "z"
+    if abs(ax - bx) < 1e-6 and abs(ay - by) < 1e-6:
+        mid: list[tuple[float, float]] = [(ax, ay)]
+    elif abs(ay - by) < 1e-6 or abs(ax - bx) < 1e-6:
+        mid = [(ax, ay), (bx, by)]
+    else:
+        mid = _route_points_raw(ax, ay, bx, by, conn)
+
+    pts: list[tuple[float, float]] = [(x1, y1)]
+    pts.extend(mid)
+    if elen > 1e-6:
+        pts.append((x2, y2))
+    elif abs(pts[-1][0] - x2) > 1e-6 or abs(pts[-1][1] - y2) > 1e-6:
+        pts.append((x2, y2))
+    return _snap_axis_segments(_dedupe(pts))
+
+
+def _route_points(x1: float, y1: float, s1: str, x2: float, y2: float, s2: str,
+                  route: str) -> list[tuple[float, float]]:
+    """生成折线；auto/hv/vh/z/zv 整条正交（straight 保持用户斜线意图）。"""
+    resolved = _resolve_route(s1, s2, x1, y1, x2, y2, route)
+    if resolved == "straight":
+        # auto 近对齐走 straight：微斜线收成正交；显式 straight 保留斜线
+        pts = _dedupe([(x1, y1), (x2, y2)])
+        if route != "straight":
+            return _snap_axis_segments(pts)
+        return pts
+    return _ortho_route(x1, y1, s1, x2, y2, s2, resolved)
 
 
 def _dedupe(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
@@ -491,13 +995,15 @@ def _ref_center(ep: str | tuple[float, float], rects: dict[str, Rect]) -> tuple[
 
 def _render_arrow(el: ArrowEl, th: Theme, fs: float, res: RenderResult) -> str:
     color = el.color or th.arrow
-    # 先算对方参考中心：from 朝向 to、to 朝向 from，裸 id 端点据此自动选边
-    x1, y1, s1 = _anchor_point(el.from_, res.node_rects, toward=_ref_center(el.to, res.node_rects))
-    x2, y2, s2 = _anchor_point(el.to, res.node_rects, toward=_ref_center(el.from_, res.node_rects))
+    # 视觉外边界锚点 + 裸 id 按对方逻辑中心自动选边
+    visual = res.node_visual_rects or res.node_rects
+    x1, y1, s1 = _anchor_point(el.from_, visual, res.node_rects, toward=_ref_center(el.to, res.node_rects))
+    x2, y2, s2 = _anchor_point(el.to, visual, res.node_rects, toward=_ref_center(el.from_, res.node_rects))
 
     if el.style == "block":
         return _render_block_arrow(el, (x1, y1), (x2, y2), color, th, fs, res)
 
+    flush = _is_flush_pair(x1, y1, s1, x2, y2, s2)
     arc_ctrl: tuple[float, float] | None = None
     if el.route == "arc" and not el.via:
         # 二次贝塞尔弧线：控制点 = 弦中点 + 法向 × bend × 弦长
@@ -505,6 +1011,7 @@ def _render_arrow(el: ArrowEl, th: Theme, fs: float, res: RenderResult) -> str:
         chord = math.hypot(dx, dy)
         if chord < 1e-6:
             res.arrow_segments.append((el.id, [(x1, y1)]))
+            res.arrow_ends.append((el.id, s1, s2))
             return ""
         nx, ny = -dy / chord, dx / chord
         arc_ctrl = ((x1 + x2) / 2 + nx * el.bend * chord,
@@ -516,20 +1023,35 @@ def _render_arrow(el: ArrowEl, th: Theme, fs: float, res: RenderResult) -> str:
             mt = 1 - t
             pts.append((mt * mt * x1 + 2 * mt * t * arc_ctrl[0] + t * t * x2,
                         mt * mt * y1 + 2 * mt * t * arc_ctrl[1] + t * t * y2))
+    elif flush:
+        # 贴齐：端点落在视觉边上；杆沿接触线做法向极短外伸再折回，保证头朝向
+        pts = [(x1, y1), (x2, y2)]
     elif el.via:
-        # 手动途经点：起点 → via... → 终点，直线连接（用于残差/绕线/总线）
-        pts = _dedupe([(x1, y1), *el.via, (x2, y2)])
+        # 手动途经点：仅修正贴边滑行；斜线 via 保持用户意图（lint 可报 approach）
+        pts = _adjust_via_ortho_end(_dedupe([(x1, y1), *el.via, (x2, y2)]), s2)
+        if pts:
+            pts = list(pts)
+            pts[0], pts[-1] = (x1, y1), (x2, y2)
+            pts = _dedupe(pts)
     else:
         route = "straight" if el.route == "arc" else el.route
-        pts = _dedupe(_route_points(x1, y1, s1, x2, y2, s2, route))
+        if route == "straight":
+            pts = _dedupe([(x1, y1), (x2, y2)])
+        else:
+            pts = _dedupe(_route_points(x1, y1, s1, x2, y2, s2, route))
+            # ortho/snap 后偶发微漂：钉回视觉锚点并保持正交
+            if len(pts) >= 2:
+                pts = _resnap_endpoints(pts, (x1, y1), (x2, y2), s1, s2)
 
     if len(pts) < 2:
         # 起止点重合（如两端锚到同一位置），无法绘制箭头
         res.arrow_segments.append((el.id, pts))
+        res.arrow_ends.append((el.id, s1, s2))
         return ""
 
     out = []
-    lw = el.width or th.lw_arrow
+    weight_mul = {"thin": 0.65, "normal": 1.0, "heavy": 1.55}.get(el.weight, 1.0)
+    lw = el.width if el.width is not None else th.lw_arrow * weight_mul
     # 粗线时箭头头部按线宽比例放大，保持观感协调
     scale = max(1.0, (lw / th.lw_arrow) ** 0.75)
     head_len = th.arrow_head_len * scale
@@ -542,55 +1064,102 @@ def _render_arrow(el: ArrowEl, th: Theme, fs: float, res: RenderResult) -> str:
             return a
         return b[0] - dx / L * d, b[1] - dy / L * d
 
-    if arc_ctrl is not None:
-        end = _shorten(arc_ctrl, (x2, y2), head_len * 0.72) if el.head == "arrow" else (x2, y2)
-        start = (_shorten(arc_ctrl, (x1, y1), head_len * 0.72)
-                 if el.head == "arrow" and el.bidir else (x1, y1))
+    if el.style == "dashed":
+        dash = ' stroke-dasharray="1.6,1.1"'
+    elif el.style == "dotted":
+        dash = ' stroke-dasharray="0.35,0.95"'
+    else:
+        dash = ""
+
+    if flush and arc_ctrl is None:
+        # 贴齐接触线：画平均位置上的短杆，头部分别法向扎入两侧视觉边
+        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+        stub = max(head_len * 0.9, 1.0)
+        if s1 in ("left", "right"):
+            shaft = [(mx - stub, my), (mx + stub, my)]
+        else:
+            shaft = [(mx, my - stub), (mx, my + stub)]
+        d = "M " + " L ".join(f"{x:.3f},{y:.3f}" for x, y in shaft)
+        out.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{lw}"'
+                   f'{dash} stroke-linejoin="round" stroke-linecap="round"/>')
+        if el.head == "arrow":
+            # 目标侧：头指向 tip2（微伸入视觉边），方向为进入该侧的法向
+            t2 = _tip_inward((x2, y2), s2)
+            if s2 == "left":
+                out.append(_arrow_head((t2[0] - 1, t2[1]), t2, color, th, head_len, head_w))
+            elif s2 == "right":
+                out.append(_arrow_head((t2[0] + 1, t2[1]), t2, color, th, head_len, head_w))
+            elif s2 == "top":
+                out.append(_arrow_head((t2[0], t2[1] - 1), t2, color, th, head_len, head_w))
+            elif s2 == "bottom":
+                out.append(_arrow_head((t2[0], t2[1] + 1), t2, color, th, head_len, head_w))
+            if el.bidir:
+                t1 = _tip_inward((x1, y1), s1)
+                if s1 == "right":
+                    out.append(_arrow_head((t1[0] + 1, t1[1]), t1, color, th, head_len, head_w))
+                elif s1 == "left":
+                    out.append(_arrow_head((t1[0] - 1, t1[1]), t1, color, th, head_len, head_w))
+                elif s1 == "bottom":
+                    out.append(_arrow_head((t1[0], t1[1] + 1), t1, color, th, head_len, head_w))
+                elif s1 == "top":
+                    out.append(_arrow_head((t1[0], t1[1] - 1), t1, color, th, head_len, head_w))
+    elif arc_ctrl is not None:
+        tip2 = _tip_inward((x2, y2), s2) if el.head == "arrow" else (x2, y2)
+        tip1 = _tip_inward((x1, y1), s1) if (el.head == "arrow" and el.bidir) else (x1, y1)
+        end = _shorten(arc_ctrl, tip2, head_len * 0.72) if el.head == "arrow" else tip2
+        start = (_shorten(arc_ctrl, tip1, head_len * 0.72)
+                 if el.head == "arrow" and el.bidir else tip1)
         d = (f"M {start[0]:.3f},{start[1]:.3f} "
              f"Q {arc_ctrl[0]:.3f},{arc_ctrl[1]:.3f} {end[0]:.3f},{end[1]:.3f}")
+        out.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{lw}"'
+                   f'{dash} stroke-linejoin="round" stroke-linecap="round"/>')
+        if el.head == "arrow":
+            out.append(_arrow_head(arc_ctrl, tip2, color, th, head_len, head_w))
+            if el.bidir:
+                out.append(_arrow_head(arc_ctrl, tip1, color, th, head_len, head_w))
     else:
+        tip2 = _tip_inward(pts[-1], s2) if el.head == "arrow" else pts[-1]
+        tip1 = _tip_inward(pts[0], s1) if (el.head == "arrow" and el.bidir) else pts[0]
         draw_pts = list(pts)
         if el.head == "arrow":
-            draw_pts[-1] = _shorten(draw_pts[-2], draw_pts[-1], head_len * 0.72)
+            draw_pts[-1] = _shorten(draw_pts[-2], tip2, head_len * 0.72)
             if el.bidir:
-                draw_pts[0] = _shorten(draw_pts[1], draw_pts[0], head_len * 0.72)
+                draw_pts[0] = _shorten(draw_pts[1], tip1, head_len * 0.72)
         d = "M " + " L ".join(f"{x:.3f},{y:.3f}" for x, y in draw_pts)
-
-    dash = ' stroke-dasharray="1.6,1.1"' if el.style == "dashed" else ""
-    out.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{lw}"'
-               f'{dash} stroke-linejoin="round" stroke-linecap="round"/>')
-
-    if el.head == "arrow":
-        tail2, tip2 = (arc_ctrl, (x2, y2)) if arc_ctrl is not None else (pts[-2], pts[-1])
-        out.append(_arrow_head(tail2, tip2, color, th, head_len, head_w))
-        if el.bidir:
-            tail1, tip1 = (arc_ctrl, (x1, y1)) if arc_ctrl is not None else (pts[1], pts[0])
-            out.append(_arrow_head(tail1, tip1, color, th, head_len, head_w))
+        out.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{lw}"'
+                   f'{dash} stroke-linejoin="round" stroke-linecap="round"/>')
+        if el.head == "arrow":
+            # head fill 必须与杆 stroke 同色；尖端微伸入视觉边
+            out.append(_arrow_head(pts[-2], tip2, color, th, head_len, head_w))
+            if el.bidir:
+                out.append(_arrow_head(pts[1], tip1, color, th, head_len, head_w))
 
     res.arrow_segments.append((el.id, pts))
+    res.arrow_ends.append((el.id, s1, s2))
 
     if el.label:
-        # 放在最长线段中点，垂直偏移
-        best = max(range(len(pts) - 1),
-                   key=lambda i: math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]))
-        (ax, ay), (bx, by) = pts[best], pts[best + 1]
-        mx, my = (ax + bx) / 2, (ay + by) / 2
         pt_size = th.size_arrow_label * fs
-        w = measure_markup_mm(el.label, pt_size)
-        horiz = abs(bx - ax) >= abs(by - ay)
-        if horiz:
-            tx, ty_base = mx - w / 2, my - el.label_offset
-        else:
-            tx, ty_base = mx + el.label_offset, my - (pt_size * PT_TO_MM) / 2 + line_ascent_mm(el.label, pt_size) - 0.35 * pt_size * PT_TO_MM + pt_size * PT_TO_MM * 0.35
-            ty_base = my + line_ascent_mm(el.label, pt_size) / 2 - 0.2
-        span = _TextSpan(x=tx, baseline=ty_base, text=el.label, pt=pt_size, bold=False, color=th.muted)
-        bb = span.bbox()
-        out.append(f'<rect x="{bb.x - 0.5:.3f}" y="{bb.y - 0.1:.3f}" width="{bb.w + 1.0:.3f}" '
-                   f'height="{bb.h + 0.2:.3f}" fill="#FFFFFF" fill-opacity="0.88"/>')
+        span, cap = _arrow_label_layout(
+            pts, el.label, el.label_offset, pt_size, head_len, th.muted)
+        if el.label_bg:
+            out.append(
+                f'<rect x="{cap.x:.3f}" y="{cap.y:.3f}" width="{cap.w:.3f}" '
+                f'height="{cap.h:.3f}" rx="{cap.h * 0.45:.3f}" '
+                f'fill="#FFFFFF" fill-opacity="0.92" stroke="#E8E8E8" stroke-width="0.08"/>')
+        res.arrow_label_boxes.append((el.id, cap, el.label))
         res.text_spans.append(span)
         out.append(span.to_svg())
 
     return "".join(out)
+
+
+def _tip_inward(tip: tuple[float, float], side: str, depth: float = 0.22
+                ) -> tuple[float, float]:
+    """尖端沿锚定边内法向微伸，消除 AA/描边造成的视觉悬空（≤ arrow-gap 压入容差）。"""
+    if depth <= 0 or side not in ("left", "right", "top", "bottom"):
+        return tip
+    ox, oy = _side_outward(side)
+    return tip[0] - ox * depth, tip[1] - oy * depth
 
 
 def _arrow_head(a: tuple[float, float], b: tuple[float, float], color: str, th: Theme,
@@ -604,8 +1173,9 @@ def _arrow_head(a: tuple[float, float], b: tuple[float, float], color: str, th: 
     L1 = (b[0] - ux * hl, b[1] - uy * hl)
     p1 = (L1[0] + px * hw / 2, L1[1] + py * hw / 2)
     p2 = (L1[0] - px * hw / 2, L1[1] - py * hw / 2)
+    # fill/stroke 均用杆色，避免渲染器对无描边 polygon 取继承色
     return (f'<polygon points="{b[0]:.3f},{b[1]:.3f} {p1[0]:.3f},{p1[1]:.3f} {p2[0]:.3f},{p2[1]:.3f}" '
-            f'fill="{color}"/>')
+            f'fill="{color}" stroke="{color}" stroke-width="0.01"/>')
 
 
 def _render_block_arrow(el: ArrowEl, p1: tuple[float, float], p2: tuple[float, float],
@@ -655,20 +1225,35 @@ def _render_group(el: GroupEl, spec: FigureSpec, th: Theme, fs: float, res: Rend
         r = el.rect
     else:
         rects = [res.node_rects[m] for m in el.members]
-        x0 = min(r.x for r in rects) - el.pad
-        y0 = min(r.y for r in rects) - el.pad
-        x1 = max(r.right for r in rects) + el.pad
-        y1 = max(r.bottom for r in rects) + el.pad
+        x0 = min(rr.x for rr in rects) - el.pad
+        y0 = min(rr.y for rr in rects) - el.pad
+        x1 = max(rr.right for rr in rects) + el.pad
+        y1 = max(rr.bottom for rr in rects) + el.pad
         r = Rect(x0, y0, x1 - x0, y1 - y0)
 
     dash = ' stroke-dasharray="2.2,1.4"' if el.style == "dashed" else ""
-    fill = el.fill or th.group_fill
+    fill = el.fill if el.fill is not None else th.group_fill
     stroke = el.color or th.group_stroke
     lw = el.lw if el.lw is not None else th.lw_group
-    out = [f'<rect x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" height="{r.h:.3f}" '
-           f'rx="{th.corner_radius + 0.6}" fill="{fill}" stroke="{stroke}" '
-           f'stroke-width="{lw}"{dash}/>']
+    cr = th.corner_radius + 0.6
+    out = []
+    if _use_shadow(el.shadow, th):
+        out.append(_soft_shadow_svg(r, cr))
+    if el.hatch:
+        pid = f"hatch_{el.id}"
+        out.append(_hatch_pattern_svg(pid, stroke))
+        # 底色（若 fill 为 none 则用极浅灰）+ hatch 叠层
+        base_fill = fill if fill and fill != "none" else "#F7F7F7"
+        out.append(f'<rect x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" height="{r.h:.3f}" '
+                   f'rx="{cr}" fill="{base_fill}" stroke="none"/>')
+        out.append(f'<rect x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" height="{r.h:.3f}" '
+                   f'rx="{cr}" fill="url(#{pid})" stroke="{stroke}" stroke-width="{lw}"{dash}/>')
+    else:
+        out.append(f'<rect x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" height="{r.h:.3f}" '
+                   f'rx="{cr}" fill="{fill}" stroke="{stroke}" '
+                   f'stroke-width="{lw}"{dash}/>')
     res.node_rects[el.id] = r
+    res.node_visual_rects[el.id] = r
 
     if el.label:
         pt = (el.label_size or th.size_group_label) * fs
@@ -693,23 +1278,31 @@ def _render_text(el: TextEl, th: Theme, fs: float, res: RenderResult) -> str:
     color = el.color or th.ink
     x, y = el.at
     out = []
-    lines = wrap_text(el.text, pt, el.max_w, el.bold) if el.max_w else [
-        ln for ln in (type("L", (), {"text": t, "width_mm": measure_markup_mm(t, pt, el.bold)})()
-                      for t in el.text.split("\n"))
+    raw = el.text.upper() if el.smallcaps else el.text
+    ls = 0.35 if el.smallcaps else 0.0
+    # smallcaps 时用略小字号
+    if el.smallcaps:
+        pt = pt * 0.92
+    lines = wrap_text(raw, pt, el.max_w, el.bold) if el.max_w else [
+        ln for ln in (type("L", (), {"text": t, "width_mm": measure_markup_mm(t, pt, el.bold)
+                                     + (max(len(t) - 1, 0) * ls if ls else 0)})()
+                      for t in raw.split("\n"))
     ]
     lh = pt * PT_TO_MM * LINE_HEIGHT
     cy = y
     for ln in lines:
+        tw = ln.width_mm
         if el.anchor == "start":
             lx = x
         elif el.anchor == "end":
-            lx = x - ln.width_mm
+            lx = x - tw
         else:
-            lx = x - ln.width_mm / 2
+            lx = x - tw / 2
         asc = line_ascent_mm(ln.text or "x", pt, el.bold)
         span = _TextSpan(x=lx, baseline=cy + asc, text=ln.text, pt=pt, bold=el.bold,
                          color=color, italic=el.italic,
-                         rotate=el.rotate, rot_cx=x, rot_cy=y)
+                         rotate=el.rotate, rot_cx=x, rot_cy=y,
+                         smallcaps=el.smallcaps, letter_spacing=ls)
         res.text_spans.append(span)
         out.append(span.to_svg())
         cy += lh
@@ -743,12 +1336,40 @@ def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult) -> str:
     header_fill = el.header_fill or v.stroke
     body_fill = el.fill or v.fill
     cr = th.corner_radius + 0.4
-    hh = min(el.header_h, r.h * 0.45)
+    lw = _variant_lw(v, th)
+    out = []
+    if _use_shadow(el.shadow, th):
+        out.append(_soft_shadow_svg(r, cr))
 
-    out = [
+    if el.header_style == "smallcaps":
+        # 顶会克制风：无色条 banner，改为 small-caps 标签 + 细灰分隔线
+        border = th.group_stroke if th.group_stroke != "none" else "#CCCCCC"
+        out.append(
+            f'<rect x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" height="{r.h:.3f}" '
+            f'rx="{cr}" fill="{body_fill}" stroke="{border}" stroke-width="{lw * 0.85:.3f}"/>')
+        if el.title:
+            label = el.title.upper()
+            pt = (el.title_size or th.size_caption) * fs * 0.95
+            ls = 0.45
+            w = measure_markup_mm(label, pt, bold=True) + max(len(label) - 1, 0) * ls
+            asc = line_ascent_mm(label, pt, bold=True)
+            # 标签靠左上，下方细灰线
+            lx = r.x + 2.5
+            baseline = r.y + 2.2 + asc
+            span = _TextSpan(x=lx, baseline=baseline, text=label, pt=pt, bold=True,
+                             color=header_fill, letter_spacing=ls, smallcaps=True)
+            res.text_spans.append(span)
+            out.append(span.to_svg())
+            ly = r.y + 2.2 + asc + 1.4
+            out.append(f'<line x1="{r.x + 2.0:.3f}" y1="{ly:.3f}" x2="{r.right - 2.0:.3f}" '
+                       f'y2="{ly:.3f}" stroke="{border}" stroke-width="0.18"/>')
+        return "".join(out)
+
+    hh = min(el.header_h, r.h * 0.45)
+    out += [
         # 面板体
         f'<rect x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" height="{r.h:.3f}" '
-        f'rx="{cr}" fill="{body_fill}" stroke="{header_fill}" stroke-width="{th.lw_box}"/>',
+        f'rx="{cr}" fill="{body_fill}" stroke="{header_fill}" stroke-width="{lw}"/>',
         # 标题条（仅上侧圆角）
         f'<path d="M {r.x + cr:.3f},{r.y:.3f} H {r.right - cr:.3f} '
         f'A {cr},{cr} 0 0 1 {r.right:.3f},{r.y + cr:.3f} V {r.y + hh:.3f} '
@@ -1000,4 +1621,387 @@ def _render_grid(spec: FigureSpec) -> str:
         out.append(f'<text x="0.4" y="{y + 2.0}" font-size="1.8" fill="#FF00AA" '
                    f'font-family="DejaVu Sans">{y}</text>')
     out.append("</g>")
+    return "".join(out)
+
+
+# ---------------------------------------------------------------- sketch (单色缩略图词汇表)
+
+def _render_sketch(el: SketchEl, th: Theme, fs: float, res: RenderResult) -> str:
+    color = el.color or el.stroke_color or th.arrow
+    stroke = el.stroke_color or color
+    seed = el.seed if el.seed is not None else _stable_seed(el.id, el.kind, el.rect.x, el.rect.y)
+    out = [_draw_sketch(el.kind, el.rect, color, stroke, seed, th)]
+    if el.label:
+        pt = max(th.size_caption * fs * 0.95, 5.5)
+        w = measure_markup_mm(el.label, pt)
+        span = _TextSpan(x=el.rect.cx - w / 2, baseline=el.rect.bottom - 0.4,
+                         text=el.label, pt=pt, bold=False, color=th.muted)
+        res.text_spans.append(span)
+        out.append(span.to_svg())
+    return "".join(out)
+
+
+def _draw_sketch(kind: str, r: Rect, color: str, stroke: str, seed: int, th: Theme) -> str:
+    rng = random.Random(seed)
+    pad = min(r.w, r.h) * 0.08
+    ir = Rect(r.x + pad, r.y + pad, r.w - 2 * pad, r.h - 2 * pad)
+    if ir.w <= 0.5 or ir.h <= 0.5:
+        return ""
+    fn = _SKETCH_DRAWERS.get(kind)
+    if fn is None:
+        raise ValueError(f"未知 sketch kind: {kind}")
+    return fn(ir, color, stroke, rng, th)
+
+
+def _sk_waveform(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    n_peaks = rng.randint(3, 5)
+    n = 28
+    pts = []
+    for i in range(n):
+        t = i / (n - 1)
+        x = r.x + t * r.w
+        # 多峰正弦叠加
+        y_n = 0.5
+        for k in range(n_peaks):
+            phase = k * 1.7 + 0.3
+            amp = 0.32 / (1 + 0.15 * k)
+            y_n += amp * math.sin(2 * math.pi * (n_peaks * 0.55) * t + phase)
+        y_n = max(0.08, min(0.92, y_n))
+        pts.append((x, r.y + (1 - y_n) * r.h))
+    d = "M " + " L ".join(f"{x:.3f},{y:.3f}" for x, y in pts)
+    return (f'<path d="{d}" fill="none" stroke="{stroke}" stroke-width="0.35" '
+            f'stroke-linecap="round" stroke-linejoin="round"/>')
+
+
+def _sk_bars(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    n = rng.randint(4, 6)
+    gap = r.w * 0.08
+    bw = (r.w - gap * (n - 1)) / n
+    heights = [0.35 + 0.55 * rng.random() for _ in range(n)]
+    out = []
+    for i, h in enumerate(heights):
+        x = r.x + i * (bw + gap)
+        bh = h * r.h
+        y = r.bottom - bh
+        out.append(f'<rect x="{x:.3f}" y="{y:.3f}" width="{bw:.3f}" height="{bh:.3f}" '
+                   f'rx="0.25" fill="{color}" fill-opacity="0.55" stroke="{stroke}" '
+                   f'stroke-width="0.18"/>')
+    return "".join(out)
+
+
+def _sk_heatmap(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    n = 5 if min(r.w, r.h) > 10 else 4
+    gw, gh = r.w / n, r.h / n
+    out = []
+    for i in range(n):
+        for j in range(n):
+            # 中心偏亮/偏暗的渐变 + 噪声
+            cx, cy = (i + 0.5) / n, (j + 0.5) / n
+            dist = math.hypot(cx - 0.5, cy - 0.45)
+            val = max(0.15, min(0.95, 0.85 - dist * 1.1 + rng.uniform(-0.12, 0.12)))
+            op = 0.15 + 0.75 * val
+            out.append(f'<rect x="{r.x + i * gw:.3f}" y="{r.y + j * gh:.3f}" '
+                       f'width="{gw - 0.15:.3f}" height="{gh - 0.15:.3f}" '
+                       f'fill="{color}" fill-opacity="{op:.3f}"/>')
+    out.append(f'<rect x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" height="{r.h:.3f}" '
+               f'fill="none" stroke="{stroke}" stroke-width="0.15" stroke-opacity="0.4"/>')
+    return "".join(out)
+
+
+def _sk_scatter(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    n_clusters = rng.randint(2, 3)
+    centers = [(0.28 + 0.22 * k, 0.35 + 0.2 * (k % 2)) for k in range(n_clusters)]
+    out = []
+    total = rng.randint(8, 12)
+    per = max(2, total // n_clusters)
+    for ci, (cxn, cyn) in enumerate(centers):
+        cx, cy = r.x + cxn * r.w, r.y + cyn * r.h
+        for _ in range(per):
+            px = cx + rng.gauss(0, r.w * 0.08)
+            py = cy + rng.gauss(0, r.h * 0.08)
+            px = max(r.x + 0.3, min(r.right - 0.3, px))
+            py = max(r.y + 0.3, min(r.bottom - 0.3, py))
+            op = 0.55 + 0.15 * (ci % 2)
+            out.append(f'<circle cx="{px:.3f}" cy="{py:.3f}" r="0.55" '
+                       f'fill="{color}" fill-opacity="{op:.2f}"/>')
+    return "".join(out)
+
+
+def _sk_axes(r: Rect, stroke: str) -> str:
+    return (f'<line x1="{r.x:.3f}" y1="{r.bottom:.3f}" x2="{r.right:.3f}" y2="{r.bottom:.3f}" '
+            f'stroke="{stroke}" stroke-width="0.18" stroke-opacity="0.55"/>'
+            f'<line x1="{r.x:.3f}" y1="{r.y:.3f}" x2="{r.x:.3f}" y2="{r.bottom:.3f}" '
+            f'stroke="{stroke}" stroke-width="0.18" stroke-opacity="0.55"/>')
+
+
+def _sk_curve(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    """上升收敛曲线。"""
+    out = [_sk_axes(r, stroke)]
+    n = 20
+    pts = []
+    for i in range(n):
+        t = i / (n - 1)
+        # 1 - exp(-kt) 上升收敛
+        y_n = 1 - math.exp(-3.2 * t)
+        y_n = max(0.05, min(0.92, y_n + rng.uniform(-0.02, 0.02) * (1 - t)))
+        pts.append((r.x + t * r.w, r.bottom - y_n * r.h))
+    d = "M " + " L ".join(f"{x:.3f},{y:.3f}" for x, y in pts)
+    out.append(f'<path d="{d}" fill="none" stroke="{stroke}" stroke-width="0.38" '
+               f'stroke-linecap="round" stroke-linejoin="round"/>')
+    return "".join(out)
+
+
+def _sk_curve_desc(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    """下降损失曲线。"""
+    out = [_sk_axes(r, stroke)]
+    n = 20
+    pts = []
+    for i in range(n):
+        t = i / (n - 1)
+        y_n = math.exp(-2.8 * t) * 0.85 + 0.08
+        y_n += rng.uniform(-0.025, 0.025) * math.exp(-t)
+        y_n = max(0.05, min(0.95, y_n))
+        pts.append((r.x + t * r.w, r.bottom - y_n * r.h))
+    d = "M " + " L ".join(f"{x:.3f},{y:.3f}" for x, y in pts)
+    out.append(f'<path d="{d}" fill="none" stroke="{stroke}" stroke-width="0.38" '
+               f'stroke-linecap="round" stroke-linejoin="round"/>')
+    return "".join(out)
+
+
+def _sk_grid(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    n = 4 if min(r.w, r.h) > 9 else 3
+    gw, gh = r.w / n, r.h / n
+    out = []
+    for i in range(n):
+        for j in range(n):
+            op = 0.25 + 0.45 * rng.random()
+            out.append(f'<rect x="{r.x + i * gw + 0.1:.3f}" y="{r.y + j * gh + 0.1:.3f}" '
+                       f'width="{gw - 0.25:.3f}" height="{gh - 0.25:.3f}" '
+                       f'fill="{color}" fill-opacity="{op:.2f}" stroke="{stroke}" '
+                       f'stroke-width="0.12" stroke-opacity="0.5"/>')
+    return "".join(out)
+
+
+def _sk_matrix(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    n = 4
+    gw, gh = r.w / n, r.h / n
+    out = [f'<rect x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" height="{r.h:.3f}" '
+           f'fill="none" stroke="{stroke}" stroke-width="0.2"/>']
+    for i in range(n):
+        for j in range(n):
+            # 对角线偏深
+            val = 0.25 + 0.55 * (1 - abs(i - j) / n) + rng.uniform(-0.08, 0.08)
+            val = max(0.12, min(0.95, val))
+            out.append(f'<rect x="{r.x + i * gw + 0.12:.3f}" y="{r.y + j * gh + 0.12:.3f}" '
+                       f'width="{gw - 0.28:.3f}" height="{gh - 0.28:.3f}" '
+                       f'fill="{color}" fill-opacity="{val:.2f}"/>')
+    return "".join(out)
+
+
+def _sk_tree(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    """3 层二叉树，叶节点小彩点。"""
+    leaf_colors = ["#5B8DB8", "#E05555", "#E69F00", "#009E73", "#6A5ACD", "#90A4AE"]
+    # 节点：root + 2 + 4
+    levels = [
+        [(0.5, 0.12)],
+        [(0.28, 0.48), (0.72, 0.48)],
+        [(0.14, 0.88), (0.38, 0.88), (0.62, 0.88), (0.86, 0.88)],
+    ]
+    nodes = [[(r.x + xn * r.w, r.y + yn * r.h) for xn, yn in lvl] for lvl in levels]
+    out = []
+    for li, layer in enumerate(nodes[:-1]):
+        for i, (x, y) in enumerate(layer):
+            for child in nodes[li + 1][i * 2: i * 2 + 2]:
+                out.append(f'<line x1="{x:.3f}" y1="{y:.3f}" x2="{child[0]:.3f}" y2="{child[1]:.3f}" '
+                           f'stroke="{stroke}" stroke-width="0.22"/>')
+    for li, layer in enumerate(nodes):
+        for i, (x, y) in enumerate(layer):
+            if li == 2:
+                c = leaf_colors[i % len(leaf_colors)]
+                out.append(f'<circle cx="{x:.3f}" cy="{y:.3f}" r="0.9" fill="{c}"/>')
+            else:
+                out.append(f'<circle cx="{x:.3f}" cy="{y:.3f}" r="0.75" fill="#FFFFFF" '
+                           f'stroke="{stroke}" stroke-width="0.25"/>')
+    return "".join(out)
+
+
+def _sk_distribution(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    """钟形分布（折线）+ 可选条形。"""
+    out = [_sk_axes(r, stroke)]
+    n = 16
+    pts = []
+    for i in range(n):
+        t = i / (n - 1)
+        # 高斯钟形
+        y_n = math.exp(-0.5 * ((t - 0.5) / 0.18) ** 2)
+        pts.append((r.x + t * r.w, r.bottom - y_n * r.h * 0.92))
+    d = "M " + " L ".join(f"{x:.3f},{y:.3f}" for x, y in pts)
+    # 填充阴影
+    fill_d = d + f" L {r.right:.3f},{r.bottom:.3f} L {r.x:.3f},{r.bottom:.3f} Z"
+    out.append(f'<path d="{fill_d}" fill="{color}" fill-opacity="0.18" stroke="none"/>')
+    out.append(f'<path d="{d}" fill="none" stroke="{stroke}" stroke-width="0.35" '
+               f'stroke-linejoin="round"/>')
+    return "".join(out)
+
+
+def _sk_spectrum(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    n = rng.randint(6, 10)
+    gap = r.w * 0.04
+    bw = (r.w - gap * (n - 1)) / n
+    out = []
+    for i in range(n):
+        # 频谱：中间偏高
+        t = i / max(n - 1, 1)
+        h = 0.25 + 0.7 * math.exp(-0.5 * ((t - 0.4) / 0.25) ** 2) + rng.uniform(-0.08, 0.08)
+        h = max(0.12, min(0.95, h))
+        bh = h * r.h
+        x = r.x + i * (bw + gap)
+        out.append(f'<rect x="{x:.3f}" y="{r.bottom - bh:.3f}" width="{bw:.3f}" height="{bh:.3f}" '
+                   f'fill="{color}" fill-opacity="0.65" stroke="{stroke}" stroke-width="0.12"/>')
+    return "".join(out)
+
+
+def _sk_layers(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    n = rng.randint(2, 3)
+    gap = r.h * 0.18
+    lh = (r.h - gap * (n - 1)) / n
+    out = []
+    for i in range(n):
+        y = r.y + i * (lh + gap)
+        # 略微错位宽度，示意堆叠
+        inset = i * r.w * 0.04
+        out.append(f'<rect x="{r.x + inset:.3f}" y="{y:.3f}" width="{r.w - 2 * inset:.3f}" '
+                   f'height="{lh:.3f}" rx="0.4" fill="{color}" fill-opacity="{0.2 + 0.15 * i:.2f}" '
+                   f'stroke="{stroke}" stroke-width="0.25"/>')
+    return "".join(out)
+
+
+def _sk_nested(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    out = []
+    for i in range(3):
+        inset = i * min(r.w, r.h) * 0.16
+        out.append(f'<rect x="{r.x + inset:.3f}" y="{r.y + inset:.3f}" '
+                   f'width="{r.w - 2 * inset:.3f}" height="{r.h - 2 * inset:.3f}" '
+                   f'rx="0.5" fill="none" stroke="{stroke}" stroke-width="0.28" '
+                   f'stroke-opacity="{0.9 - i * 0.2:.2f}"/>')
+    return "".join(out)
+
+
+def _sk_dots_flow(r: Rect, color: str, stroke: str, rng: random.Random, th: Theme) -> str:
+    """宽点云 → 收敛线 → 窄列（压缩漏斗）。"""
+    out = []
+    # 左侧宽点云
+    for _ in range(14):
+        px = r.x + rng.uniform(0.02, 0.32) * r.w
+        py = r.y + rng.uniform(0.08, 0.92) * r.h
+        out.append(f'<circle cx="{px:.3f}" cy="{py:.3f}" r="0.45" '
+                   f'fill="{color}" fill-opacity="0.55"/>')
+    # 收敛线
+    mid_x = r.x + 0.55 * r.w
+    out.append(f'<line x1="{r.x + 0.32 * r.w:.3f}" y1="{r.y + 0.15 * r.h:.3f}" '
+               f'x2="{mid_x:.3f}" y2="{r.cy:.3f}" stroke="{stroke}" stroke-width="0.22"/>')
+    out.append(f'<line x1="{r.x + 0.32 * r.w:.3f}" y1="{r.y + 0.85 * r.h:.3f}" '
+               f'x2="{mid_x:.3f}" y2="{r.cy:.3f}" stroke="{stroke}" stroke-width="0.22"/>')
+    # 右侧窄列 tokens
+    n = 4
+    tw, th_ = r.w * 0.12, r.h * 0.14
+    for i in range(n):
+        x = r.x + 0.72 * r.w
+        y = r.y + (i + 0.5) * (r.h / n) - th_ / 2
+        out.append(f'<rect x="{x:.3f}" y="{y:.3f}" width="{tw:.3f}" height="{th_:.3f}" '
+                   f'rx="0.3" fill="{color}" fill-opacity="0.45" stroke="{stroke}" '
+                   f'stroke-width="0.15"/>')
+    return "".join(out)
+
+
+_SKETCH_DRAWERS = {
+    "waveform": _sk_waveform,
+    "bars": _sk_bars,
+    "heatmap": _sk_heatmap,
+    "scatter": _sk_scatter,
+    "curve": _sk_curve,
+    "curve_desc": _sk_curve_desc,
+    "grid": _sk_grid,
+    "matrix": _sk_matrix,
+    "tree": _sk_tree,
+    "distribution": _sk_distribution,
+    "spectrum": _sk_spectrum,
+    "layers": _sk_layers,
+    "nested": _sk_nested,
+    "dots_flow": _sk_dots_flow,
+}
+
+
+# ---------------------------------------------------------------- legend
+
+def _render_legend(el: LegendEl, th: Theme, fs: float, res: RenderResult) -> str:
+    pt = el.size * fs
+    cols = max(1, el.columns)
+    items = el.items
+    rows = math.ceil(len(items) / cols)
+    sw = 3.2          # swatch 宽 mm
+    sh = 2.2          # swatch 高 mm
+    gap_x = 2.0
+    gap_y = 1.6
+    text_gap = 1.2
+    pad = 2.0
+
+    # 预计算每列最大文字宽
+    col_text_w = [0.0] * cols
+    for i, it in enumerate(items):
+        c = i % cols
+        col_text_w[c] = max(col_text_w[c], measure_markup_mm(it.label, pt))
+
+    col_w = [sw + text_gap + tw for tw in col_text_w]
+    total_w = sum(col_w) + gap_x * (cols - 1) + 2 * pad
+    total_h = rows * max(sh, pt * PT_TO_MM * LINE_HEIGHT) + gap_y * (rows - 1) + 2 * pad
+
+    x0, y0 = el.at
+    out = []
+    fill = el.fill or "#FAFAFA"
+    stroke = el.stroke or th.group_stroke
+    if el.frame:
+        out.append(f'<rect x="{x0:.3f}" y="{y0:.3f}" width="{total_w:.3f}" height="{total_h:.3f}" '
+                   f'rx="1.2" fill="{fill}" stroke="{stroke}" stroke-width="0.2"/>')
+
+    row_h = max(sh, pt * PT_TO_MM * LINE_HEIGHT)
+    for i, it in enumerate(items):
+        c = i % cols
+        row = i // cols
+        cx = x0 + pad + sum(col_w[:c]) + gap_x * c
+        cy = y0 + pad + row * (row_h + gap_y)
+        # swatch
+        sx, sy = cx, cy + (row_h - sh) / 2
+        if it.swatch == "box":
+            out.append(f'<rect x="{sx:.3f}" y="{sy:.3f}" width="{sw:.3f}" height="{sh:.3f}" '
+                       f'rx="0.35" fill="{it.color}" stroke="{it.color}" stroke-width="0.15"/>')
+        elif it.swatch == "line":
+            mid = sy + sh / 2
+            out.append(f'<line x1="{sx:.3f}" y1="{mid:.3f}" x2="{sx + sw:.3f}" y2="{mid:.3f}" '
+                       f'stroke="{it.color}" stroke-width="0.45" stroke-linecap="round"/>')
+        elif it.swatch == "dashed":
+            mid = sy + sh / 2
+            out.append(f'<line x1="{sx:.3f}" y1="{mid:.3f}" x2="{sx + sw:.3f}" y2="{mid:.3f}" '
+                       f'stroke="{it.color}" stroke-width="0.45" stroke-dasharray="0.9,0.6" '
+                       f'stroke-linecap="round"/>')
+        elif it.swatch == "arrow":
+            mid = sy + sh / 2
+            out.append(f'<line x1="{sx:.3f}" y1="{mid:.3f}" x2="{sx + sw - 0.6:.3f}" y2="{mid:.3f}" '
+                       f'stroke="{it.color}" stroke-width="0.4" stroke-linecap="round"/>')
+            out.append(f'<polygon points="{sx + sw:.3f},{mid:.3f} {sx + sw - 1.1:.3f},{mid - 0.7:.3f} '
+                       f'{sx + sw - 1.1:.3f},{mid + 0.7:.3f}" fill="{it.color}"/>')
+        else:  # dot
+            out.append(f'<circle cx="{sx + sw / 2:.3f}" cy="{sy + sh / 2:.3f}" r="0.9" '
+                       f'fill="{it.color}"/>')
+        # label
+        tx = cx + sw + text_gap
+        asc = line_ascent_mm(it.label or "x", pt)
+        span = _TextSpan(x=tx, baseline=cy + row_h / 2 + asc / 2 - 0.25,
+                         text=it.label, pt=pt, bold=False, color=th.ink)
+        res.text_spans.append(span)
+        out.append(span.to_svg())
+
+    # 记录包围盒供 lint
+    res.node_rects[el.id] = Rect(x0, y0, total_w, total_h)
+    res.node_visual_rects[el.id] = res.node_rects[el.id]
     return "".join(out)

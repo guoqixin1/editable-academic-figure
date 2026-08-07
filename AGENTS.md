@@ -17,6 +17,7 @@
 3. **文字/公式/数字走代码**（`box`/`text`/`tokens`），**AI 素材只画"物件"**（设备/器官/文档/机器人），且 prompt 禁止文字。
 4. **改完必须验证**：每次改 `spec` 后跑 `render`、**读输出的体检（lint）**、**读渲染出的 PNG**（多模态目检）。E 级必须清零。
 5. **小步快跑**：一次改一处、渲染、看图，再改下一处。迭代预览用低 DPI（150–220，<1s）。
+6. **新图默认顶会风**：从零作图用 `topconf` + 四层分解 + 信息密度 checklist（见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)）；用户说太素时走 §3「图太朴素」升级配方。
 
 ---
 
@@ -33,46 +34,51 @@
 
 ## 2. 字段速查（完整）
 
-### figure / theme / assets
+### figure / theme / assets / assets_style
 
 ```yaml
 figure: {width, height, dpi: 600, background: "#FFFFFF", font_scale: 1.0, assets_dir: assets}
-theme: sci            # 简写；或 {preset: sci|warm|mono, ink, muted, arrow, ...任意字段覆盖}
+theme: topconf        # 简写；或 {preset: topconf|airy|sci|warm|mono, palette: {...}, ink, ...}
+assets_style: "clean isometric scientific icons, uniform 2px charcoal outline"  # 可选，图级素材风格包
 assets:               # 声明要 AI 生成的物件（抽卡对象）
   - {id, prompt, aspect: "1:1", candidates: 3, shadow: keep|remove}
 ```
 
-- `theme.preset`：`sci`(蓝绿橙红，AI/ML) | `mono`(灰阶，体系结构/黑白投稿) | `warm`(橙棕，工程系统)。
-- `variant`（用在 box/panel/tokens 上区分模块）：`primary secondary accent highlight plain dark`。
+- **新图默认** `theme.preset: topconf`（白底+色边框）；现代 ML/RL 示意用 `airy`。旧稿可继续 `sci`/`warm`/`mono`。
+- `theme.palette`：8-role 覆盖，如 `{primary: "#00897B", secondary: "#FFB300", section_bg: "#ECEFF1"}`。
+- `variant`（box/panel/tokens）：`primary secondary tertiary accent highlight plain dark muted`。语义：primary=核心贡献，secondary=次要，muted/plain=常规。
+- `assets_style`：顶层英文插画语言，抽卡时与 theme 色板一并注入（跨素材风格锁）。
 
 ### elements（`type` 区分）
 
 | type | 关键字段（默认值） | 用途 |
 | --- | --- | --- |
-| `box` | `id, rect, title, body, variant(primary), shape(rect), icon, icon_h(10), title_size, body_size, align(center), valign(middle), gradient, gradient_dir(h), fill, stroke, text_color, stack(0)` | 带文字的节点 / 容器卡 |
+| `box` | `id, rect, title, body, variant(primary), shape(rect), icon, icon_h(10), title_size, body_size, align(center), valign(middle), gradient, gradient_dir(h), fill, stroke, text_color, stack(0), shadow, accent(left\|top), header_fill(false), sketch` | 带文字的节点 / 容器卡 |
 | `asset` | `id, rect, src, caption, halign(center), valign(middle), frame(false), placeholder(false)` | 独立素材图 + 图注 |
-| `panel` | `id, rect, title, variant(primary), header_fill, fill, title_size, header_h(7)` | 带色条标题的分区容器 |
+| `panel` | `id, rect, title, variant(primary), header_fill, fill, title_size, header_h(7), header_style(banner\|smallcaps), shadow` | 分区容器；顶会风用 smallcaps |
+| `sketch` | `id, rect, kind(waveform\|…), color, stroke_color, label, seed` | 单色缩略图（信息密度核心） |
+| `legend` | `id, at, items[{swatch,color,label}], columns(1), frame(true), fill, stroke, size(6)` | 自动排版图例 |
 | `tokens` | `id, rect, n(8), direction(h), variant(secondary), colors, gap(0.7), sizes, label` | token 序列 / 特征图条组 |
 | `marker` | `id, at, icon(fire), size(5), color` | 矢量角标（图标见下） |
-| `network` | `id, rect, layers([3,4,3]), variant, node_fill, color, direction(v)` | 迷你 MLP（DDPG/Actor 网络示意） |
-| `scatter` | `id, rect, clusters[{at,rx,ry,rot,n,color}], seed(42), dot_r(0.5), outline(dashed)` | 聚类散点（嵌入空间示意，seed 可复现） |
-| `badge` | `id, at, text("1"), size(5), color, text_color(#FFF)` | 编号圆点（步骤 ❶❷❸） |
-| `arrow` | `from, to, route(auto), style(solid), label, color, head(arrow), bidir(false), label_offset(1.4), via([]), width, fill, bend(0.25)` | 连线 |
-| `group` | `id, members[] 或 rect, label, pad(2.5), style(dashed), fill, color, label_pos(top), label_size, lw` | 分组框 / 彩色虚线分区 |
-| `text` | `id, at, text, size(7), bold(false), italic(false), color, anchor(middle), max_w, rotate(0)` | 自由文字（可斜体/旋转） |
+| `network` | `id, rect, layers([3,4,3]), variant, node_fill, color, direction(v)` | 迷你 MLP |
+| `scatter` | `id, rect, clusters[{at,rx,ry,rot,n,color}], seed(42), dot_r(0.5), outline(dashed)` | 聚类散点 |
+| `badge` | `id, at, text("1"), size(5), color, text_color(#FFF)` | 编号圆点 |
+| `arrow` | `from, to, route(auto), style(solid\|dashed\|dotted\|block), label, color, head(arrow), bidir(false), label_offset(1.4), via([]), width, fill, bend(0.25), weight(normal), label_bg(true)` | 连线 |
+| `group` | `id, members[] 或 rect, label, pad(2.5), style(dashed), fill, color, label_pos(top), label_size, lw, hatch(false), shadow` | 分组框 / 分区底 |
+| `text` | `id, at, text, size(7), bold(false), italic(false), color, anchor(middle), max_w, rotate(0), smallcaps(false)` | 自由文字 |
 | `panel_label` | `id, at, text` | a/b/c 面板号（自动加粗） |
 
 - **box.shape**：`rect stadium diamond cylinder parallelogram hexagon ellipse trapezoid`。
-- **box.gradient**：`[c1, c2]` 两色线性渐变，覆盖 variant 底色；`gradient_dir: h|v`。
-- **box.fill/stroke/text_color**：直接指定颜色（画"渐变色系列"逐盒指定）；**box.stack**：背后叠影层数（层叠卡片）；**box.valign: top**：标题贴顶（box 当容器/子卡，内部再放元素）。
-- **marker.icon**：`fire snow lock check cross oplus(⊕拼接) otimes(⊗) wifi(无线)`。
-- **arrow.route**：`auto`(按锚点边智能选，多条同向自动并总线) `straight hv vh z zv arc(弧线，配 bend)`。
-- **arrow.via**：`[[x,y],...]` 途经点，走「起→途经→终」，用于绕开盒子（残差/skip）。
-- **arrow.width**：线宽 mm；**arrow.style: block**：多边形粗箭头（`fill` 白=空心，同 `color`=实心彩色）。
-- **tokens.colors**：逐格颜色循环（画掩码：`["#111","#DDD",...]`）。**tokens.sizes**：逐格交叉轴 mm（画特征金字塔，居中）。
-- **text.rotate: -90**：竖排文字（窄条轴标注）；**text.italic**：斜体（Obs/Action 流程标注惯例）。
-- **group 可作箭头锚点**（框对框连线，如分区→分区的主流程）。
-- **文字记号**：`title/body/text/label/caption` 均支持 `_{...}` 下标、`^{...}` 上标（`E_{s}`、`ℝ^{(B V) H W C}`）。
+- **box.sketch**：内嵌缩略图 kind（`waveform bars heatmap scatter curve curve_desc grid matrix tree distribution spectrum layers nested dots_flow`）。
+- **box.accent**：`left`/`top` 色条；**box.header_fill**：标题区浅底；**box.shadow**：soft shadow（`null` 跟随 theme）。
+- **box.gradient**：`[c1, c2]`；**box.stack**：叠影片数；**box.valign: top**：容器卡标题贴顶。
+- **panel.header_style**：`banner`（色条）\| `smallcaps`（顶会克制：大写标签+灰线）。
+- **legend.swatch**：`box | line | dashed | arrow | dot`。
+- **marker.icon**：`fire snow lock check cross oplus otimes wifi`。
+- **arrow.route**：`auto straight hv vh z zv arc`；**arrow.weight**：`thin|normal|heavy`；**arrow.style** 含 `dotted`；**arrow.label_bg**：标签胶囊底。
+- **group.fill / hatch / shadow**：分区浅底、斜线底纹、投影。
+- **text.smallcaps**：大写+字距；**text.rotate: -90**：竖排。
+- **文字记号**：`_{...}` / `^{...}`（值须加引号）。
 
 ---
 
@@ -92,7 +98,10 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 | **加残差 / skip 连接** | `arrow` 用 `via` 走侧边：`from: mha.left, to: an.left, via: [[侧边x, y1], [侧边x, y2]], style: dashed, label: 残差`。 |
 | **换形状** | 改 `box.shape`（数据库→`cylinder`、采样块→`trapezoid`、判定→`diamond` 并给足尺寸）。 |
 | **融合/跨模态模块要渐变** | 给该 `box` 加 `gradient: [c1, c2]`（两端模态色）。 |
-| **换配色 / 主题** | 局部：改元素 `variant`；全局：改 `theme.preset` 或覆盖 `theme.ink/arrow/...`。 |
+| **换配色 / 主题** | 局部：改元素 `variant`；全局：改 `theme.preset` 或 `theme.palette`（如 Teal+Amber）。 |
+| **图太朴素 / 太素 / 像 PPT** | **升级配方（按序做，每步重渲）**：① `theme: {preset: topconf}`（或 airy）；② 每个空心 box 补 `body`/`sketch`/`icon`；③ 加 `panel`（`header_style: smallcaps` + 浅 `fill`）或 `group`+`fill`；④ ≥2 语义色加 `legend`；⑤ 核心卡 `shadow: true` + `accent: left`；⑥ 主箭头 `weight: heavy` 并补 `label`。详见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)。 |
+| **加单色缩略图** | box 内：`sketch: heatmap`（或 waveform/curve/…）+ `valign: top`；独立：`type: sketch`。 |
+| **加图例** | `- {type: legend, id: lg, at: [x,y], items: [{swatch: box, color: "#0072B2", label: "encoder"}, …]}`。 |
 | **字太小 / 太大** | 改该元素 `title_size/body_size/size`；整体缩放改 `figure.font_scale`。 |
 | **加 🔥可训练 / ❄冻结 标注** | `- {type: marker, at: [盒子右上x, y], icon: fire\|snow, size: 4.5}`。 |
 | **画 token / query 序列** | `- {type: tokens, id, rect, n: 7, label: "Z_{s}"}`；掩码加 `colors`，特征金字塔加 `sizes`。 |
@@ -141,8 +150,11 @@ python -m scifig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {proj}
 | `uneven-gap` | W | 同排/列节点**中心间距几乎相等却差一点** → 微调相邻坐标成等距（按中心距算，宽度不一也不误报） |
 | `asset-tiny` | W | 加大槽位或裁素材空白 |
 | `canvas-sparse`/`canvas-crowded` | W | 调 `figure` 尺寸贴合内容 |
+| `R-empty-box` | W | 给 box 加 `body`/`sketch`/`icon`，或把子元素放进容器卡 |
+| `R-no-section` | W | 加 `panel`（smallcaps）或带 `fill` 的 `group` |
+| `R-no-legend` | W | 加 `legend`，或把次要色改回 `muted`/`plain` |
 
-`render --strict`：有 E 级时返回非零（`asset-placeholder` 不触发），可接 CI。
+`render --strict`：有 E 级时返回非零（`asset-placeholder` 与 `R-*` 不触发），可接 CI。
 
 ---
 
@@ -176,7 +188,8 @@ studio 说明：你（AI）改图仍然直接编辑 YAML + `render` 验证；stu
 
 ## 7. 更多
 
-- **从零作图的分阶段流程**（需求拆解→占位布局→抽卡→评审→交付）：[`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)
+- **从零作图的分阶段流程**（Brief 优化→需求拆解→占位布局→抽卡→评审→交付）：[`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)
+- **需求 → Figure Brief 优化模板**（Phase 0.5，从零作图/复现论文图必做）：[`prompts/FIGURE_BRIEF.md`](prompts/FIGURE_BRIEF.md)
 - **视觉评审 rubric**（机检 + 目检清单）：[`prompts/visual_rubric.md`](prompts/visual_rubric.md)
 - **人类使用手册**（教程 + 配方 + 经验）：[`USAGE.md`](USAGE.md)
 - **可运行范例**：`examples/`（`paper_style/`、`unet_lora/` 最接近真实论文图，改图时可对照借鉴写法）

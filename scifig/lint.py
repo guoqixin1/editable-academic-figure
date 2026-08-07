@@ -15,17 +15,47 @@
     - 节点重叠
     - 素材实际显示尺寸过小（槽位浪费）
     - 画布利用率过低 / 元素过挤
+    - 视觉丰度（R-*）：空盒子 / 无分区底 / 多色无图例
+    - 箭头体检：末段不垂直进入（arrow-approach）/ 端点悬空或压入（arrow-gap）
+    - 箭头标签盖住尖端（arrow-label-tip）/ 压到其他文字（arrow-label-over-text）
 """
 
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
 
-from .render import RenderResult
-from .spec import ArrowEl, AssetEl, BoxEl, FigureSpec, Rect
+from .render import RenderResult, visual_rect_for
+from .spec import (
+    ArrowEl, AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl, LegendEl,
+    MarkerEl, NetworkEl, PanelEl, Rect, ScatterEl, SketchEl, TextEl, TokensEl,
+    parse_anchor,
+)
+
+# 箭头体检容差（mm）
+_ARROW_GAP_FLOAT = 0.8       # 悬空超过此值 → W
+_ARROW_GAP_PENETRATE = 0.5   # 深入视觉边界内部超过此值 → W
+# 末段与锚定边法向夹角 >15° → arrow-approach（cos(15°)≈0.9659）
+_ARROW_APPROACH_MAX_DEG = 15.0
+_ARROW_APPROACH_MIN_COS = math.cos(math.radians(_ARROW_APPROACH_MAX_DEG))
 
 MIN_FONT_PT = 5.5   # 180mm 图按 1:1 排版时的裸下限
 IDEAL_MIN_FONT_PT = 6.0
+
+# 视觉丰度阈值
+_RICHNESS_MIN_ELEMENTS = 8          # ≥ 此数才检查分区底
+_RICHNESS_MIN_SEMANTIC_COLORS = 3   # ≥ 此数非 muted 色需 legend
+_EMPTY_BOX_TITLE_EXEMPT_LEN = 18    # 长标题容器卡（含公式）豁免空盒检查
+_EMPTY_BOX_AREA_EXEMPT = 300.0      # mm²；小标签条 / 单行操作盒不要求塞子内容
+_MUTED_VARIANTS = frozenset({"muted", "plain"})
+_NEUTRAL_HEX = frozenset({
+    "#FFFFFF", "#FFF", "#FAFAFA", "#F7F7F7", "#F5F5F5", "#FBFCFE",
+    "#EEEEEE", "#E0E0E0", "#CCCCCC", "#BDBDBD", "#B5B5B5", "#999999",
+    "#888888", "#8492A6", "#757575", "#666666", "#4D4D4D", "#333333",
+    "#263238", "#2A2A2A", "#000000", "#000", "#111111", "#1F2933",
+    "#52606D", "#718096", "#A0AEC0", "#CBD5E0", "#EDF2F7", "#F7FAFC",
+})
 
 
 @dataclass
@@ -56,9 +86,12 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues += _check_font_sizes(res)
     issues += _check_node_overlap(spec, res)
     issues += _check_arrow_crossings(spec, res)
+    issues += _check_arrow_geometry(spec, res)
+    issues += _check_arrow_label_occlusion(spec, res)
     issues += _check_asset_scale(res)
     issues += _check_density(spec, res)
     issues += _check_alignment(spec, res)
+    issues += _check_visual_richness(spec, res)
     return issues
 
 
@@ -179,6 +212,148 @@ def _segment_hits_rect(x1: float, y1: float, x2: float, y2: float, r: Rect) -> b
         if t0 > t1:
             return False
     return True
+
+
+def _visual_rect_of(spec: FigureSpec, res: RenderResult, nid: str) -> Rect | None:
+    if nid in res.node_visual_rects:
+        return res.node_visual_rects[nid]
+    el = spec.find(nid)
+    if el is not None and hasattr(el, "rect") and el.rect is not None:
+        return visual_rect_for(el)
+    return res.node_rects.get(nid)
+
+
+def _signed_gap_to_side(x: float, y: float, r: Rect, side: str) -> float:
+    """端点相对视觉边的有符号距离：>0 在外侧（悬空），<0 在内侧（压入）。"""
+    if side == "left":
+        return r.x - x
+    if side == "right":
+        return x - r.right
+    if side == "top":
+        return r.y - y
+    if side == "bottom":
+        return y - r.bottom
+    # center / free：到矩形的外距（在内为负）
+    if r.x <= x <= r.right and r.y <= y <= r.bottom:
+        return -min(x - r.x, r.right - x, y - r.y, r.bottom - y)
+    dx = max(r.x - x, 0.0, x - r.right)
+    dy = max(r.y - y, 0.0, y - r.bottom)
+    return math.hypot(dx, dy)
+
+
+def _side_normal(side: str) -> tuple[float, float]:
+    """锚定边外法向（与 render._side_outward 一致）。"""
+    return {
+        "left": (-1.0, 0.0), "right": (1.0, 0.0),
+        "top": (0.0, -1.0), "bottom": (0.0, 1.0),
+    }.get(side, (0.0, 0.0))
+
+
+def _end_approach_ok(pts: list[tuple[float, float]], side: str) -> bool:
+    """末段方向与锚定边法向夹角是否 ≤15°（斜线末段必报）。"""
+    if side not in ("left", "right", "top", "bottom") or len(pts) < 2:
+        return True
+    (x1, y1), (x2, y2) = pts[-2], pts[-1]
+    dx, dy = x2 - x1, y2 - y1
+    L = math.hypot(dx, dy)
+    if L < 1e-9:
+        return False
+    ux, uy = dx / L, dy / L
+    nx, ny = _side_normal(side)
+    # |dir · normal| = cos(夹角)；夹角 >15° → 不通过
+    return abs(ux * nx + uy * ny) >= _ARROW_APPROACH_MIN_COS - 1e-9
+
+
+def _check_arrow_geometry(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """箭头垂直进入 / 端点悬空或压入（W 级；含 straight 与显式 via）。"""
+    issues: list[Issue] = []
+    arrows = {el.id: el for el in spec.elements if isinstance(el, ArrowEl)}
+    side_by_id = {aid: (s1, s2) for aid, s1, s2 in getattr(res, "arrow_ends", [])}
+
+    for aid, pts in res.arrow_segments:
+        el = arrows.get(aid)
+        if el is None or len(pts) < 2:
+            continue
+        s1, s2 = side_by_id.get(aid, ("free", "free"))
+
+        # 贴齐接触（stack 外缘贴邻盒）时杆可能退化，不做 approach 检查
+        flush = False
+        if s1 in ("left", "right") and s2 in ("left", "right"):
+            flush = abs(pts[0][0] - pts[-1][0]) < 0.5
+        elif s1 in ("top", "bottom") and s2 in ("top", "bottom"):
+            flush = abs(pts[0][1] - pts[-1][1]) < 0.5
+
+        # arrow-approach：末段（及双向起点）相对锚定边；straight 也检测
+        if not flush and not _end_approach_ok(pts, s2):
+            issues.append(Issue(
+                "W", "arrow-approach",
+                f"箭头 '{aid}' 末段未垂直进入锚定边 {s2}（route={el.route}"
+                f"{', via' if el.via else ''}）",
+            ))
+        if not flush and el.bidir and s1 in ("left", "right", "top", "bottom"):
+            rev = list(reversed(pts))
+            if not _end_approach_ok(rev, s1):
+                issues.append(Issue(
+                    "W", "arrow-approach",
+                    f"箭头 '{aid}' 首段未垂直离开锚定边 {s1}",
+                ))
+
+        # arrow-gap：检查锚定到节点的端点（与渲染共用 res.arrow_segments 最终折线）
+        for ep, side, tip in ((el.to, s2, pts[-1]), (el.from_, s1, pts[0])):
+            if not isinstance(ep, str) or side in ("free", "center"):
+                continue
+            nid = parse_anchor(ep)[0]
+            vr = _visual_rect_of(spec, res, nid)
+            if vr is None:
+                continue
+            gap = _signed_gap_to_side(tip[0], tip[1], vr, side)
+            if gap > _ARROW_GAP_FLOAT:
+                issues.append(Issue(
+                    "W", "arrow-gap",
+                    f"箭头 '{aid}' 端点悬空 {gap:.2f}mm（>{_ARROW_GAP_FLOAT}mm），"
+                    f"未触及 '{nid}' 的 {side} 视觉边",
+                ))
+            elif gap < -_ARROW_GAP_PENETRATE:
+                issues.append(Issue(
+                    "W", "arrow-gap",
+                    f"箭头 '{aid}' 端点压入 '{nid}' 视觉边界 "
+                    f"{-gap:.2f}mm（>{_ARROW_GAP_PENETRATE}mm）",
+                ))
+
+    return issues
+
+
+def _check_arrow_label_occlusion(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """箭头标签胶囊盖住尖端 / 压到其他元素文字（W 级）。"""
+    issues: list[Issue] = []
+    tip_by_id = {aid: pts[-1] for aid, pts in res.arrow_segments if len(pts) >= 2}
+    label_texts = {lbl for _, _, lbl in getattr(res, "arrow_label_boxes", [])}
+
+    for aid, cap, label in getattr(res, "arrow_label_boxes", []):
+        tip = tip_by_id.get(aid)
+        if tip is not None:
+            if (cap.x - 0.05 <= tip[0] <= cap.right + 0.05
+                    and cap.y - 0.05 <= tip[1] <= cap.bottom + 0.05):
+                issues.append(Issue(
+                    "W", "arrow-label-tip",
+                    f"箭头 '{aid}' 标签 “{label[:16]}” 胶囊盖住尖端，"
+                    f"会造成悬空/断头错觉",
+                ))
+        # 与其他文字重叠（不含自身标签）
+        for s in res.text_spans:
+            if not s.text.strip() or s.text == label:
+                continue
+            if s.text in label_texts and s.text == label:
+                continue
+            bb = s.bbox()
+            inter = cap.intersection_area(bb)
+            if inter > 0.35 * min(cap.w * cap.h, bb.w * bb.h):
+                issues.append(Issue(
+                    "W", "arrow-label-over-text",
+                    f"箭头 '{aid}' 标签 “{label[:14]}” 压到文字 “{s.text[:14]}”",
+                ))
+                break
+    return issues
 
 
 def _check_asset_scale(res: RenderResult) -> list[Issue]:
@@ -323,4 +498,126 @@ def _check_density(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     if node_area / canvas_area > 0.82:
         issues.append(Issue("W", "canvas-crowded",
                             f"节点面积占画布 {node_area / canvas_area:.0%}，画面偏挤，考虑加大画布"))
+    return issues
+
+
+def _strip_markup(s: str) -> str:
+    """去掉 _{...} / ^{...} 标记后估标题可见长度。"""
+    return re.sub(r"[_^]\{([^{}]*)\}", r"\1", s or "")
+
+
+def _point_in_rect(x: float, y: float, r: Rect, tol: float = 0.3) -> bool:
+    return (r.x - tol <= x <= r.right + tol) and (r.y - tol <= y <= r.bottom + tol)
+
+
+def _box_has_inner_content(spec: FigureSpec, box: BoxEl) -> bool:
+    """box 内是否落有子元素（容器卡豁免空盒检查）。"""
+    for el in spec.elements:
+        if el is box:
+            continue
+        if isinstance(el, (BoxEl, AssetEl, TokensEl, NetworkEl, ScatterEl, SketchEl)):
+            if el.rect is not None and _contains(box.rect, el.rect):
+                return True
+        elif isinstance(el, (MarkerEl, BadgeEl, TextEl)):
+            if _point_in_rect(el.at[0], el.at[1], box.rect):
+                return True
+    return False
+
+
+def _is_filled_section(el: GroupEl) -> bool:
+    """group 是否提供分区底色（显式 fill，或非 none）。"""
+    if el.fill is None:
+        return False
+    return str(el.fill).strip().lower() not in ("", "none", "transparent")
+
+
+def _norm_hex(c: str | None) -> str | None:
+    if not c or not isinstance(c, str):
+        return None
+    s = c.strip()
+    if not s.startswith("#"):
+        return None
+    return s.upper() if len(s) > 4 else s.upper()
+
+
+def _is_semantic_color(c: str | None) -> bool:
+    h = _norm_hex(c)
+    if not h:
+        return False
+    return h not in _NEUTRAL_HEX
+
+
+def _semantic_color_keys(spec: FigureSpec) -> set[str]:
+    """统计非 muted 的 variant 名 + box/panel 上的自定义语义色。"""
+    keys: set[str] = set()
+    for el in spec.elements:
+        if isinstance(el, (BoxEl, PanelEl, TokensEl, NetworkEl)):
+            v = getattr(el, "variant", None) or "primary"
+            if v not in _MUTED_VARIANTS:
+                keys.add(f"variant:{v}")
+        if isinstance(el, (BoxEl, PanelEl)):
+            for attr in ("fill", "stroke"):
+                c = getattr(el, attr, None)
+                if _is_semantic_color(c):
+                    keys.add(f"color:{_norm_hex(c)}")
+            grad = getattr(el, "gradient", None)
+            if grad:
+                for c in grad:
+                    if _is_semantic_color(c):
+                        keys.add(f"color:{_norm_hex(c)}")
+        if isinstance(el, ArrowEl) and _is_semantic_color(el.color):
+            keys.add(f"color:{_norm_hex(el.color)}")
+    return keys
+
+
+def _check_visual_richness(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """视觉丰度软检查（一律 W 级，不阻断）。"""
+    del res  # 几何信息已在其他检查使用；丰度只看 spec 结构
+    issues: list[Issue] = []
+
+    # R-empty-box：既无 body 又无 sketch/icon，且非容器 / 非长标题 / 非小标签条
+    for el in spec.elements:
+        if not isinstance(el, BoxEl):
+            continue
+        if (el.body or "").strip() or el.sketch or el.icon or el.gradient:
+            continue
+        if _box_has_inner_content(spec, el):
+            continue
+        # 小标签条 / 单行操作盒（如 LayerNorm、Reshape）豁免——不应诱导塞装饰
+        if el.rect.w * el.rect.h <= _EMPTY_BOX_AREA_EXEMPT:
+            continue
+        # 长标题容器卡（常见于通栏标题条）豁免
+        title_len = len(_strip_markup(el.title).replace("\n", "").strip())
+        if title_len >= _EMPTY_BOX_TITLE_EXEMPT_LEN:
+            continue
+        issues.append(Issue(
+            "W", "R-empty-box",
+            f"box '{el.id}' 无 body/sketch/icon，显得空心；"
+            f"建议补充有语义的 body/sketch，或确认该盒为小标签盒可忽略",
+        ))
+
+    # R-no-section：元素较多但无 panel / 带 fill 的 group
+    n_el = len(spec.elements)
+    if n_el >= _RICHNESS_MIN_ELEMENTS:
+        has_panel = any(isinstance(e, PanelEl) for e in spec.elements)
+        has_filled_group = any(
+            isinstance(e, GroupEl) and _is_filled_section(e) for e in spec.elements
+        )
+        if not has_panel and not has_filled_group:
+            issues.append(Issue(
+                "W", "R-no-section",
+                f"共 {n_el} 个元素但无 panel / 带 fill 的 group，缺少分区底色；"
+                f"建议用 panel（header_style: smallcaps）或 group + fill: \"#F7F7F7\"",
+            ))
+
+    # R-no-legend：≥3 种非 muted 语义色但无 legend
+    color_keys = _semantic_color_keys(spec)
+    has_legend = any(isinstance(e, LegendEl) for e in spec.elements)
+    if len(color_keys) >= _RICHNESS_MIN_SEMANTIC_COLORS and not has_legend:
+        issues.append(Issue(
+            "W", "R-no-legend",
+            f"使用了 {len(color_keys)} 种非 muted 语义色但无 legend；"
+            f"建议加 type: legend（swatch+label），或把次要模块改回 muted/plain",
+        ))
+
     return issues

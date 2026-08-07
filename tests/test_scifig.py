@@ -596,6 +596,150 @@ elements:
     assert not any(i.code == "arrow-through-node" for i in lint(spec, res))
 
 
+def test_arrow_visual_anchor_accent_and_stack(tmp_path):
+    """锚点落在 accent/stack 视觉外边界，而非逻辑 rect。"""
+    from scifig.render import visual_rect_for
+
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 140, height: 80}
+theme: {preset: topconf}
+elements:
+  - {type: box, id: src, rect: [10, 20, 30, 20], title: S, accent: left}
+  - {type: box, id: dst, rect: [70, 20, 30, 20], title: D, accent: left, stack: 2}
+  - {type: arrow, id: ar, from: src.right, to: dst.left, route: hv}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=100)
+    src = next(e for e in spec.elements if e.id == "src")
+    dst = next(e for e in spec.elements if e.id == "dst")
+    vr_src, vr_dst = visual_rect_for(src), visual_rect_for(dst)
+    assert abs(vr_src.x - (src.rect.x - min(1.1, src.rect.w * 0.08))) < 1e-6
+    assert abs(vr_dst.right - (dst.rect.right + 1.5 * 2)) < 1e-6
+
+    pts = dict(res.arrow_segments)["ar"]
+    # 终点在 dst 视觉左边；起点在 src 视觉右边（无 stack，= logical right）
+    assert abs(pts[-1][0] - vr_dst.x) < 1e-3
+    assert abs(pts[0][0] - vr_src.right) < 1e-3
+
+
+def test_arrow_orthogonal_entry_hv_to_left(tmp_path):
+    """hv 指向 left 时末段必须水平，且整条折线无斜线段。"""
+    from scifig.render import _segments_axis_aligned
+
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 80}
+elements:
+  - {type: box, id: a, rect: [10, 10, 28, 14], title: A}
+  - {type: box, id: b, rect: [70, 40, 28, 20], title: B}
+  - {type: arrow, id: ar, from: a.right, to: b.left@0.3, route: hv}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=100)
+    pts = dict(res.arrow_segments)["ar"]
+    assert _segments_axis_aligned(pts), f"hv 折线含斜线段: {pts}"
+    (x1, y1), (x2, y2) = pts[-2], pts[-1]
+    assert abs(y1 - y2) < 1e-6, f"末段应水平，得到 dy={y2 - y1}"
+    assert abs(x2 - x1) >= 3.0 - 1e-3, f"垂直进入段应 ≥3mm，得到 {abs(x2 - x1)}"
+    # 首段离开 right：应水平
+    (sx0, sy0), (sx1, sy1) = pts[0], pts[1]
+    assert abs(sy0 - sy1) < 1e-6
+    assert not any(i.code == "arrow-approach" for i in lint(spec, res))
+
+
+def test_arrow_z_route_fully_orthogonal(tmp_path):
+    """z 路由（right→left、y 不对齐）全部为水平/垂直段。"""
+    from scifig.render import _segments_axis_aligned
+
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 80}
+elements:
+  - {type: box, id: a, rect: [10, 12, 28, 14], title: A}
+  - {type: box, id: b, rect: [70, 42, 28, 20], title: B}
+  - {type: arrow, id: ar, from: a.right, to: b.left@0.25, route: z}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=100)
+    pts = dict(res.arrow_segments)["ar"]
+    assert len(pts) >= 4
+    assert _segments_axis_aligned(pts), f"z 折线含斜线段: {pts}"
+    # 末段水平进入 left
+    assert abs(pts[-2][1] - pts[-1][1]) < 1e-6
+    assert abs(pts[-1][0] - pts[-2][0]) >= 3.0 - 1e-3
+
+
+def test_arrow_approach_lint_flags_diagonal_via(tmp_path):
+    """显式 via 斜线末段：arrow-approach 必须告警（夹角 >15°）。"""
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 80}
+elements:
+  - {type: box, id: a, rect: [10, 20, 24, 16], title: A}
+  - {type: box, id: b, rect: [80, 40, 24, 16], title: B}
+  - {type: arrow, id: ar, from: a.right, to: b.left, via: [[50, 28]]}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=100)
+    pts = dict(res.arrow_segments)["ar"]
+    # via 保持用户意图 → 末段为斜线
+    (x0, y0), (x1, y1) = pts[-2], pts[-1]
+    assert abs(x0 - x1) > 1e-3 and abs(y0 - y1) > 1e-3
+    assert any(i.code == "arrow-approach" for i in lint(spec, res))
+
+
+def test_arrow_label_avoids_tip_keepout(tmp_path):
+    """短进入 stub + 标签不得让胶囊盖住尖端（否则会出现悬空错觉）。"""
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 70}
+elements:
+  - {type: box, id: a, rect: [8, 20, 28, 28], title: Src, accent: left}
+  - {type: box, id: b, rect: [55, 18, 30, 32], title: Dst, accent: left}
+  - {type: arrow, id: ar, from: a.right, to: b.left@0.72, route: hv, label: "8 sents"}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=120)
+    tip = dict(res.arrow_segments)["ar"][-1]
+    caps = [c for aid, c, lbl in res.arrow_label_boxes if aid == "ar"]
+    assert caps, "应记录箭头标签胶囊"
+    cap = caps[0]
+    assert not (cap.x - 0.05 <= tip[0] <= cap.right + 0.05
+                and cap.y - 0.05 <= tip[1] <= cap.bottom + 0.05), (
+        f"标签胶囊盖住尖端: tip={tip} cap={cap}")
+    assert not any(i.code == "arrow-label-tip" for i in lint(spec, res))
+
+
+def test_arrow_endpoints_resnap_to_visual(tmp_path):
+    """ortho 改写后 tip 必须精确落在目标视觉边。"""
+    from scifig.render import visual_rect_for
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 70}
+elements:
+  - {type: box, id: a, rect: [8, 12, 28, 14], title: A}
+  - {type: box, id: b, rect: [60, 30, 28, 20], title: B, accent: left}
+  - {type: arrow, id: ar, from: a.right, to: b.left@0.6, route: hv}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=100)
+    b = next(e for e in spec.elements if e.id == "b")
+    vr = visual_rect_for(b)
+    tip = dict(res.arrow_segments)["ar"][-1]
+    assert abs(tip[0] - vr.x) < 1e-6
+    assert not any(i.code == "arrow-gap" for i in lint(spec, res))
+
+
+def test_arrow_head_color_matches_shaft(tmp_path):
+    """自定义色 + dashed 时头部 fill 与杆 stroke 同色。"""
+    import re
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 40}
+elements:
+  - {type: box, id: a, rect: [8, 10, 24, 16]}
+  - {type: box, id: b, rect: [60, 10, 24, 16]}
+  - {type: arrow, id: ar, from: a.right, to: b.left, style: dashed, color: "#D55E00"}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=100)
+    # 取该箭头的 g 片段
+    m = re.search(r'<g data-el="ar">(.*?)</g>', res.svg, re.S)
+    assert m, "未找到箭头组"
+    frag = m.group(1)
+    stroke = re.search(r'stroke="(#[0-9A-Fa-f]+)"', frag)
+    fills = re.findall(r'<polygon[^>]*fill="(#[0-9A-Fa-f]+)"', frag)
+    assert stroke and fills
+    assert all(f.upper() == stroke.group(1).upper() for f in fills)
+
+
 def test_density_sparse_detected(tmp_path):
     # 一个小元素扔在大画布里 → 应报 canvas-sparse
     spec = load_spec(_write(tmp_path, """
@@ -681,9 +825,287 @@ elements:
 """))
 
 
+# ── assets 风格包（离线，不调 API）──────────────────────
+
+def test_style_pack_sci_contains_palette_and_sections():
+    from scifig.assets import build_full_prompt, build_style_pack, resolve_asset_palette
+
+    pack = build_style_pack("sci")
+    assert "STYLE SPECIFICATIONS:" in pack
+    assert "#3B6EA5" in pack
+    assert "restricted color palette" in pack.lower() or "Restricted color palette" in pack
+    assert "one illustrator" in pack
+    assert "icon-level abstraction" in pack
+    assert "Outline lock:" in pack
+    assert "Viewing angle (required):" in pack
+    assert "three-quarter view" in pack
+    assert "three-quarter or side view" not in pack  # 软建议已改为硬要求
+
+    full = build_full_prompt("一台简洁的光学显微镜，侧面视角", theme_cfg="sci")
+    assert full.startswith("一台简洁的光学显微镜")
+    assert "STYLE SPECIFICATIONS:" in full
+    assert "HARD CONSTRAINTS:" in full
+    assert "#FFFFFF" in full
+    assert "no PCB-level" in full
+    assert "uniform outline weight (~2px)" in full
+    assert "Viewing angle required:" in full
+    assert resolve_asset_palette("sci") == ["#3B6EA5", "#5B8266", "#C77D2E", "#B5B5B5"]
+
+
+def test_style_pack_palette_override_and_presets():
+    from scifig.assets import build_style_pack, resolve_asset_palette, resolve_preset
+
+    assert resolve_preset("topconf") == "topconf"
+    assert resolve_preset("airy") == "airy"
+    assert resolve_preset("unknown_preset_xyz") == "sci"
+    assert resolve_asset_palette("topconf") == ["#0072B2", "#E69F00", "#009E73"]
+    assert resolve_asset_palette("airy") == ["#BBDEFB", "#FFD0D0", "#C8E6C9"]
+
+    overridden = resolve_asset_palette({
+        "preset": "sci",
+        "palette": {"primary": "#112233", "secondary": "#445566", "accent": "#778899"},
+    })
+    # primary/secondary/accent 被覆盖，highlight 位保留 sci 默认 #B5B5B5
+    assert overridden[0] == "#112233"
+    assert overridden[1] == "#445566"
+    assert overridden[2] == "#778899"
+    assert "#B5B5B5" in overridden
+    pack = build_style_pack({"preset": "sci", "palette": {"primary": "#112233"}})
+    assert "#112233" in pack
+    assert "#5B8266" in pack  # secondary 未覆盖则保留 sci 默认
+
+
+def test_assets_style_override_and_yaml_load(tmp_path):
+    from scifig.assets import (
+        build_style_pack, build_full_prompt, load_style_context_from_yaml,
+        resolve_asset_palette,
+    )
+
+    custom = "isometric cute robot icons, thick 3px navy outline, candy colors"
+    pack = build_style_pack("sci", assets_style=custom)
+    assert custom in pack
+    assert "flat vector-style scientific illustration" not in pack  # 默认风格被覆盖
+
+    yaml_text = """
+figure: {width: 100, height: 60, assets_dir: assets}
+theme:
+  preset: warm
+  palette:
+    primary: "#AA5500"
+assets_style: "chunky sticker icons with 2px chocolate outline"
+assets:
+  - {id: chip, prompt: a microchip}
+elements:
+  - {type: box, id: a, rect: [5, 5, 30, 20], title: A}
+"""
+    p = _write(tmp_path, yaml_text)
+    # 顶层 assets_style 不得让 load_spec 报错
+    spec = load_spec(p)
+    assert spec.theme_cfg.get("preset") == "warm"
+
+    theme_cfg, assets_style = load_style_context_from_yaml(p)
+    assert theme_cfg["preset"] == "warm"
+    assert assets_style == "chunky sticker icons with 2px chocolate outline"
+    assert "#AA5500" in resolve_asset_palette(theme_cfg)
+    full = build_full_prompt("a microchip", theme_cfg=theme_cfg, assets_style=assets_style)
+    assert "chunky sticker icons" in full
+    assert "HARD CONSTRAINTS:" in full
+
+
+# ── 视觉增强：topconf/airy / sketch / legend / shadow ──────
+
+def test_theme_topconf_and_airy():
+    tc = load_theme("topconf")
+    assert tc.name == "topconf"
+    assert tc.variants["primary"].fill.upper() == "#FFFFFF"
+    assert tc.variants["primary"].stroke == "#0072B2"
+    assert tc.variants["muted"].stroke == "#CCCCCC"
+    assert tc.group_fill == "#F7F7F7"
+    assert tc.size_title > tc.size_body
+    assert tc.default_shadow is False
+
+    ay = load_theme("airy")
+    assert ay.default_shadow is True
+    assert ay.corner_radius >= 2.5
+    assert ay.variants["primary"].fill == "#BBDEFB"
+
+
+def test_theme_palette_override():
+    th = load_theme({"preset": "topconf", "palette": {"primary": "#00897B", "secondary": "#FFB300"}})
+    assert th.variants["primary"].stroke == "#00897B"
+    assert th.variants["secondary"].stroke == "#FFB300"
+    assert th.variants["primary"].fill.upper() == "#FFFFFF"
+    assert th.palette["primary"] == "#00897B"
+
+
+def test_sketch_and_legend_render(tmp_path):
+    kinds = ["waveform", "bars", "heatmap", "scatter", "curve", "curve_desc",
+             "grid", "matrix", "tree", "distribution", "spectrum", "layers",
+             "nested", "dots_flow"]
+    els = []
+    for i, k in enumerate(kinds):
+        x = 4 + (i % 7) * 26
+        y = 4 + (i // 7) * 28
+        els.append(f'  - {{type: sketch, id: sk{i}, rect: [{x}, {y}, 22, 22], kind: {k}}}')
+    els.append(
+        '  - {type: legend, id: lg, at: [4, 62], items: ['
+        '{swatch: box, color: "#0072B2", label: primary}, '
+        '{swatch: line, color: "#E69F00", label: flow}, '
+        '{swatch: dashed, color: "#999", label: skip}], columns: 1}')
+    yml = "figure: {width: 190, height: 95}\ntheme: topconf\nelements:\n" + "\n".join(els)
+    spec = load_spec(_write(tmp_path, yml))
+    r1 = render(spec, out_png=tmp_path / "a.png", dpi=100)
+    r2 = render(spec, out_png=tmp_path / "b.png", dpi=100)
+    assert r1.svg == r2.svg  # seed 可复现
+    assert (tmp_path / "a.png").exists()
+    assert "primary" in r1.svg
+
+
+def test_box_enhancements_and_panel_smallcaps(tmp_path):
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 140, height: 70}
+theme: topconf
+elements:
+  - {type: panel, id: p, rect: [4, 4, 60, 60], title: Encoder, header_style: smallcaps, fill: "#F7F7F7"}
+  - {type: box, id: a, rect: [10, 18, 48, 36], title: Module, variant: primary,
+     accent: left, header_fill: true, sketch: waveform, shadow: true, valign: top}
+  - {type: box, id: b, rect: [72, 18, 40, 28], title: Soft, variant: secondary, shadow: true}
+  - {type: arrow, from: a.right, to: b.left, style: dotted, weight: heavy, label: feat, label_bg: true}
+  - {type: text, at: [92, 55], text: Stage, smallcaps: true, size: 7, color: "#0072B2"}
+  - {type: group, id: g, rect: [70, 10, 64, 50], fill: "#F7F7F7", hatch: true, style: dashed}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=120)
+    assert "ENCODER" in res.svg or "letter-spacing" in res.svg
+    assert "stroke-dasharray=\"0.35,0.95\"" in res.svg  # dotted
+    assert "pattern" in res.svg  # hatch
+    assert "STAGE" in res.svg
+    assert not any(i.level == "E" for i in lint(spec, res))
+
+
+def test_airy_default_shadow(tmp_path):
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 80, height: 40}
+theme: airy
+elements:
+  - {type: box, id: a, rect: [10, 8, 50, 24], title: Card, variant: primary}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=100)
+    # soft shadow = PIL 高斯模糊 PNG 嵌入（非矢量灰卡）
+    assert "data:image/png;base64," in res.svg
+    assert 'xlink:href="data:image/png;base64,' in res.svg
+
+
+def test_lint_richness_empty_box_and_exemptions(tmp_path):
+    """R-empty-box：空心盒报警；有 body/sketch/子元素/小面积则豁免。"""
+    # 空心大盒（30×20=600mm² > 300）→ W
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: {preset: topconf}
+elements:
+  - {type: box, id: empty, rect: [10, 10, 30, 20], title: Mod, variant: primary}
+"""))
+    res = render(spec, dpi=80)
+    issues = lint(spec, res)
+    assert any(i.code == "R-empty-box" and i.level == "W" for i in issues)
+    assert any("有语义" in i.msg or "小标签盒可忽略" in i.msg
+               for i in issues if i.code == "R-empty-box")
+
+    # 有 sketch → 豁免
+    spec2 = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: {preset: topconf}
+elements:
+  - {type: box, id: m, rect: [10, 10, 40, 30], title: Mod, sketch: waveform, valign: top}
+"""))
+    res2 = render(spec2, dpi=80)
+    assert not any(i.code == "R-empty-box" for i in lint(spec2, res2))
+
+    # 容器卡（子元素在内）→ 豁免
+    spec3 = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: {preset: topconf}
+elements:
+  - {type: box, id: host, rect: [8, 8, 50, 36], title: Host, valign: top}
+  - {type: sketch, id: sk, rect: [14, 18, 30, 18], kind: heatmap}
+"""))
+    res3 = render(spec3, dpi=80)
+    assert not any(i.code == "R-empty-box" and "host" in i.msg for i in lint(spec3, res3))
+
+    # 小标签条（30×10=300mm²）→ 面积豁免，不诱导塞装饰
+    spec4 = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 40}
+theme: {preset: topconf}
+elements:
+  - {type: box, id: ln, rect: [10, 10, 30, 10], title: LayerNorm, variant: muted}
+"""))
+    res4 = render(spec4, dpi=80)
+    assert not any(i.code == "R-empty-box" for i in lint(spec4, res4))
+
+
+def test_lint_richness_section_and_legend(tmp_path):
+    """R-no-section / R-no-legend：多元素无分区、多色无图例。"""
+    # 8+ 元素、无 panel/fill group、3+ variant → 两条 W；无 E
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 160, height: 60}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 10, 25, 20], title: A, body: x, variant: primary}
+  - {type: box, id: b, rect: [40, 10, 25, 20], title: B, body: y, variant: secondary}
+  - {type: box, id: c, rect: [75, 10, 25, 20], title: C, body: z, variant: accent}
+  - {type: box, id: d, rect: [110, 10, 25, 20], title: D, body: w, variant: highlight}
+  - {type: arrow, from: a.right, to: b.left}
+  - {type: arrow, from: b.right, to: c.left}
+  - {type: arrow, from: c.right, to: d.left}
+  - {type: text, at: [80, 5], text: title, size: 7}
+"""))
+    res = render(spec, dpi=80)
+    codes = {i.code for i in lint(spec, res)}
+    assert "R-no-section" in codes
+    assert "R-no-legend" in codes
+    assert not any(i.level == "E" for i in lint(spec, res))
+
+    # 补 panel + legend → 两条消失
+    spec2 = load_spec(_write(tmp_path, """
+figure: {width: 160, height: 60}
+theme: {preset: topconf}
+elements:
+  - {type: panel, id: p, rect: [2, 2, 156, 56], title: Pipeline, header_style: smallcaps, fill: "#F7F7F7"}
+  - {type: box, id: a, rect: [8, 14, 28, 28], title: A, sketch: grid, valign: top, variant: primary}
+  - {type: box, id: b, rect: [48, 14, 28, 28], title: B, sketch: layers, valign: top, variant: secondary}
+  - {type: box, id: c, rect: [88, 14, 28, 28], title: C, body: out, variant: muted}
+  - {type: arrow, from: a.right, to: b.left, label: "R^d", weight: heavy}
+  - {type: arrow, from: b.right, to: c.left, style: dashed}
+  - {type: legend, id: lg, at: [122, 16], items: [
+      {swatch: box, color: "#0072B2", label: "core"},
+      {swatch: box, color: "#E69F00", label: "aux"},
+    ]}
+"""))
+    res2 = render(spec2, dpi=80)
+    codes2 = {i.code for i in lint(spec2, res2)}
+    assert "R-no-section" not in codes2
+    assert "R-no-legend" not in codes2
+    assert not any(i.level == "E" for i in lint(spec2, res2))
+
+
 if __name__ == "__main__":
     import tempfile
     import traceback
+
+    # 无 pytest 时提供简易 raises，保证 __main__ 可跑
+    try:
+        import pytest  # noqa: F401
+    except ImportError:
+        class _Pytest:
+            class raises:
+                def __init__(self, exc):
+                    self.exc = exc
+                def __enter__(self):
+                    return self
+                def __exit__(self, et, ev, tb):
+                    if et is None:
+                        raise AssertionError(f"未抛出 {self.exc}")
+                    return issubclass(et, self.exc)
+        sys.modules["pytest"] = _Pytest()  # type: ignore
 
     fns = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     passed = failed = 0

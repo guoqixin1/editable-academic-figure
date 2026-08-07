@@ -49,14 +49,45 @@ def strip_markup(text: str) -> str:
 _MEASURE_SCALE = 8
 
 # 字体文件路径（Liberation Sans 与 Arial 度量兼容；Noto CJK 提供中文；DejaVu 提供符号）
-_FONT_FILES = {
-    ("latin", False): ("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf", 0),
-    ("latin", True): ("/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf", 0),
-    ("cjk", False): ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 2),
-    ("cjk", True): ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 2),
-    ("symbol", False): ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
-    ("symbol", True): ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0),
+# 每项给出候选 (path, index) 列表，取第一个存在的文件（适配无 sudo 环境的用户字体目录）。
+import os as _os
+
+_FONT_CANDIDATES = {
+    ("latin", False): [
+        ("/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf", 0),
+        ("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 0),
+        (_os.path.expanduser("~/.local/share/fonts/LiberationSans-Regular.ttf"), 0),
+    ],
+    ("latin", True): [
+        ("/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf", 0),
+        ("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", 0),
+        (_os.path.expanduser("~/.local/share/fonts/LiberationSans-Bold.ttf"), 0),
+    ],
+    ("cjk", False): [
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 2),
+        (_os.path.expanduser("~/.local/share/fonts/NotoSansCJKsc-Regular.otf"), 0),
+    ],
+    ("cjk", True): [
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 2),
+        (_os.path.expanduser("~/.local/share/fonts/NotoSansCJKsc-Bold.otf"), 0),
+    ],
+    ("symbol", False): [
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 0),
+    ],
+    ("symbol", True): [
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 0),
+    ],
 }
+
+
+def _resolve_font(cands):
+    for path, index in cands:
+        if _os.path.exists(path):
+            return (path, index)
+    return cands[0]  # 保留原始报错语义
+
+
+_FONT_FILES = {k: _resolve_font(v) for k, v in _FONT_CANDIDATES.items()}
 
 # SVG 中使用的 font-family（fontconfig 名称）
 FAMILY_SVG = {

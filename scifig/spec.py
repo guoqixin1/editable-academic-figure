@@ -92,6 +92,11 @@ class BoxEl:
     stroke: str | None = None    # 覆盖 variant 描边色
     text_color: str | None = None
     stack: int = 0               # 背后叠影层数（层叠卡片/文档效果）
+    # 视觉增强（默认保持旧行为）
+    shadow: bool | None = None   # None=跟随 theme.default_shadow
+    accent: str | None = None    # left | top：色条（取 variant 边框色）
+    header_fill: bool = False    # 标题区浅底 + 分隔线
+    sketch: str | None = None    # 内嵌单色缩略图 kind（见 SketchEl）
 
 
 @dataclass
@@ -117,6 +122,8 @@ class PanelEl:
     fill: str | None = None
     title_size: float | None = None
     header_h: float = 7.0        # 标题条高度 mm
+    header_style: str = "banner"  # banner | smallcaps（顶会克制风分区标签）
+    shadow: bool | None = None   # None=跟随 theme.default_shadow
 
 
 @dataclass
@@ -199,6 +206,7 @@ class TextEl:
     anchor: str = "middle"       # start | middle | end
     max_w: float | None = None   # 给定则自动换行
     rotate: float = 0.0          # 绕 at 点旋转（度）；-90 即竖排（自下而上读）
+    smallcaps: bool = False      # 大写 + letter-spacing 模拟 small-caps
 
 
 @dataclass
@@ -207,7 +215,7 @@ class ArrowEl:
     from_: str | tuple[float, float]
     to: str | tuple[float, float]
     route: str = "auto"          # auto | straight | hv | vh | z | zv | arc
-    style: str = "solid"         # solid | dashed | block(空心/实心粗箭头)
+    style: str = "solid"         # solid | dashed | dotted | block(空心/实心粗箭头)
     label: str = ""
     color: str | None = None
     head: str = "arrow"          # arrow | none
@@ -217,6 +225,8 @@ class ArrowEl:
     width: float | None = None   # 线宽 mm 覆盖（粗箭头）；block 样式下为箭杆宽
     fill: str | None = None      # block 样式的填充色（默认白 → 空心箭头）
     bend: float = 0.25           # arc 路由的弯曲度（弦长比例，负值反侧）
+    label_bg: bool = True        # 标签浅色胶囊底（默认开，与旧版白底一致）
+    weight: str = "normal"       # thin | normal | heavy
 
 
 @dataclass
@@ -232,6 +242,8 @@ class GroupEl:
     label_pos: str = "top"       # top(框外上方) | inside-top | inside-bottom
     label_size: float | None = None
     lw: float | None = None      # 线宽覆盖
+    hatch: bool = False          # 斜线底纹（SVG pattern）
+    shadow: bool | None = None
 
 
 @dataclass
@@ -241,8 +253,48 @@ class PanelLabelEl:
     text: str
 
 
+# 单色缩略图词汇表（信息密度核心）
+_SKETCH_KINDS = {
+    "waveform", "bars", "heatmap", "scatter", "curve", "curve_desc",
+    "grid", "matrix", "tree", "distribution", "spectrum", "layers",
+    "nested", "dots_flow",
+}
+
+
+@dataclass
+class SketchEl:
+    """程序化单色缩略图（waveform/bars/heatmap/...），可复现（seed 固定）。"""
+    id: str
+    rect: Rect
+    kind: str = "waveform"
+    color: str | None = None
+    stroke_color: str | None = None
+    label: str = ""
+    seed: int | None = None      # None → 由 id/坐标哈希
+
+
+@dataclass
+class LegendItem:
+    swatch: str                  # box | line | dashed | arrow | dot
+    label: str
+    color: str = "#333333"
+
+
+@dataclass
+class LegendEl:
+    """自动排版的色块+文字图例。"""
+    id: str
+    at: tuple[float, float]
+    items: list[LegendItem] = field(default_factory=list)
+    columns: int = 1
+    frame: bool = True           # 浅底圆角外框
+    fill: str | None = None
+    stroke: str | None = None
+    size: float = 6.0            # 文字 pt
+
+
 Element = (BoxEl | AssetEl | TextEl | ArrowEl | GroupEl | PanelLabelEl | PanelEl
-           | TokensEl | MarkerEl | NetworkEl | ScatterEl | BadgeEl)
+           | TokensEl | MarkerEl | NetworkEl | ScatterEl | BadgeEl | SketchEl | LegendEl)
 
 
 @dataclass
@@ -274,29 +326,37 @@ class FigureSpec:
 _ALLOWED_KEYS = {
     "box": {"type", "id", "rect", "title", "body", "variant", "shape", "icon", "icon_h",
             "title_size", "body_size", "align", "valign", "gradient", "gradient_dir",
-            "fill", "stroke", "text_color", "stack"},
+            "fill", "stroke", "text_color", "stack", "shadow", "accent", "header_fill",
+            "sketch"},
     "asset": {"type", "id", "rect", "src", "caption", "halign", "valign", "frame", "placeholder"},
     "text": {"type", "id", "at", "text", "size", "bold", "italic", "color", "anchor",
-             "max_w", "rotate"},
+             "max_w", "rotate", "smallcaps"},
     "arrow": {"type", "id", "from", "to", "route", "style", "label", "color",
-              "head", "bidir", "label_offset", "via", "width", "fill", "bend"},
+              "head", "bidir", "label_offset", "via", "width", "fill", "bend",
+              "label_bg", "weight"},
     "group": {"type", "id", "members", "rect", "label", "pad", "style", "fill",
-              "color", "label_pos", "label_size", "lw"},
+              "color", "label_pos", "label_size", "lw", "hatch", "shadow"},
     "panel_label": {"type", "id", "at", "text"},
     "panel": {"type", "id", "rect", "title", "variant", "header_fill", "fill",
-              "title_size", "header_h"},
+              "title_size", "header_h", "header_style", "shadow"},
     "tokens": {"type", "id", "rect", "n", "direction", "variant", "colors", "gap",
                "sizes", "label"},
     "marker": {"type", "id", "at", "icon", "size", "color"},
     "network": {"type", "id", "rect", "layers", "variant", "node_fill", "color", "direction"},
     "scatter": {"type", "id", "rect", "clusters", "seed", "dot_r", "outline"},
     "badge": {"type", "id", "at", "text", "size", "color", "text_color"},
+    "sketch": {"type", "id", "rect", "kind", "color", "stroke_color", "label", "seed"},
+    "legend": {"type", "id", "at", "items", "columns", "frame", "fill", "stroke", "size"},
 }
 
 _SHAPES = {"rect", "stadium", "diamond", "cylinder", "parallelogram", "hexagon", "ellipse", "trapezoid"}
 _MARKER_ICONS = {"fire", "snow", "lock", "check", "cross", "oplus", "otimes", "wifi"}
 _ROUTES = {"auto", "straight", "hv", "vh", "z", "zv", "arc"}
-_ARROW_STYLES = {"solid", "dashed", "block"}
+_ARROW_STYLES = {"solid", "dashed", "dotted", "block"}
+_ARROW_WEIGHTS = {"thin", "normal", "heavy"}
+_PANEL_HEADER_STYLES = {"banner", "smallcaps"}
+_LEGEND_SWATCHES = {"box", "line", "dashed", "arrow", "dot"}
+_BOX_ACCENTS = {"left", "top"}
 
 _ANCHOR_RE = re.compile(r"^([A-Za-z0-9_\-]+)\.(left|right|top|bottom|center)(?:@([0-9.]+))?$")
 _BARE_ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")   # 裸节点 id：不写 .side，渲染时按几何自动选边
@@ -391,6 +451,17 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 if not (isinstance(gradient, (list, tuple)) and len(gradient) == 2):
                     raise SpecError(f"{ctx}: gradient 必须是两个颜色 [c1, c2]")
                 gradient = [str(c) for c in gradient]
+            accent = e.get("accent")
+            if accent is not None:
+                accent = str(accent)
+                if accent not in _BOX_ACCENTS:
+                    raise SpecError(f"{ctx}: accent 必须是 left/top，得到 {accent!r}")
+            sketch = e.get("sketch")
+            if sketch is not None:
+                sketch = str(sketch)
+                if sketch not in _SKETCH_KINDS:
+                    raise SpecError(f"{ctx}: 未知 sketch kind '{sketch}'（可选 {sorted(_SKETCH_KINDS)}）")
+            shadow = e.get("shadow")
             elements.append(BoxEl(
                 id=eid, rect=_rect(e["rect"], ctx),
                 title=str(e.get("title", "")), body=str(e.get("body", "")),
@@ -401,6 +472,9 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 gradient=gradient, gradient_dir=str(e.get("gradient_dir", "h")),
                 fill=e.get("fill"), stroke=e.get("stroke"),
                 text_color=e.get("text_color"), stack=int(e.get("stack", 0)),
+                shadow=bool(shadow) if shadow is not None else None,
+                accent=accent, header_fill=bool(e.get("header_fill", False)),
+                sketch=sketch,
             ))
         elif etype == "asset":
             if "rect" not in e or "src" not in e:
@@ -415,12 +489,18 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
         elif etype == "panel":
             if "rect" not in e:
                 raise SpecError(f"{ctx}: panel 需要 rect")
+            header_style = str(e.get("header_style", "banner"))
+            if header_style not in _PANEL_HEADER_STYLES:
+                raise SpecError(f"{ctx}: header_style 必须是 banner/smallcaps")
+            shadow = e.get("shadow")
             elements.append(PanelEl(
                 id=eid, rect=_rect(e["rect"], ctx), title=str(e.get("title", "")),
                 variant=str(e.get("variant", "primary")),
                 header_fill=e.get("header_fill"), fill=e.get("fill"),
                 title_size=e.get("title_size"),
                 header_h=float(e.get("header_h", 7.0)),
+                header_style=header_style,
+                shadow=bool(shadow) if shadow is not None else None,
             ))
         elif etype == "tokens":
             if "rect" not in e:
@@ -454,6 +534,7 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 color=e.get("color"), anchor=str(e.get("anchor", "middle")),
                 max_w=float(e["max_w"]) if e.get("max_w") is not None else None,
                 rotate=float(e.get("rotate", 0.0)),
+                smallcaps=bool(e.get("smallcaps", False)),
             ))
         elif etype == "arrow":
             if "from" not in e or "to" not in e:
@@ -464,6 +545,9 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
             style = str(e.get("style", "solid"))
             if style not in _ARROW_STYLES:
                 raise SpecError(f"{ctx}: 未知 style '{style}'（可选 {sorted(_ARROW_STYLES)}）")
+            weight = str(e.get("weight", "normal"))
+            if weight not in _ARROW_WEIGHTS:
+                raise SpecError(f"{ctx}: weight 必须是 thin/normal/heavy")
             via = [_point(p, f"{ctx}.via[{k}]") for k, p in enumerate(e.get("via") or [])]
             elements.append(ArrowEl(
                 id=eid, from_=_endpoint(e["from"], ctx), to=_endpoint(e["to"], ctx),
@@ -473,6 +557,7 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 label_offset=float(e.get("label_offset", 1.4)), via=via,
                 width=float(e["width"]) if e.get("width") is not None else None,
                 fill=e.get("fill"), bend=float(e.get("bend", 0.25)),
+                label_bg=bool(e.get("label_bg", True)), weight=weight,
             ))
         elif etype == "group":
             members = [str(m) for m in (e.get("members") or [])]
@@ -482,12 +567,53 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
             label_pos = str(e.get("label_pos", "top"))
             if label_pos not in ("top", "inside-top", "inside-bottom"):
                 raise SpecError(f"{ctx}: label_pos 必须是 top/inside-top/inside-bottom")
+            shadow = e.get("shadow")
             elements.append(GroupEl(
                 id=eid, members=members, rect=rect, label=str(e.get("label", "")),
                 pad=float(e.get("pad", 2.5)), style=str(e.get("style", "dashed")),
                 fill=e.get("fill"), color=e.get("color"), label_pos=label_pos,
                 label_size=e.get("label_size"),
                 lw=float(e["lw"]) if e.get("lw") is not None else None,
+                hatch=bool(e.get("hatch", False)),
+                shadow=bool(shadow) if shadow is not None else None,
+            ))
+        elif etype == "sketch":
+            if "rect" not in e:
+                raise SpecError(f"{ctx}: sketch 需要 rect")
+            kind = str(e.get("kind", "waveform"))
+            if kind not in _SKETCH_KINDS:
+                raise SpecError(f"{ctx}: 未知 sketch kind '{kind}'（可选 {sorted(_SKETCH_KINDS)}）")
+            elements.append(SketchEl(
+                id=eid, rect=_rect(e["rect"], ctx), kind=kind,
+                color=e.get("color"), stroke_color=e.get("stroke_color"),
+                label=str(e.get("label", "")),
+                seed=int(e["seed"]) if e.get("seed") is not None else None,
+            ))
+        elif etype == "legend":
+            items_raw = e.get("items") or []
+            if not items_raw:
+                raise SpecError(f"{ctx}: legend 需要非空 items")
+            items = []
+            for k, it in enumerate(items_raw):
+                ictx = f"{ctx}.items[{k}]"
+                if not isinstance(it, dict):
+                    raise SpecError(f"{ictx}: 必须是 mapping")
+                extra = set(it) - {"swatch", "color", "label"}
+                if extra:
+                    raise SpecError(f"{ictx}: 未知字段 {sorted(extra)}")
+                sw = str(it.get("swatch", "box"))
+                if sw not in _LEGEND_SWATCHES:
+                    raise SpecError(f"{ictx}: swatch 必须是 {sorted(_LEGEND_SWATCHES)}")
+                items.append(LegendItem(
+                    swatch=sw, label=str(it.get("label", "")),
+                    color=str(it.get("color", "#333333")),
+                ))
+            elements.append(LegendEl(
+                id=eid, at=_point(e.get("at"), ctx), items=items,
+                columns=int(e.get("columns", 1)),
+                frame=bool(e.get("frame", True)),
+                fill=e.get("fill"), stroke=e.get("stroke"),
+                size=float(e.get("size", 6.0)),
             ))
         elif etype == "network":
             if "rect" not in e:
@@ -549,9 +675,9 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
 
 
 def _validate_refs(spec: FigureSpec) -> None:
-    # panel/tokens/network/scatter 也可作为箭头锚点与 group 成员
+    # panel/tokens/network/scatter/sketch 也可作为箭头锚点与 group 成员
     node_ids = {el.id for el in spec.elements
-                if isinstance(el, (BoxEl, AssetEl, PanelEl, TokensEl, NetworkEl, ScatterEl))}
+                if isinstance(el, (BoxEl, AssetEl, PanelEl, TokensEl, NetworkEl, ScatterEl, SketchEl))}
     # group（含 members 推导矩形）也可作为箭头锚点：框对框连线
     anchor_ids = node_ids | {el.id for el in spec.elements if isinstance(el, GroupEl)}
     for el in spec.elements:
@@ -565,7 +691,7 @@ def _validate_refs(spec: FigureSpec) -> None:
         elif isinstance(el, GroupEl):
             for m in el.members:
                 if m not in node_ids:
-                    raise SpecError(f"group '{el.id}' 的成员 '{m}' 不存在（成员必须是 box/asset/panel/tokens/network/scatter 的 id）")
+                    raise SpecError(f"group '{el.id}' 的成员 '{m}' 不存在（成员必须是 box/asset/panel/tokens/network/scatter/sketch 的 id）")
 
 
 def parse_anchor(s: str) -> tuple[str, str | None, float]:

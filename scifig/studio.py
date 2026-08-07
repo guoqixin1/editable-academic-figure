@@ -27,12 +27,13 @@ import yaml
 
 from .lint import lint
 from .render import render
-from .spec import (AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl, MarkerEl,
+from .spec import (AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl, LegendEl, MarkerEl,
+                   SketchEl,
                    NetworkEl, PanelEl, PanelLabelEl, ScatterEl, SpecError,
                    TextEl, TokensEl, load_spec)
 
-_DRAG_RECT = (BoxEl, AssetEl, PanelEl, TokensEl, NetworkEl, ScatterEl)
-_DRAG_AT = (TextEl, MarkerEl, BadgeEl, PanelLabelEl)
+_DRAG_RECT = (BoxEl, AssetEl, PanelEl, TokensEl, NetworkEl, ScatterEl, SketchEl)
+_DRAG_AT = (TextEl, MarkerEl, BadgeEl, PanelLabelEl, LegendEl)
 
 
 def element_ranges(text: str, spec: FigureSpec) -> list[dict]:
