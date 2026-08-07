@@ -81,6 +81,10 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     for bid in res.overflow_boxes:
         issues.append(Issue("E", "text-overflow", f"box '{bid}' 内容高度超出盒子，加大盒子或缩短文字"))
 
+    # 渲染期软警告（如 route-avoid-fallback）；最终路径仍走下方 arrow-* 检查
+    for level, code, msg in getattr(res, "soft_issues", []) or []:
+        issues.append(Issue(level, code, msg))
+
     issues += _check_text_overlap(res)
     issues += _check_canvas_bounds(spec, res)
     issues += _check_font_sizes(res)

@@ -777,6 +777,173 @@ elements:
         assert (tmp_path / f"{route}.png").exists()
 
 
+# ── route: avoid + auto label ────────────────────────────
+
+def test_route_avoid_goes_around_obstacle(tmp_path):
+    """中间有墙时 avoid 路径绕行，不穿墙。"""
+    from paperfig.lint import _segment_hits_rect
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 80}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 30, 25, 20], title: A, body: in}
+  - {type: box, id: wall, rect: [45, 20, 25, 40], title: Wall, body: block}
+  - {type: box, id: b, rect: [90, 30, 25, 20], title: B, body: out}
+  - {type: arrow, id: ar, from: a.right, to: b.left, route: avoid}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    pts = dict(res.arrow_segments)["ar"]
+    assert len(pts) >= 3
+    wall = res.node_rects["wall"]
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+        assert not _segment_hits_rect(x1, y1, x2, y2, wall.expanded(-0.4))
+    assert not any(i.code == "arrow-through-node" for i in lint(spec, res))
+
+
+def test_route_avoid_orthogonal_ports(tmp_path):
+    """首段垂直离开源边、末段垂直进入目标边。"""
+    from paperfig.lint import _end_approach_ok
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 80}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [10, 10, 30, 20], title: A, body: x}
+  - {type: box, id: mid, rect: [50, 35, 20, 30], title: M, body: y}
+  - {type: box, id: b, rect: [85, 10, 30, 20], title: B, body: z}
+  - {type: arrow, id: ar, from: a.right, to: b.left, route: avoid}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    pts = dict(res.arrow_segments)["ar"]
+    sides = {aid: (s1, s2) for aid, s1, s2 in res.arrow_ends}
+    s1, s2 = sides["ar"]
+    assert s1 == "right" and s2 == "left"
+    # 全正交
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        assert abs(x0 - x1) < 1e-6 or abs(y0 - y1) < 1e-6
+    assert _end_approach_ok(pts, s2)
+    # 首段水平离开 right
+    assert abs(pts[0][1] - pts[1][1]) < 1e-6
+    assert pts[1][0] > pts[0][0]
+
+
+def test_route_avoid_nudging_separates_parallel(tmp_path):
+    """共享走廊的平行箭头被 nudge 错开。"""
+    from paperfig.routing import nudge_paths, NUDGE_GAP_MM
+    paths = {
+        "a": [(10.0, 20.0), (30.0, 20.0), (30.0, 40.0), (50.0, 40.0)],
+        "b": [(10.0, 20.0), (30.0, 20.0), (30.0, 50.0), (50.0, 50.0)],
+    }
+    out = nudge_paths(paths)
+    # 中间竖直段（非 stub）应被错开
+    ax = {i: out["a"][i][0] for i in range(len(out["a"]))}
+    # 至少路径仍正交且端点不变
+    assert out["a"][0] == paths["a"][0] and out["a"][-1] == paths["a"][-1]
+    assert out["b"][0] == paths["b"][0] and out["b"][-1] == paths["b"][-1]
+    # 若存在共享竖直走廊，x 应不同
+    segs_a = [(out["a"][i], out["a"][i + 1]) for i in range(len(out["a"]) - 1)]
+    segs_b = [(out["b"][i], out["b"][i + 1]) for i in range(len(out["b"]) - 1)]
+    vert_a = [s for s in segs_a if abs(s[0][0] - s[1][0]) < 1e-6 and 0 < s[0][0] < 50]
+    vert_b = [s for s in segs_b if abs(s[0][0] - s[1][0]) < 1e-6 and 0 < s[0][0] < 50]
+    if vert_a and vert_b:
+        assert abs(vert_a[0][0][0] - vert_b[0][0][0]) >= NUDGE_GAP_MM - 0.05
+
+
+def test_route_avoid_fallback_warning(tmp_path):
+    """无解时降级 auto 并产生 route-avoid-fallback 警告，不崩溃。"""
+    from paperfig.routing import route_orthogonal_avoid, RouteRequest, route_all
+    from paperfig.spec import Rect
+    # 通高墙把左右口袋隔开，端点在墙外 → A* 必失败
+    obstacles = [("wall", Rect(20, 0, 60, 100))]
+    req = RouteRequest(
+        id="ar", x1=5, y1=50, s1="right", x2=95, y2=50, s2="left",
+        exclude_ids=set(),
+    )
+    assert route_orthogonal_avoid(req, obstacles, Rect(0, 0, 100, 100)) is None
+    batch = route_all([req], obstacles, Rect(0, 0, 100, 100))
+    assert batch["ar"].fallback is True
+
+    # 渲染路径：强制失败场景用巨大通高墙 + 极窄口袋
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 40}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [1, 15, 8, 10], title: A, body: x}
+  - {type: box, id: b, rect: [91, 15, 8, 10], title: B, body: y}
+  - {type: box, id: wall, rect: [15, 0, 70, 40], title: W, body: block}
+  - {type: arrow, id: ar, from: a.right, to: b.left, route: avoid}
+"""))
+    res = render(spec, out_png=tmp_path / "o.png", dpi=80)
+    issues = lint(spec, res)
+    assert any(i.code == "route-avoid-fallback" for i in issues)
+    assert (tmp_path / "o.png").exists()
+    assert "ar" in dict(res.arrow_segments)  # 已降级画出路径
+
+
+def test_label_auto_picks_collision_free(tmp_path):
+    """碰撞打分选中不压盒子的候选位。"""
+    from paperfig.routing import pick_best_label
+    from paperfig.spec import Rect
+    pts = [(40.0, 20.0), (55.0, 20.0), (55.0, 50.0), (70.0, 50.0)]
+    boxes = [Rect(10, 10, 30, 20), Rect(70, 40, 30, 20)]
+    texts = [Rect(42, 18, 18, 4)]
+    best = pick_best_label(pts, 12.0, 3.5, 2.5, boxes, texts, [], [])
+    assert best is not None
+    assert sum(best.cap.intersection_area(b) for b in boxes) < 0.05
+    assert sum(best.cap.intersection_area(t) for t in texts) < 0.05
+
+
+def test_label_manual_offset_respected(tmp_path):
+    """显式 label_offset 时不走 auto，行为与旧落标一致。"""
+    spec_auto = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 15, 25, 20], title: A, body: x}
+  - {type: box, id: b, rect: [70, 15, 25, 20], title: B, body: y}
+  - {type: arrow, id: ar, from: a.right, to: b.left, route: avoid, label: hi}
+"""))
+    spec_manual = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 15, 25, 20], title: A, body: x}
+  - {type: box, id: b, rect: [70, 15, 25, 20], title: B, body: y}
+  - {type: arrow, id: ar, from: a.right, to: b.left, route: avoid, label: hi, label_offset: -2.2}
+"""))
+    ra = render(spec_auto, out_png=tmp_path / "a.png", dpi=80)
+    rm = render(spec_manual, out_png=tmp_path / "m.png", dpi=80)
+    cap_a = next(c for aid, c, _ in ra.arrow_label_boxes if aid == "ar")
+    cap_m = next(c for aid, c, _ in rm.arrow_label_boxes if aid == "ar")
+    # 手动负 offset → 标签在线下方，与默认 auto 位置应不同（或至少 offset 标志生效）
+    el = next(e for e in spec_manual.elements if e.id == "ar")
+    assert el.label_offset_explicit is True
+    assert el.label_offset == -2.2
+    # 手动路径使用旧 layout：胶囊中心相对折线的侧应偏向下方
+    pts = dict(rm.arrow_segments)["ar"]
+    mid_y = (pts[0][1] + pts[-1][1]) / 2
+    assert cap_m.y + cap_m.h / 2 >= mid_y - 0.5 or abs(cap_a.y - cap_m.y) > 0.3
+
+
+def test_label_pos_auto_only_default_on_avoid(tmp_path):
+    """兼容性：普通箭头未写 label_pos 时不启用 auto（与旧行为一致）。"""
+    from paperfig.render import _use_auto_label
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+elements:
+  - {type: box, id: a, rect: [5, 15, 25, 20]}
+  - {type: box, id: b, rect: [70, 15, 25, 20]}
+  - {type: arrow, id: old, from: a.right, to: b.left, label: x}
+  - {type: arrow, id: av, from: a.right, to: b.left, route: avoid, label: y}
+  - {type: arrow, id: exp, from: a.right, to: b.left, route: auto, label: z, label_pos: auto}
+"""))
+    old = next(e for e in spec.elements if e.id == "old")
+    av = next(e for e in spec.elements if e.id == "av")
+    exp = next(e for e in spec.elements if e.id == "exp")
+    assert _use_auto_label(old) is False
+    assert _use_auto_label(av) is True
+    assert _use_auto_label(exp) is True
+
+
 # ── bug #2：抠图退化输入返回 False 不崩溃 ───────────────
 
 def test_cutout_all_white(tmp_path):

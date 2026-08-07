@@ -24,6 +24,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from .fonts import (FAMILY_SVG, PT_TO_MM, LINE_HEIGHT, SCRIPT_SCALE, SUB_SHIFT,
                     SUP_SHIFT, line_ascent_mm, measure_markup_mm, measure_mm,
                     parse_markup, split_runs, text_block_height_mm, wrap_text)
+from .routing import (RouteRequest, pick_best_label, route_all)
 from .spec import (ArrowEl, AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl,
                    LegendEl, MarkerEl, NetworkEl, PanelEl, PanelLabelEl, Rect,
                    ScatterEl, SketchEl, TextEl, TokensEl, parse_anchor)
@@ -128,6 +129,8 @@ class RenderResult:
         self.missing_assets: list[str] = []
         self.placeholder_assets: list[str] = []      # 意图性占位槽（待手动插入实验图）
         self.overflow_boxes: list[str] = []          # 文本溢出的 box id
+        # 渲染期软警告（level, code, msg），由 lint 合并；如 route-avoid-fallback
+        self.soft_issues: list[tuple[str, str, str]] = []
 
 
 # 叠影每层向右下错位（与 _render_box 一致）
@@ -205,8 +208,18 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
         else:
             s = _render_asset(n, spec, theme, fs, res)
         body.append(_wrap_el(n.id, s))
-    for a in arrows:
-        body.append(_wrap_el(a.id, _render_arrow(a, theme, fs, res)))
+
+    # 箭头：先批量避障路由 → 两阶段落标 → 再绘制（旧 route 路径像素不变）
+    avoid_paths = _precompute_avoid_routes(arrows, spec, res)
+    arrow_geoms = [_resolve_arrow_geometry(a, res, avoid_paths) for a in arrows]
+    auto_labels = _place_auto_arrow_labels(arrows, arrow_geoms, spec, res, theme, fs)
+    for a, geom in zip(arrows, arrow_geoms):
+        body.append(_wrap_el(
+            a.id,
+            _render_arrow(a, theme, fs, res,
+                          precomputed=geom,
+                          precomputed_label=auto_labels.get(a.id)),
+        ))
     for t in texts:
         if isinstance(t, TextEl):
             s = _render_text(t, theme, fs, res)
@@ -596,6 +609,256 @@ def _embed_image(path: Path, slot: Rect, halign: str, valign: str, ref: str,
 
 
 # ---------------------------------------------------------------- arrow
+
+def _endpoint_node_id(ep: str | tuple[float, float]) -> str | None:
+    if not isinstance(ep, str):
+        return None
+    return parse_anchor(ep)[0]
+
+
+def _use_auto_label(el: ArrowEl) -> bool:
+    """兼容性：仅 route:avoid 默认开启 auto 落标；显式 label_offset 则尊重手动。"""
+    if not el.label:
+        return False
+    if el.label_offset_explicit:
+        return False
+    if el.label_pos == "auto":
+        return True
+    if el.label_pos is not None:
+        return False
+    return el.route == "avoid"
+
+
+def _estimate_text_bbox(el: TextEl, fs: float) -> Rect:
+    """独立 text 的粗包围盒（渲染前估算，供避障/落标）。"""
+    pt = el.size * fs * (0.92 if el.smallcaps else 1.0)
+    ls = 0.35 if el.smallcaps else 0.0
+    raw = el.text.upper() if el.smallcaps else el.text
+    lines = raw.split("\n") if not el.max_w else [
+        ln.text for ln in wrap_text(raw, pt, el.max_w, el.bold)
+    ]
+    if not lines:
+        lines = [""]
+    widths = [
+        measure_markup_mm(ln, pt, el.bold) + max(len(ln) - 1, 0) * ls
+        for ln in lines
+    ]
+    tw = max(widths) if widths else 0.0
+    lh = pt * PT_TO_MM * LINE_HEIGHT
+    th = lh * len(lines)
+    x, y = el.at
+    if el.anchor == "start":
+        lx = x
+    elif el.anchor == "end":
+        lx = x - tw
+    else:
+        lx = x - tw / 2
+    asc = line_ascent_mm(lines[0] or "x", pt, el.bold)
+    return Rect(lx, y, tw, max(th, asc))
+
+
+def _collect_routing_obstacles(spec: FigureSpec, res: RenderResult
+                               ) -> list[tuple[str, Rect]]:
+    """路由障碍：节点视觉外边界 + group + 独立 text；panel 为背景容器不计入。"""
+    out: list[tuple[str, Rect]] = []
+    solid = (BoxEl, AssetEl, TokensEl, NetworkEl, ScatterEl, SketchEl, GroupEl)
+    for el in spec.elements:
+        if isinstance(el, solid):
+            vr = res.node_visual_rects.get(el.id) or res.node_rects.get(el.id)
+            if vr is not None:
+                out.append((el.id, vr))
+        elif isinstance(el, TextEl) and el.text.strip():
+            out.append((el.id, _estimate_text_bbox(el, spec.font_scale)))
+    return out
+
+
+def _precompute_avoid_routes(
+    arrows: list[ArrowEl],
+    spec: FigureSpec,
+    res: RenderResult,
+) -> dict[str, list[tuple[float, float]]]:
+    """批量 route:avoid；失败记 soft_issues 并让调用方降级 auto。"""
+    visual = res.node_visual_rects or res.node_rects
+    reqs: list[RouteRequest] = []
+    for el in arrows:
+        if el.route != "avoid" or el.style == "block":
+            continue
+        x1, y1, s1 = _anchor_point(
+            el.from_, visual, res.node_rects, toward=_ref_center(el.to, res.node_rects))
+        x2, y2, s2 = _anchor_point(
+            el.to, visual, res.node_rects, toward=_ref_center(el.from_, res.node_rects))
+        if _is_flush_pair(x1, y1, s1, x2, y2, s2):
+            continue
+        exclude = set()
+        for ep in (el.from_, el.to):
+            nid = _endpoint_node_id(ep)
+            if nid:
+                exclude.add(nid)
+        reqs.append(RouteRequest(
+            id=el.id, x1=x1, y1=y1, s1=s1, x2=x2, y2=y2, s2=s2,
+            exclude_ids=exclude,
+        ))
+    if not reqs:
+        return {}
+    obstacles = _collect_routing_obstacles(spec, res)
+    canvas = Rect(0, 0, spec.width, spec.height)
+    results = route_all(reqs, obstacles, canvas)
+    paths: dict[str, list[tuple[float, float]]] = {}
+    for rid, rr in results.items():
+        if rr.fallback:
+            res.soft_issues.append(("W", "route-avoid-fallback", rr.message))
+        else:
+            paths[rid] = rr.points
+    return paths
+
+
+@dataclass
+class _ArrowGeom:
+    x1: float
+    y1: float
+    s1: str
+    x2: float
+    y2: float
+    s2: str
+    pts: list[tuple[float, float]]
+    flush: bool = False
+    arc_ctrl: tuple[float, float] | None = None
+    skip: bool = False  # 退化无法绘制
+
+
+def _resolve_arrow_geometry(
+    el: ArrowEl,
+    res: RenderResult,
+    avoid_paths: dict[str, list[tuple[float, float]]],
+) -> _ArrowGeom:
+    """解析箭头折线（含 avoid 预计算结果 / 降级 auto），不绘制。"""
+    visual = res.node_visual_rects or res.node_rects
+    x1, y1, s1 = _anchor_point(
+        el.from_, visual, res.node_rects, toward=_ref_center(el.to, res.node_rects))
+    x2, y2, s2 = _anchor_point(
+        el.to, visual, res.node_rects, toward=_ref_center(el.from_, res.node_rects))
+
+    if el.style == "block":
+        return _ArrowGeom(x1, y1, s1, x2, y2, s2, [(x1, y1), (x2, y2)])
+
+    flush = _is_flush_pair(x1, y1, s1, x2, y2, s2)
+    arc_ctrl: tuple[float, float] | None = None
+
+    if el.route == "avoid" and el.id in avoid_paths:
+        pts = list(avoid_paths[el.id])
+        # avoid 路径已正交且法向进出；仅钉 tip，不做 resnap（会破坏末段法向）
+        if len(pts) >= 2:
+            pts[0], pts[-1] = (x1, y1), (x2, y2)
+            pts = _dedupe(pts)
+        return _ArrowGeom(x1, y1, s1, x2, y2, s2, pts, flush=False)
+
+    if el.route == "arc" and not el.via:
+        dx, dy = x2 - x1, y2 - y1
+        chord = math.hypot(dx, dy)
+        if chord < 1e-6:
+            return _ArrowGeom(x1, y1, s1, x2, y2, s2, [(x1, y1)], skip=True)
+        nx, ny = -dy / chord, dx / chord
+        arc_ctrl = ((x1 + x2) / 2 + nx * el.bend * chord,
+                    (y1 + y2) / 2 + ny * el.bend * chord)
+        pts = []
+        for i in range(9):
+            t = i / 8
+            mt = 1 - t
+            pts.append((mt * mt * x1 + 2 * mt * t * arc_ctrl[0] + t * t * x2,
+                        mt * mt * y1 + 2 * mt * t * arc_ctrl[1] + t * t * y2))
+        return _ArrowGeom(x1, y1, s1, x2, y2, s2, pts, arc_ctrl=arc_ctrl)
+
+    if flush:
+        return _ArrowGeom(x1, y1, s1, x2, y2, s2, [(x1, y1), (x2, y2)], flush=True)
+
+    # avoid 失败降级：忽略 via，走 auto（与 route:auto 相同）
+    if el.route == "avoid":
+        pts = _dedupe(_route_points(x1, y1, s1, x2, y2, s2, "auto"))
+        if len(pts) >= 2:
+            pts = _resnap_endpoints(pts, (x1, y1), (x2, y2), s1, s2)
+        return _ArrowGeom(x1, y1, s1, x2, y2, s2, pts)
+
+    if el.via:
+        pts = _adjust_via_ortho_end(_dedupe([(x1, y1), *el.via, (x2, y2)]), s2)
+        if pts:
+            pts = list(pts)
+            pts[0], pts[-1] = (x1, y1), (x2, y2)
+            pts = _dedupe(pts)
+        return _ArrowGeom(x1, y1, s1, x2, y2, s2, pts)
+
+    route = "straight" if el.route == "arc" else el.route
+    if route == "straight":
+        pts = _dedupe([(x1, y1), (x2, y2)])
+    else:
+        pts = _dedupe(_route_points(x1, y1, s1, x2, y2, s2, route))
+        if len(pts) >= 2:
+            pts = _resnap_endpoints(pts, (x1, y1), (x2, y2), s1, s2)
+    return _ArrowGeom(x1, y1, s1, x2, y2, s2, pts)
+
+
+def _place_auto_arrow_labels(
+    arrows: list[ArrowEl],
+    geoms: list[_ArrowGeom],
+    spec: FigureSpec,
+    res: RenderResult,
+    th: Theme,
+    fs: float,
+) -> dict[str, tuple["_TextSpan", Rect]]:
+    """两阶段落标：全部路径确定后，按碰撞打分为 auto 标签选位。"""
+    need = [(el, g) for el, g in zip(arrows, geoms)
+            if _use_auto_label(el) and len(g.pts) >= 2 and not g.skip]
+    if not need:
+        return {}
+
+    boxes: list[Rect] = []
+    for el in spec.elements:
+        if isinstance(el, (BoxEl, AssetEl, TokensEl, NetworkEl, ScatterEl, SketchEl)):
+            vr = res.node_visual_rects.get(el.id) or res.node_rects.get(el.id)
+            if vr is not None:
+                boxes.append(vr)
+    # 已渲染的盒子标题/正文 + 独立 text，都作为落标障碍
+    texts: list[Rect] = []
+    for sp in res.text_spans:
+        if sp.text.strip() and not sp.diagnostic:
+            texts.append(sp.bbox())
+    for el in spec.elements:
+        if isinstance(el, TextEl) and el.text.strip():
+            texts.append(_estimate_text_bbox(el, fs))
+
+    # 其它箭头线段（含非 auto 标签箭头）
+    all_segs: dict[str, list[tuple[tuple[float, float], tuple[float, float]]]] = {}
+    for el, g in zip(arrows, geoms):
+        if len(g.pts) >= 2:
+            all_segs[el.id] = list(zip(g.pts, g.pts[1:]))
+
+    placed: dict[str, tuple[_TextSpan, Rect]] = {}
+    other_caps: list[Rect] = []
+
+    for el, g in need:
+        pt_size = th.size_arrow_label * fs
+        w = measure_markup_mm(el.label, pt_size)
+        asc = line_ascent_mm(el.label, pt_size)
+        h = pt_size * PT_TO_MM * LINE_HEIGHT
+        weight_mul = {"thin": 0.65, "normal": 1.0, "heavy": 1.55}.get(el.weight, 1.0)
+        lw = el.width if el.width is not None else th.lw_arrow * weight_mul
+        scale = max(1.0, (lw / th.lw_arrow) ** 0.75)
+        head_len = th.arrow_head_len * scale
+        other_segs = []
+        for aid, segs in all_segs.items():
+            if aid != el.id:
+                other_segs.extend(segs)
+        best = pick_best_label(
+            g.pts, w, h, asc, boxes, texts, other_segs, other_caps,
+            head_keep=max(head_len + 1.2, 2.8),
+        )
+        if best is None:
+            continue
+        span = _TextSpan(x=best.x, baseline=best.baseline, text=el.label,
+                         pt=pt_size, bold=False, color=th.muted)
+        placed[el.id] = (span, best.cap)
+        other_caps.append(best.cap)
+    return placed
+
 
 def _anchor_point(ep: str | tuple[float, float],
                   visual_rects: dict[str, Rect],
@@ -993,58 +1256,27 @@ def _ref_center(ep: str | tuple[float, float], rects: dict[str, Rect]) -> tuple[
     return r.cx, r.cy
 
 
-def _render_arrow(el: ArrowEl, th: Theme, fs: float, res: RenderResult) -> str:
+def _render_arrow(
+    el: ArrowEl,
+    th: Theme,
+    fs: float,
+    res: RenderResult,
+    precomputed: _ArrowGeom | None = None,
+    precomputed_label: tuple["_TextSpan", Rect] | None = None,
+) -> str:
     color = el.color or th.arrow
-    # 视觉外边界锚点 + 裸 id 按对方逻辑中心自动选边
-    visual = res.node_visual_rects or res.node_rects
-    x1, y1, s1 = _anchor_point(el.from_, visual, res.node_rects, toward=_ref_center(el.to, res.node_rects))
-    x2, y2, s2 = _anchor_point(el.to, visual, res.node_rects, toward=_ref_center(el.from_, res.node_rects))
+    if precomputed is None:
+        precomputed = _resolve_arrow_geometry(el, res, {})
+    x1, y1, s1 = precomputed.x1, precomputed.y1, precomputed.s1
+    x2, y2, s2 = precomputed.x2, precomputed.y2, precomputed.s2
+    pts = list(precomputed.pts)
+    flush = precomputed.flush
+    arc_ctrl = precomputed.arc_ctrl
 
     if el.style == "block":
         return _render_block_arrow(el, (x1, y1), (x2, y2), color, th, fs, res)
 
-    flush = _is_flush_pair(x1, y1, s1, x2, y2, s2)
-    arc_ctrl: tuple[float, float] | None = None
-    if el.route == "arc" and not el.via:
-        # 二次贝塞尔弧线：控制点 = 弦中点 + 法向 × bend × 弦长
-        dx, dy = x2 - x1, y2 - y1
-        chord = math.hypot(dx, dy)
-        if chord < 1e-6:
-            res.arrow_segments.append((el.id, [(x1, y1)]))
-            res.arrow_ends.append((el.id, s1, s2))
-            return ""
-        nx, ny = -dy / chord, dx / chord
-        arc_ctrl = ((x1 + x2) / 2 + nx * el.bend * chord,
-                    (y1 + y2) / 2 + ny * el.bend * chord)
-        # 供 lint / 标签用的采样折线
-        pts = []
-        for i in range(9):
-            t = i / 8
-            mt = 1 - t
-            pts.append((mt * mt * x1 + 2 * mt * t * arc_ctrl[0] + t * t * x2,
-                        mt * mt * y1 + 2 * mt * t * arc_ctrl[1] + t * t * y2))
-    elif flush:
-        # 贴齐：端点落在视觉边上；杆沿接触线做法向极短外伸再折回，保证头朝向
-        pts = [(x1, y1), (x2, y2)]
-    elif el.via:
-        # 手动途经点：仅修正贴边滑行；斜线 via 保持用户意图（lint 可报 approach）
-        pts = _adjust_via_ortho_end(_dedupe([(x1, y1), *el.via, (x2, y2)]), s2)
-        if pts:
-            pts = list(pts)
-            pts[0], pts[-1] = (x1, y1), (x2, y2)
-            pts = _dedupe(pts)
-    else:
-        route = "straight" if el.route == "arc" else el.route
-        if route == "straight":
-            pts = _dedupe([(x1, y1), (x2, y2)])
-        else:
-            pts = _dedupe(_route_points(x1, y1, s1, x2, y2, s2, route))
-            # ortho/snap 后偶发微漂：钉回视觉锚点并保持正交
-            if len(pts) >= 2:
-                pts = _resnap_endpoints(pts, (x1, y1), (x2, y2), s1, s2)
-
-    if len(pts) < 2:
-        # 起止点重合（如两端锚到同一位置），无法绘制箭头
+    if precomputed.skip or len(pts) < 2:
         res.arrow_segments.append((el.id, pts))
         res.arrow_ends.append((el.id, s1, s2))
         return ""
@@ -1139,8 +1371,11 @@ def _render_arrow(el: ArrowEl, th: Theme, fs: float, res: RenderResult) -> str:
 
     if el.label:
         pt_size = th.size_arrow_label * fs
-        span, cap = _arrow_label_layout(
-            pts, el.label, el.label_offset, pt_size, head_len, th.muted)
+        if precomputed_label is not None:
+            span, cap = precomputed_label
+        else:
+            span, cap = _arrow_label_layout(
+                pts, el.label, el.label_offset, pt_size, head_len, th.muted)
         if el.label_bg:
             out.append(
                 f'<rect x="{cap.x:.3f}" y="{cap.y:.3f}" width="{cap.w:.3f}" '

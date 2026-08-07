@@ -214,7 +214,7 @@ class ArrowEl:
     id: str
     from_: str | tuple[float, float]
     to: str | tuple[float, float]
-    route: str = "auto"          # auto | straight | hv | vh | z | zv | arc
+    route: str = "auto"          # auto | straight | hv | vh | z | zv | arc | avoid
     style: str = "solid"         # solid | dashed | dotted | block(空心/实心粗箭头)
     label: str = ""
     color: str | None = None
@@ -227,6 +227,9 @@ class ArrowEl:
     bend: float = 0.25           # arc 路由的弯曲度（弦长比例，负值反侧）
     label_bg: bool = True        # 标签浅色胶囊底（默认开，与旧版白底一致）
     weight: str = "normal"       # thin | normal | heavy
+    # label_pos: None=未写（avoid 默认 auto，其它保持旧落标）；"auto"=碰撞打分落标
+    label_pos: str | None = None
+    label_offset_explicit: bool = False  # YAML 是否显式写了 label_offset
 
 
 @dataclass
@@ -332,8 +335,8 @@ _ALLOWED_KEYS = {
     "text": {"type", "id", "at", "text", "size", "bold", "italic", "color", "anchor",
              "max_w", "rotate", "smallcaps"},
     "arrow": {"type", "id", "from", "to", "route", "style", "label", "color",
-              "head", "bidir", "label_offset", "via", "width", "fill", "bend",
-              "label_bg", "weight"},
+              "head", "bidir", "label_offset", "label_pos", "via", "width", "fill",
+              "bend", "label_bg", "weight"},
     "group": {"type", "id", "members", "rect", "label", "pad", "style", "fill",
               "color", "label_pos", "label_size", "lw", "hatch", "shadow"},
     "panel_label": {"type", "id", "at", "text"},
@@ -351,7 +354,8 @@ _ALLOWED_KEYS = {
 
 _SHAPES = {"rect", "stadium", "diamond", "cylinder", "parallelogram", "hexagon", "ellipse", "trapezoid"}
 _MARKER_ICONS = {"fire", "snow", "lock", "check", "cross", "oplus", "otimes", "wifi"}
-_ROUTES = {"auto", "straight", "hv", "vh", "z", "zv", "arc"}
+_ROUTES = {"auto", "straight", "hv", "vh", "z", "zv", "arc", "avoid"}
+_ARROW_LABEL_POS = {"auto"}
 _ARROW_STYLES = {"solid", "dashed", "dotted", "block"}
 _ARROW_WEIGHTS = {"thin", "normal", "heavy"}
 _PANEL_HEADER_STYLES = {"banner", "smallcaps"}
@@ -549,6 +553,13 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
             if weight not in _ARROW_WEIGHTS:
                 raise SpecError(f"{ctx}: weight 必须是 thin/normal/heavy")
             via = [_point(p, f"{ctx}.via[{k}]") for k, p in enumerate(e.get("via") or [])]
+            label_offset_explicit = "label_offset" in e
+            label_pos = e.get("label_pos", None)
+            if label_pos is not None:
+                label_pos = str(label_pos)
+                if label_pos not in _ARROW_LABEL_POS:
+                    raise SpecError(
+                        f"{ctx}: arrow.label_pos 必须是 {sorted(_ARROW_LABEL_POS)}（或省略）")
             elements.append(ArrowEl(
                 id=eid, from_=_endpoint(e["from"], ctx), to=_endpoint(e["to"], ctx),
                 route=route, style=style,
@@ -558,6 +569,8 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 width=float(e["width"]) if e.get("width") is not None else None,
                 fill=e.get("fill"), bend=float(e.get("bend", 0.25)),
                 label_bg=bool(e.get("label_bg", True)), weight=weight,
+                label_pos=label_pos,
+                label_offset_explicit=label_offset_explicit,
             ))
         elif etype == "group":
             members = [str(m) for m in (e.get("members") or [])]
