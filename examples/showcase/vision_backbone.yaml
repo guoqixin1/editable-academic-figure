@@ -1,4 +1,4 @@
-# A2 — Multi-branch vision backbone + multi-task heads
+# A2 — Multi-task vision backbone: flex layout + route: avoid（零手写坐标）
 figure: {width: 180, height: 94, dpi: 600}
 theme:
   preset: topconf
@@ -7,109 +7,168 @@ theme:
     secondary: "#FFB300"
     section_bg: "#ECEFF1"
 
-elements:
-  # -- Macro --
-  - {type: panel, id: p_macro, rect: [3, 2.5, 102, 88.5], title: "Overall Architecture",
-     header_style: smallcaps, fill: "#ECEFF1", title_size: 7.0, header_h: 6.5}
+layout:
+  kind: row
+  gap: 4.0
+  pad: [2.5, 3.0]
+  align: stretch
+  children:
+    # ── Macro: Overall Architecture ──
+    - id: p_macro
+      type: panel
+      kind: row
+      gap: 4.0
+      pad: [8.0, 3.0, 3.0, 3.0]
+      align: start
+      title: "Overall Architecture"
+      header_style: smallcaps
+      fill: "#ECEFF1"
+      title_size: 7.0
+      header_h: 6.5
+      w: 100
+      children:
+        # 左列：输入栈 + 图例（B×3×H×W 改挂 img→patch 箭头，贴竖段）
+        - kind: col
+          gap: 7.0
+          children:
+            - {ref: img, w: 17, h: 22}
+            - {ref: patch, w: 17, h: 22}
+            - {ref: lg, w: 28, h: 18}
+        # 中：×N Transformer group
+        - id: vit_grp
+          type: group
+          kind: col
+          gap: 0
+          pad: [7.0, 1.5, 3.0, 1.5]
+          align: center
+          fill: "#FFFFFF"
+          style: dashed
+          color: "#00897B"
+          label: "×N"
+          label_pos: inside-top
+          label_size: 7.5
+          children:
+            - {ref: vit, w: 18, h: 40}
+        # 右：FPN + 三任务头
+        - kind: col
+          gap: 4.0
+          children:
+            - {ref: fpn, w: 20, h: 14}
+            - {ref: h_cls, w: 20, h: 14}
+            - {ref: h_det, w: 20, h: 14}
+            - {ref: h_seg, w: 20, h: 14}
 
-  - {type: box, id: img, rect: [9, 12, 18, 24], title: "Input Image",
+    # ── Micro: Transformer Block detail ──
+    - id: p_micro
+      type: panel
+      kind: col
+      gap: 2.5
+      pad: [8.0, 3.5, 3.0, 7.0]   # 左侧加宽：残差走廊
+      align: stretch
+      title: "Transformer Block (detail)"
+      header_style: smallcaps
+      fill: "#F7F7F7"
+      title_size: 7.0
+      header_h: 6.5
+      flex: 1
+      children:
+        - {ref: x_in, h: 10}
+        - kind: row
+          gap: 4.0
+          align: start
+          children:
+            - {ref: ln1, w: 20, h: 12}
+            - {ref: mhsa, w: 30, h: 20, flex: 1}
+        - {ref: add1, h: 10}
+        - kind: row
+          gap: 4.0
+          align: start
+          children:
+            - {ref: ln2, w: 20, h: 12}
+            - {ref: ffn, w: 30, h: 14, flex: 1}
+        - {ref: add2, h: 10}
+
+elements:
+  # Macro nodes
+  - {type: box, id: img, title: "Input Image",
      body: "RGB H×W", variant: plain, shape: parallelogram,
      sketch: grid, valign: top, title_size: 6.6, body_size: 6.0}
 
-  - {type: box, id: patch, rect: [9, 42, 18, 24], title: "Patch Embed",
+  - {type: box, id: patch, title: "Patch Embed",
      body: "16×16 tokens", variant: secondary, accent: left,
      sketch: grid, valign: top, title_size: 6.6, body_size: 6.0}
 
-  # corridors: patch.right=27 -> grp.left=43 (16mm); grp.right=65 -> fpn.left=79 (14mm)
-  - {type: group, id: vit_grp, rect: [43, 12, 22, 54], fill: "#FFFFFF", style: dashed,
-     color: "#00897B", lw: 0.45, label: "×N", label_pos: inside-top, label_size: 7.5}
-
-  - {type: box, id: vit, rect: [44.5, 20, 19, 42], title: "Transformer",
+  - {type: box, id: vit, title: "Transformer",
      body: "MHSA+FFN", variant: primary, accent: left,
      sketch: heatmap, valign: top, shadow: true, title_size: 6.4, body_size: 6.0}
 
-  - {type: box, id: fpn, rect: [79, 12, 22, 15], title: "Feat. Pyramid",
+  - {type: box, id: fpn, title: "Feat. Pyramid",
      body: "P3–P5", variant: primary, accent: left,
      sketch: bars, valign: top, shadow: true, title_size: 6.2, body_size: 6.0}
 
-  # equal 4mm gaps; no body -> sketch taller; bars/grid/heatmap distinct
-  - {type: box, id: h_cls, rect: [79, 31, 22, 15], title: "Cls · GAP→FC",
+  - {type: box, id: h_cls, title: "Cls · GAP→FC",
      variant: secondary, sketch: bars, valign: top, title_size: 6.2}
 
-  - {type: box, id: h_det, rect: [79, 50, 22, 15], title: "Det · box+cls",
+  - {type: box, id: h_det, title: "Det · box+cls",
      variant: secondary, sketch: grid, valign: top, title_size: 6.2}
 
-  - {type: box, id: h_seg, rect: [79, 69, 22, 15], title: "Seg · mask",
+  - {type: box, id: h_seg, title: "Seg · mask",
      variant: secondary, sketch: heatmap, valign: top, title_size: 6.2}
 
-  - {type: arrow, from: img.bottom, to: patch.top, label: "B×3×H×W", weight: heavy,
-     label_bg: true}
-  - {type: arrow, from: patch.right, to: vit.left@0.70, weight: heavy}
-  # vertical mid-corridor, clear of patch.right(27) and grp.left(43)
-  - {type: text, id: dim1, at: [34, 55], text: "196×768", size: 6.0, color: "#333333",
-     anchor: middle, rotate: -90}
-  - {type: arrow, from: vit.right, to: fpn.left, weight: heavy, route: hv}
-  - {type: text, id: dim2, at: [70, 15.2], text: "B×L×D", size: 6.0, color: "#333333",
-     anchor: middle}
-  - {type: arrow, from: fpn.bottom, to: h_cls.top, label: "P3–P5", weight: normal,
-     label_bg: true}
-  - {type: arrow, from: fpn.bottom, to: h_det.left, route: hv, weight: normal}
-  - {type: arrow, from: fpn.bottom, to: h_seg.left, route: hv, weight: normal}
+  # Macro arrows — route: avoid，零 via
+  # B×3×H×W 贴 img→patch 竖段右侧
+  - {type: arrow, from: img.bottom, to: patch.top, label: "B×3×H×W", weight: heavy, route: straight, label_offset: 1.8}
+  - {type: arrow, from: patch.right, to: vit.left@0.70, label: "196×768", weight: heavy, route: avoid, label_offset: 1.4}
+  # 对齐 FPN 高度，避免从 Transformer 中腰折到顶部
+  - {type: arrow, from: vit.right@0.06, to: fpn.left, label: "B×L×D", weight: heavy, route: avoid, label_pos: auto}
+  - {type: arrow, from: fpn.bottom, to: h_cls.top, label: "P3–P5", weight: normal, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: h_cls.bottom, to: h_det.top, weight: normal, route: avoid}
+  - {type: arrow, from: h_det.bottom, to: h_seg.top, weight: normal, route: avoid}
+  # skip：内容区上沿横走，label auto 避开标题
+  - {type: arrow, from: img.right@0.06, to: fpn.left@0.08,
+     style: dashed, weight: thin, label: "skip", route: avoid, label_pos: auto}
+  # block detail：label_pos auto → 落到底部横段走廊，避开 Seg 标题
+  - {type: arrow, from: vit_grp.right@0.85, to: p_micro.left@0.92,
+     style: dashed, weight: thin, label: "block detail", color: "#00897B",
+     route: avoid, label_pos: auto}
 
-  # skip: no arrow label; rotated text mid-left only
-  - {type: arrow, from: patch.left, to: fpn.top,
-     via: [[6.8, 54], [6.8, 11.0], [90, 11.0]], style: dashed, weight: thin}
-  - {type: text, id: skip_lbl, at: [6.8, 42], text: "skip", size: 6.0, color: "#666666",
-     anchor: middle, rotate: -90}
-
-  # -- Micro --
-  - {type: panel, id: p_micro, rect: [109, 2.5, 68, 88.5], title: "Transformer Block (detail)",
-     header_style: smallcaps, fill: "#F7F7F7", title_size: 7.0, header_h: 6.5}
-
-  - {type: box, id: x_in, rect: [116, 12, 54, 10], title: "X_{in}",
+  # Micro nodes
+  - {type: box, id: x_in, title: "X_{in}",
      body: "R^{B×L×D} · L=196 · D=768", variant: plain, title_size: 6.6, body_size: 6.0}
 
-  - {type: box, id: ln1, rect: [116, 24.5, 20, 12], title: "LayerNorm",
+  - {type: box, id: ln1, title: "LayerNorm",
      body: "pre-norm", variant: muted, title_size: 6.2, body_size: 6.0}
 
-  - {type: box, id: mhsa, rect: [140, 24.5, 30, 20], title: "MHSA",
+  - {type: box, id: mhsa, title: "MHSA",
      body: "h=12 heads", variant: secondary, accent: left,
      sketch: heatmap, valign: top, shadow: true, title_size: 6.8, body_size: 6.0}
 
-  - {type: box, id: add1, rect: [116, 48, 54, 10], title: "Add & Norm",
+  - {type: box, id: add1, title: "Add & Norm",
      body: "X + MHSA(X)", variant: tertiary, title_size: 6.4, body_size: 6.0}
 
-  - {type: box, id: ln2, rect: [116, 61, 20, 12], title: "LayerNorm",
+  - {type: box, id: ln2, title: "LayerNorm",
      body: "pre-norm", variant: muted, title_size: 6.2, body_size: 6.0}
 
-  - {type: box, id: ffn, rect: [140, 61, 30, 14], title: "FFN",
+  - {type: box, id: ffn, title: "FFN",
      body: "GELU · 4D", variant: primary, accent: left,
      sketch: bars, valign: top, shadow: true, title_size: 6.8, body_size: 6.0}
 
-  - {type: box, id: add2, rect: [116, 78, 54, 10], title: "Add & Norm",
+  - {type: box, id: add2, title: "Add & Norm",
      body: "Y + FFN(Y) → X_{out}", variant: tertiary, title_size: 6.4, body_size: 6.0}
 
-  - {type: arrow, from: x_in.bottom, to: ln1.top, weight: heavy}
-  - {type: arrow, from: ln1.right, to: mhsa.left, label: "Q,K,V", weight: heavy,
-     label_bg: true}
-  - {type: arrow, from: mhsa.bottom, to: add1.top@0.78, weight: heavy}
+  # Micro arrows
+  - {type: arrow, from: x_in.bottom@0.18, to: ln1.top, weight: heavy, route: avoid}
+  - {type: arrow, from: ln1.right, to: mhsa.left, label: "Q,K,V", weight: heavy, route: avoid, label_offset: 1.4}
+  - {type: arrow, from: mhsa.bottom, to: add1.top@0.78, weight: heavy, route: avoid}
   - {type: arrow, from: x_in.left, to: add1.left,
-     via: [[112, 17], [112, 53]], style: dashed, weight: thin, label: "res",
-     label_bg: true}
-  - {type: arrow, from: add1.bottom, to: ln2.top, weight: heavy}
-  - {type: arrow, from: ln2.right, to: ffn.left, label: "B×L×D", weight: heavy,
-     label_bg: true, label_offset: 2.2}
-  - {type: arrow, from: ffn.bottom, to: add2.top@0.78, weight: heavy}
+     style: dashed, weight: thin, label: "res", route: avoid, label_offset: 1.4}
+  - {type: arrow, from: add1.bottom@0.18, to: ln2.top, weight: heavy, route: avoid}
+  - {type: arrow, from: ln2.right, to: ffn.left, label: "B×L×D", weight: heavy, route: avoid, label_offset: 2.2}
+  - {type: arrow, from: ffn.bottom, to: add2.top@0.78, weight: heavy, route: avoid}
   - {type: arrow, from: add1.left, to: add2.left,
-     via: [[112, 53], [112, 83]], style: dashed, weight: thin, label: "res",
-     label_bg: true}
+     style: dashed, weight: thin, label: "res", route: avoid, label_offset: 1.4}
 
-  # callout in corridor x=72; end y = 2.5 + 0.95*88.5 = 86.575
-  - {type: arrow, from: vit.right@0.92, to: p_micro.left@0.95,
-     via: [[72, 62], [72, 86.6], [106.5, 86.6]], style: dashed, weight: thin,
-     label: "block detail", color: "#00897B", label_bg: true, label_offset: -2.2}
-
-  - {type: legend, id: lg, at: [9, 70], columns: 1, size: 6.0, items: [
+  - {type: legend, id: lg, columns: 1, size: 6.0, items: [
       {swatch: box, color: "#00897B", label: "backbone"},
       {swatch: box, color: "#FFB300", label: "attn / heads"},
       {swatch: dashed, color: "#4D4D4D", label: "residual / skip"},
