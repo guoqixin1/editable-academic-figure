@@ -12,6 +12,7 @@
     - 箭头穿过无关节点（含 legend / 独立 sketch / asset；端点仅豁免法向 stub）
     - 箭头标签压 sketch/accent（arrow-label-over-sketch，交 >0.8mm²）
     - 箭头标签深入节点 inner（arrow-label-in-node；显式 label_offset 不豁免）
+    - 箭头标签压到 panel 标题带（arrow-label-on-title）
   W 级（警告，建议修）
     - 字号低于下限（印刷缩放后 <6pt）
     - 节点重叠
@@ -23,6 +24,8 @@
     - 箭头出口落在本盒 sketch 带且法向净空不足（arrow-exit-over-content）
     - 绕行穿空场（arrow-route-awkward）
     - 箭头标签盖住尖端（arrow-label-tip）/ 压到其他文字（arrow-label-over-text）
+    - 箭头标签中心距折线过远（arrow-label-far，>6mm；含显式 offset）
+    - 近距候选全硬拒已折中放置（arrow-label-crowded，由 render soft_issues 注入）
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ import re
 from dataclasses import dataclass
 
 from .render import RenderResult, visual_rect_for
+from .routing import LABEL_DIST_FAR_LINT_MM, cap_path_distance
 from .spec import (
     ArrowEl, AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl, LegendEl,
     MarkerEl, NetworkEl, PanelEl, Rect, ScatterEl, SketchEl, TextEl, TokensEl,
@@ -46,6 +50,7 @@ _ARROW_APPROACH_MAX_DEG = 15.0
 _ARROW_APPROACH_MIN_COS = math.cos(math.radians(_ARROW_APPROACH_MAX_DEG))
 _ARROW_LABEL_SKETCH_MIN = 0.8   # mm²：标签∩sketch/accent → E
 _ARROW_LABEL_NODE_MIN = 0.8     # mm²：标签∩节点 inner → E
+_ARROW_LABEL_TITLE_MIN = 0.5    # mm²：标签∩panel 标题带 → E
 _ENDPOINT_BORDER_MM = 1.0       # 端点盒边框带（与 routing 一致）
 _EXIT_SKETCH_CLEARANCE = 2.5    # mm：出口到本盒 sketch 法向净空
 _MIN_APPROACH_MM = 3.0          # 与 render/routing 法向 stub 一致
@@ -115,6 +120,8 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues += _check_arrow_label_occlusion(spec, res)
     issues += _check_arrow_label_over_sketch(res)
     issues += _check_arrow_label_in_node(spec, res)
+    issues += _check_arrow_label_on_title(res)
+    issues += _check_arrow_label_far(res)
     issues += _check_arrow_route_awkward(spec, res)
     issues += _check_asset_scale(res)
     issues += _check_density(spec, res)
@@ -520,6 +527,43 @@ def _check_arrow_label_in_node(spec: FigureSpec, res: RenderResult) -> list[Issu
                     f"（交 {inter:.2f}mm²）；边框带可叠、勿压 inner/sketch",
                 ))
                 break
+    return issues
+
+
+def _check_arrow_label_on_title(res: RenderResult) -> list[Issue]:
+    """箭头标签压到 panel 标题带（标题行+分隔线/色条）→ E。"""
+    issues: list[Issue] = []
+    bands = getattr(res, "panel_title_bands", []) or []
+    if not bands:
+        return issues
+    for aid, cap, label in getattr(res, "arrow_label_boxes", []):
+        for pid, band in bands:
+            inter = cap.intersection_area(band)
+            if inter > _ARROW_LABEL_TITLE_MIN:
+                issues.append(Issue(
+                    "E", "arrow-label-on-title",
+                    f"箭头 '{aid}' 标签 “{label[:14]}” 压到 panel '{pid}' 标题带"
+                    f"（交 {inter:.2f}mm²）；拉开间距或改 label_offset",
+                ))
+                break
+    return issues
+
+
+def _check_arrow_label_far(res: RenderResult) -> list[Issue]:
+    """标签胶囊中心到所属折线距离 >6mm → W（含显式 label_offset）。"""
+    issues: list[Issue] = []
+    segs = {aid: pts for aid, pts in getattr(res, "arrow_segments", []) or []}
+    for aid, cap, label in getattr(res, "arrow_label_boxes", []):
+        pts = segs.get(aid)
+        if not pts or len(pts) < 2:
+            continue
+        d = cap_path_distance(cap, pts)
+        if d > LABEL_DIST_FAR_LINT_MM:
+            issues.append(Issue(
+                "W", "arrow-label-far",
+                f"箭头 '{aid}' 标签 “{label[:14]}” 距折线 {d:.1f}mm"
+                f"（>{LABEL_DIST_FAR_LINT_MM:g}mm）；像悬浮孤儿，请贴近路径或删标签",
+            ))
     return issues
 
 

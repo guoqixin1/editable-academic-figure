@@ -1909,6 +1909,123 @@ elements:
                for i in _check_arrow_crossings(spec, res))
 
 
+# ── 标签距离上限 / 标题带 / far·crowded lint ─────────────
+
+def test_label_auto_respects_path_dist_hard_cap():
+    """auto 落标：绝不为无碰撞跑出距离硬上限（≤5mm）。"""
+    from paperfig.routing import LABEL_DIST_HARD_MM, cap_path_distance, pick_best_label
+
+    pts = [(20.0, 40.0), (80.0, 40.0)]
+    # 整条路径上下被墙堵住，仅远处（画布顶）无障——旧逻辑会「流放」
+    boxes = [
+        Rect(10, 30, 90, 8),   # 线上方近距墙
+        Rect(10, 42, 90, 8),   # 线下方近距墙
+    ]
+    best = pick_best_label(pts, 10.0, 3.5, 2.5, boxes, [], [], [])
+    assert best is not None
+    assert cap_path_distance(best.cap, pts) <= LABEL_DIST_HARD_MM + 1e-6
+    # 近距全撞 → crowded 兜底
+    assert best.crowded is True
+
+
+def test_label_hard_rejects_title_band():
+    """panel 标题带相交 → 硬拒；带外可落。"""
+    from paperfig.routing import _label_hard_collision
+
+    band = Rect(10, 10, 80, 7)
+    on_title = Rect(20, 12, 12, 3.5)
+    assert _label_hard_collision(
+        on_title, [], [], [], [], title_bands=[band],
+    )
+    clear = Rect(20, 22, 12, 3.5)
+    assert not _label_hard_collision(
+        clear, [], [], [], [], title_bands=[band],
+    )
+
+
+def test_lint_arrow_label_far_trigger_and_clean():
+    """中心距折线 >6mm → W；近距不报。"""
+    from paperfig.lint import _check_arrow_label_far
+    from paperfig.render import RenderResult
+
+    res = RenderResult()
+    res.arrow_segments.append(("ar", [(10.0, 40.0), (90.0, 40.0)]))
+    # 胶囊中心约在 y=40-12=28 → 距线 12mm
+    res.arrow_label_boxes.append(("ar", Rect(40, 26, 10, 4), "exile"))
+    bad = _check_arrow_label_far(res)
+    assert any(i.code == "arrow-label-far" and i.level == "W" for i in bad)
+
+    res2 = RenderResult()
+    res2.arrow_segments.append(("ar", [(10.0, 40.0), (90.0, 40.0)]))
+    res2.arrow_label_boxes.append(("ar", Rect(40, 36.5, 10, 3.5), "ok"))
+    assert not _check_arrow_label_far(res2)
+
+
+def test_lint_arrow_label_on_title_trigger_and_clean():
+    """压 panel 标题带 → E；带外不报。"""
+    from paperfig.lint import _check_arrow_label_on_title
+    from paperfig.render import RenderResult
+
+    res = RenderResult()
+    res.panel_title_bands.append(("p1", Rect(5, 5, 90, 7)))
+    res.arrow_label_boxes.append(("ar", Rect(20, 6, 10, 3.5), "r(τ)"))
+    bad = _check_arrow_label_on_title(res)
+    assert any(i.code == "arrow-label-on-title" and i.level == "E" for i in bad)
+
+    res2 = RenderResult()
+    res2.panel_title_bands.append(("p1", Rect(5, 5, 90, 7)))
+    res2.arrow_label_boxes.append(("ar", Rect(20, 20, 10, 3.5), "ok"))
+    assert not _check_arrow_label_on_title(res2)
+
+
+def test_label_crowded_soft_issue_via_render(tmp_path):
+    """近距全硬拒时 render 记 arrow-label-crowded，且标签仍贴路径。"""
+    from paperfig.routing import LABEL_DIST_HARD_MM, cap_path_distance
+
+    # 两盒夹一条极窄缝，标签几乎必撞盒；auto 应 crowded 且不流放
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 40}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [2, 8, 40, 24], title: A, body: long body text here}
+  - {type: box, id: b, rect: [58, 8, 40, 24], title: B, body: long body text here}
+  - {type: arrow, id: ar, from: a.right, to: b.left, route: avoid,
+     label: "tok", label_pos: auto}
+"""))
+    res = render(spec, out_png=tmp_path / "c.png", dpi=72)
+    issues = lint(spec, res)
+    caps = [c for aid, c, _ in res.arrow_label_boxes if aid == "ar"]
+    assert caps, "应仍放置标签"
+    pts = dict(res.arrow_segments)["ar"]
+    assert cap_path_distance(caps[0], pts) <= LABEL_DIST_HARD_MM + 0.5
+    # 若近距确全撞则应有 crowded；宽松场景也可能净空落位——二者择一即可，
+    # 但绝不能出现 far
+    assert not any(i.code == "arrow-label-far" for i in issues)
+
+
+def test_panel_title_band_recorded_and_lint(tmp_path):
+    """panel 标题带写入 res；标签骑上时 lint 报 arrow-label-on-title。"""
+    from paperfig.lint import _check_arrow_label_on_title
+
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: sci
+elements:
+  - {type: panel, id: p, rect: [5, 5, 90, 40], title: Advantage, header_style: smallcaps}
+  - {type: box, id: a, rect: [12, 18, 30, 16], title: A}
+  - {type: box, id: b, rect: [58, 18, 30, 16], title: B}
+  - {type: arrow, id: ar, from: a.right, to: b.left, route: avoid, label: r(t),
+     label_pos: auto}
+"""))
+    res = render(spec, out_png=tmp_path / "p.png", dpi=72)
+    assert any(pid == "p" for pid, _ in res.panel_title_bands)
+    # 注入骑标题胶囊，验证 lint 码
+    band = next(b for pid, b in res.panel_title_bands if pid == "p")
+    res.arrow_label_boxes.append(("fake", Rect(band.x + 2, band.y + 1, 8, 3), "r(t)"))
+    assert any(i.code == "arrow-label-on-title"
+               for i in _check_arrow_label_on_title(res))
+
+
 if __name__ == "__main__":
     import tempfile
     import traceback

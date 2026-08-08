@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from .fonts import (FAMILY_SVG, PT_TO_MM, LINE_HEIGHT, SCRIPT_SCALE, SUB_SHIFT,
                     SUP_SHIFT, line_ascent_mm, measure_markup_mm, measure_mm,
                     parse_markup, split_runs, text_block_height_mm, wrap_text)
-from .routing import (RouteRequest, pick_best_label, route_all)
+from .routing import (RouteRequest, max_label_path_dist, pick_best_label, route_all)
 from .spec import (ArrowEl, AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl,
                    LegendEl, MarkerEl, NetworkEl, PanelEl, PanelLabelEl, Rect,
                    ScatterEl, SketchEl, TextEl, TokensEl, parse_anchor)
@@ -128,6 +128,8 @@ class RenderResult:
         # box 内 sketch / accent 色条 / 独立 sketch：(owner_id, kind, rect)
         # kind 为 sketch 名（waveform/…）或 accent-left / accent-top
         self.sketch_rects: list[tuple[str, str, Rect]] = []
+        # panel 标题文字带（标题行 + 分隔线/色条）：落标硬拒 + lint
+        self.panel_title_bands: list[tuple[str, Rect]] = []
         self.asset_boxes: dict[str, Rect] = {}       # 素材实际显示区域
         self.missing_assets: list[str] = []
         self.placeholder_assets: list[str] = []      # 意图性占位槽（待手动插入实验图）
@@ -815,6 +817,38 @@ def _resolve_arrow_geometry(
     return _ArrowGeom(x1, y1, s1, x2, y2, s2, pts)
 
 
+def _shared_panel_bounds(
+    el: ArrowEl, spec: FigureSpec, res: RenderResult,
+) -> Rect | None:
+    """两端点同属一个 panel 时返回该 panel.rect，否则 None。"""
+    nids = [_endpoint_node_id(el.from_), _endpoint_node_id(el.to)]
+    if not all(nids):
+        return None
+    panels = [p for p in spec.elements if isinstance(p, PanelEl)]
+    if not panels:
+        return None
+    shared: PanelEl | None = None
+    for nid in nids:
+        nr = res.node_rects.get(nid) or res.node_visual_rects.get(nid)
+        if nr is None:
+            return None
+        found: PanelEl | None = None
+        for p in panels:
+            if (p.rect.contains_point(nr.cx, nr.cy)
+                    or (p.rect.x - 0.2 <= nr.x and p.rect.y - 0.2 <= nr.y
+                        and p.rect.right + 0.2 >= nr.right
+                        and p.rect.bottom + 0.2 >= nr.bottom)):
+                found = p
+                break
+        if found is None:
+            return None
+        if shared is None:
+            shared = found
+        elif shared.id != found.id:
+            return None
+    return shared.rect if shared is not None else None
+
+
 def _place_auto_arrow_labels(
     arrows: list[ArrowEl],
     geoms: list[_ArrowGeom],
@@ -823,7 +857,10 @@ def _place_auto_arrow_labels(
     th: Theme,
     fs: float,
 ) -> dict[str, tuple["_TextSpan", Rect]]:
-    """两阶段落标：全部路径确定后，按碰撞打分为 auto 标签选位。"""
+    """两阶段落标：全部路径确定后，按碰撞打分为 auto 标签选位。
+
+    距离硬上限内选位；全硬拒时软冲突最小兜底并记 arrow-label-crowded。
+    """
     need = [(el, g) for el, g in zip(arrows, geoms)
             if _use_auto_label(el) and len(g.pts) >= 2 and not g.skip]
     if not need:
@@ -837,6 +874,7 @@ def _place_auto_arrow_labels(
                 boxes.append(vr)
     # sketch / accent 内容区：落标硬障（与整盒不同，端点盒内也拒）
     content_obstacles = [rect for _, _, rect in res.sketch_rects]
+    title_bands = [band for _, band in getattr(res, "panel_title_bands", []) or []]
     # 已渲染的盒子标题/正文 + 独立 text，都作为落标障碍
     texts: list[Rect] = []
     for sp in res.text_spans:
@@ -851,6 +889,12 @@ def _place_auto_arrow_labels(
     for el, g in zip(arrows, geoms):
         if len(g.pts) >= 2:
             all_segs[el.id] = list(zip(g.pts, g.pts[1:]))
+
+    # 画布内边距：标签不得越出
+    margin = 0.8
+    canvas_bounds = Rect(margin, margin,
+                         max(spec.width - 2 * margin, 0.1),
+                         max(spec.height - 2 * margin, 0.1))
 
     placed: dict[str, tuple[_TextSpan, Rect]] = {}
     other_caps: list[Rect] = []
@@ -876,14 +920,35 @@ def _place_auto_arrow_labels(
                 vr = res.node_visual_rects.get(nid) or res.node_rects.get(nid)
                 if vr is not None:
                     endpoint_boxes.append(vr)
+        # 两端点同 panel → 标签不得跑出该 panel
+        panel_r = _shared_panel_bounds(el, spec, res)
+        if panel_r is not None:
+            # 与画布取交，并略内缩避开描边
+            ix = max(canvas_bounds.x, panel_r.x + 0.4)
+            iy = max(canvas_bounds.y, panel_r.y + 0.4)
+            ir = min(canvas_bounds.right, panel_r.right - 0.4)
+            ib = min(canvas_bounds.bottom, panel_r.bottom - 0.4)
+            bounds = Rect(ix, iy, max(ir - ix, 0.1), max(ib - iy, 0.1))
+        else:
+            bounds = canvas_bounds
+        hard_lim = max_label_path_dist(h)
         best = pick_best_label(
             g.pts, w, h, asc, boxes, texts, other_segs, other_caps,
             head_keep=max(head_len + 1.2, 2.8),
             endpoint_boxes=endpoint_boxes,
             content_obstacles=content_obstacles,
+            title_bands=title_bands,
+            bounds=bounds,
+            max_path_dist=hard_lim,
         )
         if best is None:
             continue
+        if best.crowded:
+            res.soft_issues.append((
+                "W", "arrow-label-crowded",
+                f"箭头 '{el.id}' 标签 “{el.label[:14]}” 距离上限内候选均冲突，"
+                f"已折中放置；请拉开箭头间距或删除标签",
+            ))
         span = _TextSpan(x=best.x, baseline=best.baseline, text=el.label,
                          pt=pt_size, bold=False, color=th.muted)
         placed[el.id] = (span, best.cap)
@@ -1620,6 +1685,22 @@ def _luminance(hex_color: str) -> float:
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
+def _panel_title_band_rect(el: PanelEl, th: Theme, fs: float) -> Rect | None:
+    """panel 标题文字带（标题行 + 分隔线 / banner 色条），供落标硬拒与 lint。"""
+    if not el.title:
+        return None
+    r = el.rect
+    if el.header_style == "smallcaps":
+        label = el.title.upper()
+        pt = (el.title_size or th.size_caption) * fs * 0.95
+        asc = line_ascent_mm(label, pt, bold=True)
+        # 与绘制一致：顶 pad + 字高 + 线下方余量
+        band_h = min(r.h, 2.2 + asc + 1.4 + 1.0)
+        return Rect(r.x, r.y, r.w, band_h)
+    hh = min(el.header_h, r.h * 0.45)
+    return Rect(r.x, r.y, r.w, hh)
+
+
 def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult) -> str:
     v = th.variants.get(el.variant)
     if v is None:
@@ -1632,6 +1713,10 @@ def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult) -> str:
     out = []
     if _use_shadow(el.shadow, th):
         out.append(_soft_shadow_svg(r, cr))
+
+    band = _panel_title_band_rect(el, th, fs)
+    if band is not None:
+        res.panel_title_bands.append((el.id, band))
 
     if el.header_style == "smallcaps":
         # 顶会克制风：无色条 banner，改为 small-caps 标签 + 细灰分隔线

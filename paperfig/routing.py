@@ -703,6 +703,18 @@ def route_all(
 
 # ── 标签候选打分 ─────────────────────────────────────────
 
+# 胶囊中心到所属折线的硬上限（mm）；高大标签可略放宽但仍封顶
+LABEL_DIST_HARD_MM = 5.0
+LABEL_DIST_HARD_FLOOR_MM = 3.8
+# lint 用：超过此距报 arrow-label-far（含显式 offset）
+LABEL_DIST_FAR_LINT_MM = 6.0
+
+
+def max_label_path_dist(label_h: float) -> float:
+    """按标签高度自适应的路径距离硬上限（≤ LABEL_DIST_HARD_MM）。"""
+    return min(LABEL_DIST_HARD_MM, max(LABEL_DIST_HARD_FLOOR_MM, label_h + 1.8))
+
+
 @dataclass
 class LabelCandidate:
     x: float          # 文本起点 x（与 _TextSpan 一致）
@@ -710,6 +722,8 @@ class LabelCandidate:
     cap: Rect
     tag: str
     score: float = 0.0
+    crowded: bool = False   # True：上限内无净空，已用软冲突最小兜底
+    path_dist: float = 0.0
 
 
 def _point_seg_dist(p: tuple[float, float], a: tuple[float, float],
@@ -725,18 +739,67 @@ def _point_seg_dist(p: tuple[float, float], a: tuple[float, float],
     return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 
 
+def cap_path_distance(cap: Rect, pts: list[tuple[float, float]]) -> float:
+    """标签胶囊中心到折线的最短距离（mm）。"""
+    if len(pts) < 2:
+        return 99.0
+    cx, cy = cap.cx, cap.cy
+    return min(_point_seg_dist((cx, cy), a, b) for a, b in zip(pts, pts[1:]))
+
+
+def _path_mid_affinity(cap: Rect, pts: list[tuple[float, float]]) -> float:
+    """越靠近路径弧长中点越大（0..1），同分时优先中段。"""
+    if len(pts) < 2:
+        return 0.0
+    cx, cy = cap.cx, cap.cy
+    total = 0.0
+    segs: list[tuple[float, tuple[float, float], tuple[float, float]]] = []
+    for a, b in zip(pts, pts[1:]):
+        L = math.hypot(b[0] - a[0], b[1] - a[1])
+        segs.append((L, a, b))
+        total += L
+    if total < 1e-9:
+        return 0.5
+    best_d = 1e18
+    best_s = 0.0
+    acc = 0.0
+    for L, a, b in segs:
+        ax, ay = a
+        bx, by = b
+        dx, dy = bx - ax, by - ay
+        l2 = dx * dx + dy * dy
+        if l2 < 1e-12:
+            t = 0.0
+            d = math.hypot(cx - ax, cy - ay)
+        else:
+            t = max(0.0, min(1.0, ((cx - ax) * dx + (cy - ay) * dy) / l2))
+            d = math.hypot(cx - (ax + t * dx), cy - (ay + t * dy))
+        if d < best_d:
+            best_d = d
+            best_s = acc + t * L
+        acc += L
+    frac = best_s / total
+    return 1.0 - abs(frac - 0.5) * 2.0
+
+
+def _cap_inside_bounds(cap: Rect, bounds: Rect, tol: float = 0.15) -> bool:
+    return (bounds.x - tol <= cap.x and bounds.y - tol <= cap.y
+            and bounds.right + tol >= cap.right and bounds.bottom + tol >= cap.bottom)
+
+
 def label_candidates(
     pts: list[tuple[float, float]],
     label_w: float,
     label_h: float,
     asc: float,
     offsets: tuple[float, ...] = (
-        1.6, -1.6, 2.4, -2.4, 3.6, -3.6, 5.0, -5.0, 7.0, -7.0, 9.0, -9.0,
+        1.6, -1.6, 2.4, -2.4, 3.2, -3.2, 4.0, -4.0, 5.0, -5.0,
     ),
 ) -> list[tuple[float, float, Rect, str, float]]:
     """生成候选：(text_x, baseline, cap, tag, segment_preference)。
 
-    segment_preference 越大越优先（长段加分）。
+    segment_preference 越大越优先（长段加分）。偏移不超过硬上限附近，
+    避免生成「流放」远位；escape 仅保留近距滑移。
     """
     out: list[tuple[float, float, Rect, str, float]] = []
     if len(pts) < 2:
@@ -751,6 +814,10 @@ def label_candidates(
         mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
         horiz = abs(b[0] - a[0]) >= abs(b[1] - a[1])
         pref = lengths[i] / max_len * 10.0
+        # 中段加分、端段减分（同分时亦靠 score 里的 mid affinity）
+        if nseg >= 2:
+            mid = (nseg - 1) / 2.0
+            pref += 4.0 * (1.0 - abs(i - mid) / max(mid, 0.5))
         if i == nseg - 1 and nseg >= 2:
             pref -= 8.0
         if i == 0 and nseg >= 3:
@@ -767,8 +834,6 @@ def label_candidates(
                 tx = mx + off if off > 0 else mx + off - label_w
                 ty = my + asc / 2 - 0.2
                 bb_y = ty - asc
-                cap = Rect(min(tx, mx) - 0.7 if off < 0 else tx - 0.7,
-                           bb_y - 0.25, label_w + 1.4, label_h + 0.5)
                 if off > 0:
                     cap = Rect(tx - 0.7, bb_y - 0.25, label_w + 1.4, label_h + 0.5)
                 else:
@@ -776,7 +841,7 @@ def label_candidates(
                 side = "right" if off > 0 else "left"
             out.append((tx, ty, cap, f"seg{i}:{side}:{off}", pref))
 
-    # 拐角内外侧
+    # 拐角内外侧（近距）
     for i in range(1, len(pts) - 1):
         px, py = pts[i]
         for dx, dy, tag in (
@@ -790,7 +855,7 @@ def label_candidates(
             cap = Rect(tx - 0.7, bb_y - 0.25, label_w + 1.4, label_h + 0.5)
             out.append((tx, ty, cap, f"corner{i}:{tag}", 3.0))
 
-    # 窄缝逃逸：沿路径包围盒外围滑移，宽标签塞不进短段时用
+    # 窄缝逃逸：仅近距滑移（去掉 far-*，避免流放）
     xs = [p[0] for p in pts]
     ys = [p[1] for p in pts]
     min_x, max_x = min(xs), max(xs)
@@ -801,10 +866,8 @@ def label_candidates(
         (-label_w - 1.2, 1.5, "escape:L-below", 4.0),
         (1.2, -asc - 1.2, "escape:R-above", 3.5),
         (1.2, 1.5, "escape:R-below", 3.5),
-        (-label_w / 2, -asc - 3.5, "escape:mid-above", 5.0),
-        (-label_w / 2, 3.5, "escape:mid-below", 5.0),
-        (-label_w / 2, -asc - 6.0, "escape:far-above", 3.0),
-        (-label_w / 2, 6.0, "escape:far-below", 3.0),
+        (-label_w / 2, -asc - 2.4, "escape:mid-above", 5.0),
+        (-label_w / 2, 2.4, "escape:mid-below", 5.0),
     ):
         tx, ty = mid_x + dx, mid_y + dy + asc
         bb_y = ty - asc
@@ -851,11 +914,16 @@ def _label_hard_collision(
     box_pad: float = 0.35,
     endpoint_boxes: list[Rect] | None = None,
     content_obstacles: list[Rect] | None = None,
+    title_bands: list[Rect] | None = None,
+    bounds: Rect | None = None,
 ) -> bool:
-    """硬碰撞：压非端点盒子 / 端点盒 inner / sketch·accent / 文字 / 其它标签，或被箭头穿过。
+    """硬碰撞：压非端点盒子 / 端点盒 inner / sketch·accent / 标题带 / 文字 / 其它标签，
+    越出 bounds，或被箭头穿过。
 
     端点盒仅边框带（≈1mm）可用；深入 inner 或压本盒 sketch/accent 一律硬拒。
     """
+    if bounds is not None and not _cap_inside_bounds(cap, bounds):
+        return True
     endpoints = endpoint_boxes or []
     for b in boxes:
         if any(_is_same_rect(b, e) for e in endpoints):
@@ -865,9 +933,12 @@ def _label_hard_collision(
             continue
         if cap.intersection_area(b.expanded(box_pad)) > 0.02:
             return True
-    # sketch / accent：任意相交即硬拒（含端点盒内缩略图）
+    # sketch / accent / panel 标题带：任意相交即硬拒
     for c in content_obstacles or []:
         if cap.intersection_area(c) > 0.05:
+            return True
+    for tb in title_bands or []:
+        if cap.intersection_area(tb) > 0.05:
             return True
     for t in texts:
         if cap.intersection_area(t) <= 0.05:
@@ -920,14 +991,20 @@ def score_label_candidate(
     other_arrow_segs: list[tuple[tuple[float, float], tuple[float, float]]] | None = None,
     endpoint_boxes: list[Rect] | None = None,
     content_obstacles: list[Rect] | None = None,
+    title_bands: list[Rect] | None = None,
+    bounds: Rect | None = None,
+    max_path_dist: float | None = None,
 ) -> float:
-    """越高越好。硬碰撞大幅扣分；其它箭头线段穿标签为重罚。"""
+    """越高越好。硬碰撞大幅扣分；距离惩罚强化；贴近路径中段加分。"""
     s = 100.0 + seg_pref
     endpoints = endpoint_boxes or []
+    hard_lim = max_path_dist if max_path_dist is not None else LABEL_DIST_HARD_MM
 
     def _is_endpoint(b: Rect) -> bool:
         return any(_is_same_rect(b, e) for e in endpoints)
 
+    if bounds is not None and not _cap_inside_bounds(cap, bounds):
+        s -= 180
     for b in boxes:
         a = cap.intersection_area(b.expanded(0.35))
         if a <= 0:
@@ -944,6 +1021,10 @@ def score_label_candidate(
         a = cap.intersection_area(c)
         if a > 0:
             s -= 140 + a * 10
+    for tb in title_bands or []:
+        a = cap.intersection_area(tb)
+        if a > 0:
+            s -= 160 + a * 12
     for t in texts:
         a = cap.intersection_area(t)
         if a > 0:
@@ -967,14 +1048,20 @@ def score_label_candidate(
             s -= 200
         elif _point_seg_dist((cx, cy), a, b) < 1.2:
             s -= 50
-    segs = own_segs or list(arrow_segs)
-    dmin = min(_point_seg_dist((cx, cy), a, b) for a, b in segs) if segs else 99.0
+    dmin = cap_path_distance(cap, pts) if pts else 99.0
     if dmin < 0.25:
         s -= 40
-    elif dmin > 5.0:
-        s -= (dmin - 5.0) * 3
+    elif dmin > hard_lim:
+        # 超出硬上限：极重罚（正常路径应已过滤，此处兜底）
+        s -= 250 + (dmin - hard_lim) * 40
     else:
-        s += 6
+        # 偏好 ~1.6–2.4mm；越远惩罚越陡，杜绝「远无碰撞」跑赢近冲突
+        ideal = 1.9
+        s += 12.0 - abs(dmin - ideal) * 10.0
+        if dmin > 3.2:
+            s -= (dmin - 3.2) * 14.0
+    # 贴近路径弧长中段
+    s += 5.0 * _path_mid_affinity(cap, pts)
     return s
 
 
@@ -990,30 +1077,70 @@ def pick_best_label(
     head_keep: float = 2.8,
     endpoint_boxes: list[Rect] | None = None,
     content_obstacles: list[Rect] | None = None,
+    title_bands: list[Rect] | None = None,
+    bounds: Rect | None = None,
+    max_path_dist: float | None = None,
 ) -> LabelCandidate | None:
+    """在距离硬上限内选最佳标签位；绝不为无碰撞跑出上限。
+
+    上限内有净空 → 取最高分；全硬拒 → 取软冲突最小并标 crowded=True。
+    """
     tip = pts[-1]
     own_segs = list(zip(pts, pts[1:]))
     all_segs = own_segs + list(other_arrow_segs)
+    hard_lim = max_path_dist if max_path_dist is not None else max_label_path_dist(label_h)
     cands = label_candidates(pts, label_w, label_h, asc)
-    best: LabelCandidate | None = None
-    best_soft: LabelCandidate | None = None
+
+    scored: list[tuple[LabelCandidate, bool, float]] = []
     for tx, ty, cap, tag, pref in cands:
+        d = cap_path_distance(cap, pts)
+        if d > hard_lim + 1e-6:
+            continue  # 绝不考虑超距候选
         hard = _label_hard_collision(
             cap, boxes, texts, other_caps, other_arrow_segs,
             own_segs=own_segs, tip=tip, endpoint_boxes=endpoint_boxes,
             content_obstacles=content_obstacles,
+            title_bands=title_bands, bounds=bounds,
         )
         sc = score_label_candidate(
             cap, tip, pts, boxes, texts, all_segs, other_caps, pref, head_keep,
             other_arrow_segs=other_arrow_segs,
             endpoint_boxes=endpoint_boxes,
             content_obstacles=content_obstacles,
+            title_bands=title_bands, bounds=bounds,
+            max_path_dist=hard_lim,
         )
-        cand = LabelCandidate(x=tx, baseline=ty, cap=cap, tag=tag, score=sc)
-        if not hard and (best is None or sc > best.score):
-            best = cand
-        if best_soft is None or sc > best_soft.score:
-            best_soft = cand
-    # 有硬碰撞自由候选时用它；否则不回退到压 sketch/inner 的 soft
-    # （避免「全撞仍硬塞」）；仅当全部硬撞时才退 soft 保兼容
-    return best if best is not None else best_soft
+        mid = _path_mid_affinity(cap, pts)
+        cand = LabelCandidate(
+            x=tx, baseline=ty, cap=cap, tag=tag, score=sc, path_dist=d,
+        )
+        scored.append((cand, hard, mid))
+
+    if not scored:
+        return None
+
+    def _better(a: tuple[LabelCandidate, float], b: tuple[LabelCandidate, float]) -> bool:
+        ca, ma = a
+        cb, mb = b
+        if ca.score != cb.score:
+            return ca.score > cb.score
+        if abs(ma - mb) > 1e-9:
+            return ma > mb  # 同分优先路径中段
+        return ca.path_dist < cb.path_dist
+
+    best: tuple[LabelCandidate, float] | None = None
+    best_soft: tuple[LabelCandidate, float] | None = None
+    for cand, hard, mid in scored:
+        if not hard:
+            if best is None or _better((cand, mid), best):
+                best = (cand, mid)
+        if best_soft is None or _better((cand, mid), best_soft):
+            best_soft = (cand, mid)
+
+    if best is not None:
+        return best[0]
+    # 上限内全部硬拒：选软冲突最小照放，标记 crowded（由 render 记 W）
+    assert best_soft is not None
+    out = best_soft[0]
+    out.crowded = True
+    return out
