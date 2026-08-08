@@ -1,11 +1,13 @@
-# A1 — RAG pipeline · neurips Soft Pastel（由 examples/showcase/rag_framework.yaml 迁移）
-figure: {width: 180, height: 91, dpi: 600}
+# A1 — RAG pipeline · neurips Soft Pastel
+# 重制要点：加宽关键线缝给标签走廊；锚点避开 sketch 带；label_pos auto；精简窄缝标签
+# 高度贴内容底；online 底 pad 加厚给 feedback 走廊，消原 ~15% 空白带
+figure: {width: 180, height: 88, dpi: 600}
 theme:
   preset: neurips
 
 layout:
   kind: col
-  gap: 5.5          # 字号偏印刷档后略收紧；仍留 index 横走走廊
+  gap: 6.0
   pad: [2.0, 2.5]
   align: stretch
   children:
@@ -13,8 +15,10 @@ layout:
     - id: p_online
       type: panel
       kind: row
-      gap: 2.5
-      pad: [8.5, 3.0, 1.8, 3.0]
+      # 主链 gap≥8mm：标签胶囊不蹭到端点 accent/sketch
+      gap: 8.0
+      # 底 pad 加厚：ans↔fuse feedback 标签走廊
+      pad: [8.5, 2.5, 6.0, 2.5]
       align: center
       justify: start
       title: "Online Inference Pipeline"
@@ -23,40 +27,22 @@ layout:
       title_size: 7.5
       header_h: 6.0
       children:
-        - {ref: q, w: 16, h: 36}
-        - kind: row
-          gap: 1.2
-          align: center
+        # 等宽 16：同排中心距 = 16+7 = 23，消 uneven-gap
+        - {ref: q, w: 16, h: 34}
+        - {ref: rewrite, w: 16, h: 34}
+        - kind: col
+          gap: 2.5
           children:
-            - {ref: rewrite, w: 18, h: 36}
-            - kind: col
-              gap: 0
-              align: start
-              w: 9
-              h: 36
-              children:
-                - {ref: lbl_768, w: 9, h: 4.5}
-            - kind: row
-              gap: 12.0
-              align: center
-              children:
-                - kind: col
-                  gap: 2.5
-                  children:
-                    - {ref: dense, w: 18, h: 16.5}
-                    - {ref: sparse, w: 18, h: 16.5}
-                - {ref: fuse, w: 18, h: 36}
-        - {ref: compress, w: 15, h: 36}
-        - kind: row
-          gap: 3.5
-          align: center
+            - {ref: dense, w: 16, h: 15.5}
+            - {ref: sparse, w: 16, h: 15.5}
+        - {ref: fuse, w: 16, h: 34}
+        - {ref: compress, w: 16, h: 34}
+        - {ref: llm, w: 16, h: 34}
+        - kind: col
+          gap: 2.5
           children:
-            - {ref: llm, w: 19, h: 36}
-            - kind: col
-              gap: 2.5
-              children:
-                - {ref: verify, w: 16, h: 16.5}
-                - {ref: ans, w: 16, h: 16.5}
+            - {ref: verify, w: 16, h: 15.5}
+            - {ref: ans, w: 16, h: 15.5}
 
     # ── Offline + legend ──
     - kind: row
@@ -66,7 +52,7 @@ layout:
         - id: p_offline
           type: panel
           kind: row
-          gap: 3.5
+          gap: 7.0
           pad: [7.0, 3.5, 3.0, 3.5]
           align: center
           title: "Offline Index Build"
@@ -75,16 +61,16 @@ layout:
           title_size: 7.5
           header_h: 5.5
           children:
-            - {ref: docs, w: 20, h: 17}
-            - {ref: chunk, w: 20, h: 17}
-            - {ref: embed, w: 21, h: 17}
-            - {ref: vdb, w: 25, h: 17}
+            - {ref: docs, w: 22, h: 18}
+            - {ref: chunk, w: 22, h: 18}
+            - {ref: embed, w: 22, h: 18}
+            - {ref: vdb, w: 22, h: 18}
         - kind: col
-          gap: 2.0
+          gap: 2.5
           flex: 1
           align: stretch
           children:
-            - {ref: fb_note, h: 10}
+            - {ref: fb_note, h: 11}
             - {ref: lg, h: 16}
 
 elements:
@@ -95,9 +81,6 @@ elements:
   - {type: box, id: rewrite, title: "Query Rewrite",
      body: "HyDE + multi-q", variant: secondary, accent: left,
      sketch: tree, valign: top, title_size: 6.6, body_size: 6.0}
-
-  - {type: text, id: lbl_768, text: "768-d vec", size: 5.8, color: "#666666",
-     anchor: start}
 
   - {type: box, id: dense, title: "Dense Retriever",
      body: "bi-encoder ANN", variant: primary, accent: left,
@@ -127,25 +110,28 @@ elements:
      body: "cited text", variant: purple, shape: stadium,
      sketch: nested, valign: top, title_size: 6.4, body_size: 6.0}
 
-  # 主链 data；显式 style 会挡住 semantic 线型映射，故不写 style
-  - {type: arrow, from: q.right, to: rewrite.left, label: "raw q", weight: heavy,
-     semantic: data, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: rewrite.right@0.28, to: dense.left@0.61, weight: heavy,
-     semantic: data, route: straight}
-  - {type: arrow, from: rewrite.right@0.78, to: sparse.left, label: "tok q", weight: heavy,
-     semantic: data, route: avoid, label_offset: -2.2}
-  - {type: arrow, from: dense.right, to: fuse.left@0.23, label: "top-k=50", weight: heavy,
-     semantic: data, route: straight, label_offset: 0.0}
-  - {type: arrow, from: sparse.right, to: fuse.left@0.77, label: "top-k=50", weight: heavy,
-     semantic: data, route: straight, label_offset: 0.0}
-  - {type: arrow, from: fuse.right, to: compress.left, label: "top-k=8", weight: heavy,
-     semantic: data, route: avoid, label_offset: 2.2}
-  - {type: arrow, from: compress.right, to: llm.left, label: "≤4k tok", weight: heavy,
-     semantic: data, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: llm.right@0.23, to: verify.left, label: "draft", weight: heavy,
-     semantic: data, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: verify.bottom, to: ans.top, label: "ok", weight: heavy,
-     semantic: data, route: avoid, label_offset: 1.4}
+  # 主链：route avoid + auto 落标；侧向锚点压在 title 带（@t≲0.28）避开 sketch
+  # raw q：auto 会上飘进面板标题；显式负 offset 压到箭头下方，gap=8 避开 accent
+  - {type: arrow, from: q.right@0.22, to: rewrite.left@0.22, label: "raw q",
+     weight: heavy, semantic: data, route: avoid, label_offset: -2.4}
+  - {type: arrow, from: rewrite.right@0.15, to: dense.left@0.40,
+     label: "768-d", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  - {type: arrow, from: rewrite.right@0.30, to: sparse.left@0.40,
+     label: "tok q", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  - {type: arrow, from: dense.right@0.40, to: fuse.left@0.22,
+     label: "k=50", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  # sparse→fuse：底边切入；k 已在 dense 支路标明，此处省略避免挤进 sparse
+  - {type: arrow, from: sparse.right@0.40, to: fuse.bottom@0.08,
+     weight: heavy, semantic: data, route: avoid}
+  - {type: arrow, from: fuse.right@0.22, to: compress.left@0.22,
+     label: "k=8", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  - {type: arrow, from: compress.right@0.22, to: llm.left@0.22,
+     label: "≤4k", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  - {type: arrow, from: llm.right@0.22, to: verify.left@0.40,
+     label: "draft", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  # verify/ans 底边 sketch 几乎满宽：锚到左右外侧条带
+  - {type: arrow, from: verify.bottom@0.08, to: ans.top@0.08,
+     label: "ok", weight: heavy, semantic: data, route: avoid, label_pos: auto}
 
   - {type: box, id: docs, title: "Doc Corpus",
      body: "PDF / wiki", variant: muted,
@@ -163,18 +149,19 @@ elements:
      body: "HNSW index", variant: primary, shape: cylinder,
      sketch: grid, valign: top, title_size: 6.2, body_size: 6.0}
 
-  # offline 索引链：optional（dotted 灰）
-  - {type: arrow, from: docs.right, to: chunk.left, label: "docs", weight: normal,
-     semantic: optional, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: chunk.right, to: embed.left, label: "chunks", weight: normal,
-     semantic: optional, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: embed.right, to: vdb.left, label: "768-d", weight: normal,
-     semantic: optional, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: vdb.top, to: rewrite.bottom@1.0, label: "index", weight: thin,
-     semantic: optional, route: avoid, label_offset: 1.4}
-  # 在线反馈：feedback（dashed 蓝）
-  - {type: arrow, from: ans.bottom, to: fuse.bottom, label: "feedback", weight: thin,
-     semantic: feedback, route: avoid, label_offset: 1.4}
+  # offline：盒标题已含语义，链上不再挂标签（7mm 缝放不下 chunks/768-d）
+  - {type: arrow, from: docs.right@0.28, to: chunk.left@0.28,
+     weight: normal, semantic: optional, route: avoid}
+  - {type: arrow, from: chunk.right@0.28, to: embed.left@0.28,
+     weight: normal, semantic: optional, route: avoid}
+  - {type: arrow, from: embed.right@0.28, to: vdb.left@0.28,
+     weight: normal, semantic: optional, route: avoid}
+  # rewrite 底边 tree 几乎满宽：锚到右侧外侧条带 @t≥0.95
+  - {type: arrow, from: vdb.top@0.50, to: rewrite.bottom@0.96,
+     label: "index", weight: thin, semantic: optional, route: avoid, label_pos: auto}
+  # feedback：底边外侧锚点；收矮画布后走廊仍够放全称
+  - {type: arrow, from: ans.bottom@0.92, to: fuse.bottom@0.92,
+     label: "feedback", weight: thin, semantic: feedback, route: avoid, label_pos: auto}
 
   - {type: box, id: fb_note, title: "Feedback loop",
      body: "click / rating → reranker FT", variant: muted,

@@ -1,6 +1,6 @@
 # A2 — Multi-task vision backbone · neurips Soft Pastel
-# 设定：backbone/Transformer frozen；任务头 trainable（三色区分 + fire/snow）
-figure: {width: 180, height: 94, dpi: 600}
+# 重制要点：加宽 vit↔fpn / ln↔mhsa|ffn 缝；锚点避开 sketch；legend 填满左下；label auto
+figure: {width: 180, height: 116, dpi: 600}
 theme:
   preset: neurips
 
@@ -14,8 +14,8 @@ layout:
     - id: p_macro
       type: panel
       kind: row
-      gap: 3.5
-      # 顶 pad 加大：标题带与 ×N 组框之间留出 skip 走廊（~6mm）
+      gap: 5.0
+      # 顶 pad：标题带与 ×N 组框之间留出 skip 走廊
       pad: [12.0, 2.5, 2.5, 2.5]
       align: start
       title: "Overall Architecture"
@@ -23,34 +23,39 @@ layout:
       fill: "#F7F7F5"
       title_size: 7.5
       header_h: 6.0
-      w: 100
+      w: 102
       children:
         - kind: col
-          gap: 4.5
+          gap: 3.5
           children:
-            - {ref: img, w: 17, h: 22}
-            - {ref: patch, w: 17, h: 22}
-            # inline + columns:1 = 强制单行；拆两行并用 layout gap≥3mm 避免项间压叠
-            - kind: col
-              gap: 3.5
-              align: start
-              children:
-                - {ref: lg1, w: 34, h: 6}
-                - {ref: lg2, w: 34, h: 6}
-        - id: vit_grp
-          type: group
-          kind: col
-          gap: 0
-          pad: [6.5, 1.5, 2.5, 1.5]
+            - {ref: img, w: 22, h: 26}
+            - {ref: patch, w: 22, h: 24}
+            # 左下密度：图例 + 训练协议说明，消 layout-imbalance / region-empty
+            - {ref: lg, w: 36, h: 14}
+            - {ref: train_note, w: 36, h: 18}
+        - kind: col
+          gap: 3.5
           align: center
-          fill: "#FFFFFF"
-          style: dashed
-          color: "#90A4AE"
-          label: "×N"
-          label_pos: inside-bottom   # 避开顶部 skip 走廊
-          label_size: 7.0
           children:
-            - {ref: vit, w: 18, h: 40}
+            - id: vit_grp
+              type: group
+              kind: col
+              gap: 0
+              pad: [6.5, 1.5, 2.5, 1.5]
+              align: center
+              fill: "#FFFFFF"
+              style: dashed
+              color: "#90A4AE"
+              label: "×N"
+              label_pos: inside-bottom
+              label_size: 7.0
+              children:
+                # h≤18：避免与 micro 的 ln1/mhsa 行在 y 带上误聚成「同行」
+                - {ref: vit, w: 18, h: 17}
+            # 加高以伸进九宫格 r2c1，消 layout-imbalance
+            # 两段实义说明叠满中下区（消 imbalance，避免单块空高盒）
+            - {ref: trunk_note, w: 32, h: 34}
+            - {ref: stage_note, w: 32, h: 30}
         - kind: col
           gap: 3.5
           children:
@@ -63,9 +68,10 @@ layout:
     - id: p_micro
       type: panel
       kind: col
-      gap: 2.2
-      # 与 p_macro 同步下移，避免跨面板 row-misaligned
-      pad: [12.0, 3.0, 2.5, 6.5]
+      # 交替行高 11/18 + 等 gap：中心距仍均匀，且 MHSA/FFN 够高以绘出 sketch
+      gap: 4.0
+      # 顶 pad 加大：拉开与 macro 顶行的 y 带，避免 img/fpn/x_in 误聚触发 uneven-gap
+      pad: [22.0, 3.0, 2.5, 8.0]
       align: stretch
       title: "Transformer Block (detail)"
       header_style: smallcaps
@@ -74,21 +80,21 @@ layout:
       header_h: 6.0
       flex: 1
       children:
-        - {ref: x_in, h: 10}
+        - {ref: x_in, h: 11}
         - kind: row
-          gap: 3.5
+          gap: 10.0
           align: start
           children:
-            - {ref: ln1, w: 20, h: 12}
-            - {ref: mhsa, w: 30, h: 20, flex: 1}
-        - {ref: add1, h: 10}
+            - {ref: ln1, w: 18, h: 18}
+            - {ref: mhsa, w: 24, h: 18}
+        - {ref: add1, h: 11}
         - kind: row
-          gap: 3.5
+          gap: 10.0
           align: start
           children:
-            - {ref: ln2, w: 20, h: 12}
-            - {ref: ffn, w: 30, h: 14, flex: 1}
-        - {ref: add2, h: 10}
+            - {ref: ln2, w: 18, h: 18}
+            - {ref: ffn, w: 24, h: 18}
+        - {ref: add2, h: 11}
 
 elements:
   # Macro nodes
@@ -108,7 +114,6 @@ elements:
      body: "P3–P5", variant: sky, accent: left,
      sketch: bars, valign: top, title_size: 6.2, body_size: 6.0}
 
-  # 三任务头：trainable 语义用 fire；色相用 secondary/purple/vermillion 区分
   - {type: box, id: h_cls, title: "Cls · GAP→FC",
      body: "trainable", variant: secondary, sketch: bars, valign: top,
      title_size: 6.2, body_size: 5.8}
@@ -121,28 +126,30 @@ elements:
      body: "trainable", variant: vermillion, sketch: heatmap, valign: top,
      title_size: 6.2, body_size: 5.8}
 
-  # Macro arrows
-  - {type: arrow, from: img.bottom, to: patch.top, label: "B×3×H×W", weight: heavy,
-     semantic: data, route: straight, label_offset: 1.8}
-  - {type: arrow, from: patch.right, to: vit.left@0.70, label: "196×768", weight: heavy,
-     semantic: data, route: avoid, label_offset: 1.4}
-  # 显式 offset；锚点略下移以免压 Transformer 标题
-  - {type: arrow, from: vit.right@0.20, to: fpn.left, label: "B×L×D", weight: heavy,
-     semantic: data, route: avoid, label_offset: 2.0}
-  - {type: arrow, from: fpn.bottom, to: h_cls.top, label: "P3–P5", weight: normal,
-     semantic: data, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: h_cls.bottom, to: h_det.top, weight: normal,
-     semantic: data, route: avoid}
-  - {type: arrow, from: h_det.bottom, to: h_seg.top, weight: normal,
-     semantic: data, route: avoid}
-  # skip：水平段走标题带下方、×N 组框上方的走廊（via y=9.8）；末段垂直接入 fpn.left
-  - {type: arrow, from: img.right@0.06, to: fpn.left@0.08, label: "skip", weight: thin,
-     semantic: feedback, route: auto,
-     via: [[34, 9.8], [66.8, 9.8], [66.8, 15.2]], label_offset: -1.8}
-  - {type: arrow, from: vit_grp.right@0.85, to: p_micro.left@0.92, label: "block detail",
-     weight: thin, semantic: optional, route: avoid, label_pos: auto}
+  # Macro arrows — 侧/底锚点避开 sketch 带；维度标走缝隙走廊
+  # img→patch 竖缝 3.5mm 放不下维度标（body 已写 RGB H×W）
+  - {type: arrow, from: img.bottom@0.08, to: patch.top@0.08,
+     weight: heavy, semantic: data, route: avoid}
+  - {type: arrow, from: patch.right@0.22, to: vit.left@0.22,
+     label: "196×768", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  # vit→fpn：对齐 y≈21（title 带），水平直连，避开 fpn bars 与 skip 走廊
+  - {type: arrow, from: vit.right@0.03, to: fpn.left@0.50,
+     label: "B×L×D", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  # P3–P5 与 fpn.body 重复且竖缝窄，省略
+  - {type: arrow, from: fpn.bottom@0.08, to: h_cls.top@0.08,
+     weight: normal, semantic: data, route: avoid}
+  - {type: arrow, from: h_cls.bottom@0.08, to: h_det.top@0.08,
+     weight: normal, semantic: data, route: avoid}
+  - {type: arrow, from: h_det.bottom@0.08, to: h_seg.top@0.08,
+     weight: normal, semantic: data, route: avoid}
+  # skip：走顶廊，从 fpn 顶边落入（不与 vit→fpn 抢左侧入口）
+  - {type: arrow, from: img.right@0.08, to: fpn.top@0.70, label: "skip",
+     weight: thin, semantic: feedback, route: avoid, label_pos: auto}
+  # 任务头 → micro：短横跨面板缝，避免穿盒 / 大绕行
+  - {type: arrow, from: h_seg.right@0.45, to: p_micro.left@0.72,
+     label: "block detail", weight: thin, semantic: optional, route: avoid, label_pos: auto}
 
-  # Micro nodes — backbone 内部：MHSA/FFN frozen；Add 为结构算子
+  # Micro nodes
   - {type: box, id: x_in, title: "X_{in}",
      body: "R^{B×L×D} · L=196 · D=768", variant: plain, title_size: 6.6, body_size: 6.0}
 
@@ -166,39 +173,53 @@ elements:
   - {type: box, id: add2, title: "Add & Norm",
      body: "Y + FFN(Y) → X_{out}", variant: tertiary, title_size: 6.4, body_size: 6.0}
 
-  # Micro arrows
-  - {type: arrow, from: x_in.bottom@0.18, to: ln1.top, weight: heavy,
-     semantic: data, route: avoid}
-  - {type: arrow, from: ln1.right, to: mhsa.left, label: "Q,K,V", weight: heavy,
-     semantic: data, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: mhsa.bottom, to: add1.top@0.78, weight: heavy,
-     semantic: data, route: avoid}
-  - {type: arrow, from: x_in.left, to: add1.left, label: "res", weight: thin,
-     semantic: feedback, route: avoid, label_offset: 1.4}
-  - {type: arrow, from: add1.bottom@0.18, to: ln2.top, weight: heavy,
-     semantic: data, route: avoid}
-  - {type: arrow, from: ln2.right, to: ffn.left, label: "B×L×D", weight: heavy,
-     semantic: data, route: avoid, label_offset: 2.2}
-  - {type: arrow, from: ffn.bottom, to: add2.top@0.78, weight: heavy,
-     semantic: data, route: avoid}
-  - {type: arrow, from: add1.left, to: add2.left, label: "res", weight: thin,
-     semantic: feedback, route: avoid, label_offset: 1.4}
+  # Micro arrows — gap 9mm 容纳 Q,K,V；B×L×D 与 x_in 重复故省略
+  - {type: arrow, from: x_in.bottom@0.18, to: ln1.top@0.50,
+     weight: heavy, semantic: data, route: avoid}
+  - {type: arrow, from: ln1.right@0.22, to: mhsa.left@0.22,
+     label: "Q,K,V", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  # mhsa/ffn 底边 sketch 左缘≈@0.07：锚到更外侧
+  - {type: arrow, from: mhsa.bottom@0.04, to: add1.top@0.78,
+     weight: heavy, semantic: data, route: avoid}
+  # residual：走左侧 pad 走廊，避免深入 ln 盒
+  - {type: arrow, from: x_in.left@0.50, to: add1.left@0.50,
+     label: "res", weight: thin, semantic: feedback, route: avoid, label_pos: auto}
+  - {type: arrow, from: add1.bottom@0.18, to: ln2.top@0.50,
+     weight: heavy, semantic: data, route: avoid}
+  - {type: arrow, from: ln2.right@0.22, to: ffn.left@0.22,
+     label: "hid", weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  - {type: arrow, from: ffn.bottom@0.04, to: add2.top@0.78,
+     weight: heavy, semantic: data, route: avoid}
+  - {type: arrow, from: add1.left@0.50, to: add2.left@0.50,
+     label: "res", weight: thin, semantic: feedback, route: avoid, label_pos: auto}
 
-  # 短标签 + 3+2 两行；行距由 layout gap: 3.5 保证（inline 内建 gap_y 仅 1.2）
-  - {type: legend, id: lg1, style: inline, columns: 3, size: 5.8, items: [
+  # 合并图例：左下填满，消九宫格空洞
+  - {type: legend, id: lg, style: inline, columns: 2, size: 5.8, items: [
       {swatch: box, color: "#90A4AE", label: "frozen"},
-      {swatch: box, color: "#E69F00", label: "cls"},
-      {swatch: box, color: "#CC79A7", label: "det"},
-    ]}
-  - {type: legend, id: lg2, style: inline, columns: 2, size: 5.8, items: [
-      {swatch: box, color: "#D55E00", label: "seg"},
-      {swatch: dashed, color: "#0072B2", label: "residual"},
+      {swatch: box, color: "#E69F00", label: "cls head"},
+      {swatch: box, color: "#CC79A7", label: "det head"},
+      {swatch: box, color: "#D55E00", label: "seg head"},
+      {swatch: dashed, color: "#0072B2", label: "residual / skip"},
+      {swatch: box, color: "#56B4E9", label: "FPN neck"},
     ]}
 
-  # fire/snow：layout 解算后贴右上角（绝对坐标；布局变后需重对）
-  - {type: marker, id: m_snow_vit, at: [60.5, 22.0], icon: snow, size: 3.4}
-  - {type: marker, id: m_snow_patch, at: [29.0, 42.0], icon: snow, size: 3.2}
-  - {type: marker, id: m_fire_fpn, at: [85.5, 15.5], icon: fire, size: 3.2}
-  - {type: marker, id: m_fire_cls, at: [85.5, 33.0], icon: fire, size: 3.2}
-  - {type: marker, id: m_fire_det, at: [85.5, 50.5], icon: fire, size: 3.2}
-  - {type: marker, id: m_fire_seg, at: [85.5, 68.0], icon: fire, size: 3.2}
+  # 说明盒：浅主题色 + 有信息量 sketch（勿纯灰填空）
+  - {type: box, id: trunk_note, title: "Shared trunk",
+     body: "ViT-B/16 frozen · PE · ×N blocks", variant: sky,
+     sketch: heatmap, valign: top, title_size: 6.0, body_size: 5.6}
+
+  - {type: box, id: stage_note, title: "Multi-task stage",
+     body: "FPN P3–P5 → cls / det / seg", variant: secondary,
+     sketch: bars, valign: top, title_size: 6.0, body_size: 5.6}
+
+  - {type: box, id: train_note, title: "Train protocol",
+     body: "lr cosine · freeze→FT heads", variant: tertiary,
+     sketch: waveform, valign: top, title_size: 6.0, body_size: 5.6}
+
+  # fire/snow：贴各盒右上角外侧，避免压标题字
+  - {type: marker, id: m_snow_vit, at: [70.2, 21.3], icon: snow, size: 3.2}
+  - {type: marker, id: m_snow_patch, at: [33.2, 44.3], icon: snow, size: 3.0}
+  - {type: marker, id: m_fire_fpn, at: [102.2, 14.8], icon: fire, size: 3.0}
+  - {type: marker, id: m_fire_cls, at: [102.2, 32.3], icon: fire, size: 3.0}
+  - {type: marker, id: m_fire_det, at: [102.2, 49.8], icon: fire, size: 3.0}
+  - {type: marker, id: m_fire_seg, at: [102.2, 67.3], icon: fire, size: 3.0}
