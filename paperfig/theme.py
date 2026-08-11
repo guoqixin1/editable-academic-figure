@@ -345,7 +345,7 @@ class Theme:
 
     # base 模式文字底板（半透明白圆角，保证插画上可读）
     plate_fill: str = "#FFFFFF"
-    plate_opacity: float = 0.82
+    plate_opacity: float = 0.92
     plate_pad: float = 1.2       # mm，文字包围盒外扩
     plate_radius: float = 1.2    # mm
 

@@ -20,6 +20,7 @@
     - 节点重叠
     - 素材实际显示尺寸过小（槽位浪费）
     - 画布利用率过低 / 元素过挤（覆盖率按叶元素，剔除 panel/背景 group）
+    - 画布边缘空带（canvas-edge-gap：叶联合包围盒到四边空隙 >8mm 或 >边长×8%）
     - 九宫格空洞 / 失衡（region-empty / layout-imbalance）
     - 视觉丰度（R-*）：空盒子 / 无分区底 / 多色无图例（base 模式均停用）
     - 箭头体检：末段不垂直进入（arrow-approach）/ 端点悬空或压入（arrow-gap）
@@ -72,6 +73,8 @@ _SMALL_CANVAS_W = 120.0         # 小于此宽放宽九宫格阈值
 _ROUTE_AWKWARD_DETOUR = 1.3
 _ROUTE_AWKWARD_SEG = 15.0       # mm：中段落在低占用格
 _ROUTE_AWKWARD_CELL_OCC = 0.08
+_EDGE_GAP_ABS_MM = 8.0          # canvas-edge-gap 绝对下限 mm
+_EDGE_GAP_FRAC = 0.08           # 相对画布对应边长
 
 # base 混合模式
 _BASE_CONTRAST_MIN = 3.0          # WCAG 近似对比率下限 → 低于此 E
@@ -149,6 +152,7 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues += _check_arrow_route_awkward(spec, res)
     issues += _check_asset_scale(res)
     issues += _check_density(spec, res)
+    issues += _check_canvas_edge_gap(spec, res)
     issues += _check_region_balance(spec, res)
     issues += _check_alignment(spec, res)
     issues += _check_visual_richness(spec, res, base_mode=base_mode)
@@ -846,6 +850,71 @@ def _check_density(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     if node_area / canvas_area > 0.82:
         issues.append(Issue("W", "canvas-crowded",
                             f"节点面积占画布 {node_area / canvas_area:.0%}，画面偏挤，考虑加大画布"))
+    return issues
+
+
+def _content_union_bbox(spec: FigureSpec, res: RenderResult) -> Rect | None:
+    """叶元素 + 独立 text 的联合包围盒；panel 不计（常铺满）。"""
+    leaves = _leaf_element_rects(spec, res)
+    xs0, ys0, xs1, ys1 = [], [], [], []
+    for _nid, r in leaves:
+        xs0.append(r.x)
+        ys0.append(r.y)
+        xs1.append(r.right)
+        ys1.append(r.bottom)
+    for s in res.text_spans:
+        if s.text.strip() and not getattr(s, "diagnostic", False):
+            b = s.bbox()
+            xs0.append(b.x)
+            ys0.append(b.y)
+            xs1.append(b.right)
+            ys1.append(b.bottom)
+    if not xs0:
+        return None
+    return Rect(min(xs0), min(ys0), max(xs1) - min(xs0), max(ys1) - min(ys0))
+
+
+def _edge_gap_threshold(side_mm: float) -> float:
+    """空隙报警阈值下限。
+
+    触发条件：``gap > 8mm`` **或** ``gap > 边长×8%``，
+    等价于 ``gap > min(8mm, 8%×边长)``。
+    矮画布（如医学示例 h≈73）上 8% 更敏感，可抓住 ~10% 底部空带；
+    大画布上 8mm 绝对地板生效。
+    """
+    return min(_EDGE_GAP_ABS_MM, _EDGE_GAP_FRAC * side_mm)
+
+
+def _check_canvas_edge_gap(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """叶联合包围盒到画布四边空隙过大 → W（base 与纯矢量均启用）。"""
+    issues: list[Issue] = []
+    bbox = _content_union_bbox(spec, res)
+    if bbox is None:
+        return issues
+
+    gaps = {
+        "left": bbox.x,
+        "right": spec.width - bbox.right,
+        "top": bbox.y,
+        "bottom": spec.height - bbox.bottom,
+    }
+    sides = {
+        "left": spec.width,
+        "right": spec.width,
+        "top": spec.height,
+        "bottom": spec.height,
+    }
+    for edge, gap in gaps.items():
+        if gap <= 0:
+            continue
+        thresh = _edge_gap_threshold(sides[edge])
+        if gap > thresh:
+            issues.append(Issue(
+                "W", "canvas-edge-gap",
+                f"画布{edge}边空隙 {gap:.1f}mm（阈值 {thresh:.1f}mm = "
+                f"min(8mm, {_EDGE_GAP_FRAC:.0%}×{sides[edge]:.0f}mm)；"
+                f"即 >8mm 或 >边长 8%）；收紧画布或把内容外推",
+            ))
     return issues
 
 

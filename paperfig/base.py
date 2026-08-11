@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import colorsys
 import json
 import re
 import shutil
@@ -26,7 +27,7 @@ from .assets import (
     build_style_pack,
     resolve_style_for_assets,
 )
-from .spec import AssetEl, BoxEl, FigureSpec, PanelEl, load_spec
+from .spec import AssetEl, ArrowEl, BoxEl, FigureSpec, PanelEl, load_spec
 from .theme import load_theme
 
 # 底稿版硬约束（与素材版不同：整幅构图、不抠图、模块落点）
@@ -57,11 +58,11 @@ _SKELETON_EDIT_INSTRUCTIONS = """\
 illustrated content (detailed flat-vector scientific modules inside each panel). \
 Keep every module's position and footprint exactly. Do not translate, scale, merge \
 or split modules. Do not reorder or resize panels.
-- Pale gray blocks are reserved areas — keep them as plain flat very-light-gray, \
-do not illustrate or decorate them.
+- Light tinted header bands inside modules (same hue, much lighter) and pale-gray \
+blocks are reserved for later text plates — keep them plain and unillustrated.
 - 强编辑：把每个色块的平面填充替换成插画内容；保持每个模块的位置与 footprint \
 完全不变；禁止平移、缩放、合并或拆分模块。
-- 浅灰占位块为保留区：保持极浅灰平面，不要插画或装饰。"""
+- 模块内同色系浅色头带与浅灰占位块为文字板保留区：保持平面净空，不要插画或装饰。"""
 
 # nano-banana 常见宽高比；按 figure mm 比例就近匹配
 _ASPECT_CHOICES: list[tuple[float, str]] = [
@@ -79,7 +80,7 @@ _ASPECT_CHOICES: list[tuple[float, str]] = [
 
 _SKELETON_LONG_SIDE = 1024
 _PANEL_FILL = "#F0F3F7"
-# ghost:false 实体区在骨架上的占位色：告知模型勿插画（最终被矢量盖住）
+# ghost:false 实体区 / 箭头胶囊在骨架上的占位色：告知模型勿插画（最终被矢量盖住）
 _SKELETON_RESERVED_FILL = "#EEEEEE"
 
 
@@ -87,6 +88,29 @@ def _skeleton_is_ghost(el) -> bool:
     """骨架导出时的幽灵判定：与 base 渲染一致（None → 幽灵）。"""
     g = getattr(el, "ghost", None)
     return True if g is None else bool(g)
+
+
+def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    return tuple(int(h[i : i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+
+def _rgb01_to_hex(r: float, g: float, b: float) -> str:
+    return "#{:02X}{:02X}{:02X}".format(
+        max(0, min(255, round(r * 255))),
+        max(0, min(255, round(g * 255))),
+        max(0, min(255, round(b * 255))),
+    )
+
+
+def tint_reserve_color(fill: str, *, lightness: float = 0.88) -> str:
+    """同色系提亮：HSL 上 L→lightness、S 减半，作幽灵盒文字板保留带色。"""
+    r, g, b = _hex_to_rgb01(fill)
+    h, _l, s = colorsys.rgb_to_hls(r, g, b)
+    nr, ng, nb = colorsys.hls_to_rgb(h, lightness, s * 0.5)
+    return _rgb01_to_hex(nr, ng, nb)
 
 
 def figure_aspect_ratio(width_mm: float, height_mm: float) -> str:
@@ -145,16 +169,35 @@ def render_skeleton(
     """渲无文字色块骨架图：幽灵 box/asset 饱和色块，ghost:false 浅灰占位；白底。
 
     panel 默认极浅底；ghost:false panel 同样用浅灰保留区。
+    幽灵盒的 title/body 文字板矩形与渲染板同源（零外扩），填该盒色块的同色系提亮
+    （读作模块浅色头带，而非灰补丁）。
     像素尺寸与底稿目标一致（长边 long_side）。返回写入路径，或未给 out_path 时返回 PNG bytes。
     """
+    from .render import (
+        estimate_arrow_label_capsule,
+        estimate_box_text_plate,
+        visual_rect_for,
+    )
+
     pw, ph = base_pixel_size(spec.width, spec.height, long_side=long_side)
     sx = pw / spec.width
     sy = ph / spec.height
     palette = _skeleton_palette(spec.theme_cfg)
+    th = load_theme(spec.theme_cfg)
 
     img = Image.new("RGB", (pw, ph), "#FFFFFF")
     draw = ImageDraw.Draw(img)
     color_i = 0
+    ghost_fills: dict[str, str] = {}
+
+    def _fill_rect_mm(r, fill: str) -> None:
+        box = [
+            round(r.x * sx),
+            round(r.y * sy),
+            round(r.right * sx) - 1,
+            round(r.bottom * sy) - 1,
+        ]
+        draw.rectangle(box, fill=fill, outline=fill)
 
     # panel 先画（极浅底 / 实体保留浅灰），再画 box/asset
     for el in spec.elements:
@@ -173,13 +216,18 @@ def render_skeleton(
                     box, fill=_SKELETON_RESERVED_FILL, outline=_SKELETON_RESERVED_FILL,
                 )
 
+    node_rects: dict[str, Any] = {}
+    node_visual: dict[str, Any] = {}
     for el in spec.elements:
         if not isinstance(el, (BoxEl, AssetEl)):
             continue
         r = el.rect
+        node_rects[el.id] = r
+        node_visual[el.id] = visual_rect_for(el)
         if _skeleton_is_ghost(el):
             fill = palette[color_i % len(palette)]
             color_i += 1
+            ghost_fills[el.id] = fill
         else:
             fill = _SKELETON_RESERVED_FILL
         box = [
@@ -189,6 +237,30 @@ def render_skeleton(
             round(r.bottom * sy) - 1,
         ]
         draw.rectangle(box, fill=fill, outline=fill)
+
+    # 幽灵盒文字板保留区：与渲染板同源矩形 + 模块同色系提亮
+    for el in spec.elements:
+        if not isinstance(el, BoxEl):
+            continue
+        if not _skeleton_is_ghost(el):
+            continue
+        plate = getattr(el, "plate", None)
+        if plate is False:
+            continue
+        pret = estimate_box_text_plate(el, th, spec.font_scale)  # expand_mm=0
+        if pret is not None:
+            base_fill = ghost_fills.get(el.id, palette[0])
+            _fill_rect_mm(pret, tint_reserve_color(base_fill))
+
+    # 箭头标签胶囊：仅静态可算（显式 offset / 非 auto）；auto/avoid 不画
+    for el in spec.elements:
+        if not isinstance(el, ArrowEl):
+            continue
+        cap = estimate_arrow_label_capsule(
+            el, node_rects, th, spec.font_scale, node_visual_rects=node_visual,
+        )
+        if cap is not None:
+            _fill_rect_mm(cap, _SKELETON_RESERVED_FILL)
 
     if out_path is None:
         from io import BytesIO

@@ -6,6 +6,7 @@
   python -m paperfig.cli assets  spec.yaml --api-key KEY [--only id1,id2] [--force] [--no-auto-select]
   python -m paperfig.cli select  spec.yaml ASSET_ID INDEX
   python -m paperfig.cli cutout  in.png out.png [--threshold 238] [--shadow keep|remove]
+  python -m paperfig.cli tiles   spec.yaml [-o outdir] [--grid 2x2|3x3] [--dpi 300]
   python -m paperfig.cli base gen  spec.yaml [--api-key|-k] [--model] [--force] [--candidates N]
   python -m paperfig.cli base pick spec.yaml N
   python -m paperfig.cli base grid spec.yaml
@@ -27,6 +28,7 @@ from .layout import LayoutError, document_has_layout, materialize_yaml
 from .lint import lint
 from .render import render
 from .spec import load_spec
+from .tiles import default_tile_grid, export_tiles, parse_grid
 
 
 def _resolve_api_key(args: argparse.Namespace) -> str:
@@ -203,6 +205,23 @@ def cmd_base_grid(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tiles(args: argparse.Namespace) -> int:
+    """渲染后网格切片放大，供循环目检。"""
+    spec = load_spec(args.spec)
+    out_dir = Path(args.output) if args.output else (spec.path.parent / "tiles")
+    try:
+        grid = parse_grid(args.grid) if args.grid else None
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    rows, cols = grid if grid is not None else default_tile_grid(spec.width)
+    paths = export_tiles(spec, out_dir, grid=(rows, cols), dpi=args.dpi)
+    print(f"切片: {out_dir}  ({rows}x{cols}, {len(paths) - 1} tiles + overview)")
+    for name in sorted(paths):
+        print(f"  {paths[name]}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="paperfig", description="Editable, controllable academic paper figures")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -274,6 +293,17 @@ def main(argv: list[str] | None = None) -> int:
     pbgrid = pb_sub.add_parser("grid", help="底稿叠 mm 网格 → base/base_grid.png")
     pbgrid.add_argument("spec")
     pbgrid.set_defaults(func=cmd_base_grid)
+
+    pt = sub.add_parser("tiles", help="渲染后网格切片放大（循环目检用）")
+    pt.add_argument("spec")
+    pt.add_argument("-o", "--output", help="输出目录（默认 spec 旁 tiles/）")
+    pt.add_argument(
+        "--grid",
+        default=None,
+        help="网格 RxC（如 2x2 / 3x3）；默认宽≤180mm 用 2x2，更宽 3x3",
+    )
+    pt.add_argument("--dpi", type=int, default=300, help="渲染 DPI（默认 300）")
+    pt.set_defaults(func=cmd_tiles)
 
     args = p.parse_args(argv)
     return args.func(args)

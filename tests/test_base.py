@@ -247,8 +247,9 @@ def test_base_prompt_has_hard_constraints():
     assert "Do not translate, scale, merge" in p
     assert "footprint" in p
     assert "强编辑" in p or "平面填充" in p
-    assert "Pale gray blocks are reserved areas" in p
-    assert "do not illustrate or decorate them" in p
+    assert "Light tinted header bands" in p
+    assert "reserved for later text plates" in p
+    assert "plain and unillustrated" in p
     # 素材版硬约束不应混入
     assert "Single centered object" not in p
     assert _BASE_HARD_CONSTRAINTS.splitlines()[0] in p
@@ -267,8 +268,8 @@ def test_base_prompt_skeleton_strong_edit():
     assert "Replace each colored block's flat fill with illustrated content" in sk
     assert "Keep every module's position and footprint exactly" in sk
     assert "Do not translate, scale, merge or split modules" in sk
-    assert "Pale gray blocks are reserved areas" in sk
-    assert "do not illustrate or decorate them" in sk
+    assert "Light tinted header bands" in sk
+    assert "reserved for later text plates" in sk
     # no-text 硬约束仍在
     assert "No text" in sk or "禁止任何文字" in sk
 
@@ -552,11 +553,20 @@ elements:
     # 几何：pad 外扩
     plate_b = next(r for oid, r in res.text_plates if oid == "b")
     assert plate_b.w > 0 and plate_b.h > 0
-    assert abs(th.plate_opacity - 0.82) < 1e-6
+    assert abs(th.plate_opacity - 0.92) < 1e-6
     assert abs(th.plate_pad - 1.2) < 1e-6
     # SVG 含半透明底板
     assert f'fill-opacity="{th.plate_opacity}"' in res.svg
     assert th.plate_fill in res.svg
+
+
+def test_theme_plate_opacity_override(tmp_path):
+    """theme.plate_opacity 可覆盖默认 0.92。"""
+    from paperfig.theme import load_theme
+    th = load_theme({"preset": "sci", "plate_opacity": 0.95})
+    assert abs(th.plate_opacity - 0.95) < 1e-6
+    th0 = load_theme("sci")
+    assert abs(th0.plate_opacity - 0.92) < 1e-6
 
 
 def test_no_base_regression_solid_boxes(tmp_path):
@@ -936,7 +946,7 @@ elements:
 
 
 def test_skeleton_ghost_false_is_pale_gray(tmp_path):
-    """skeleton：ghost:false → #EEEEEE；默认幽灵 → 饱和色。"""
+    """skeleton：ghost:false → #EEEEEE；默认幽灵 → 饱和色（避开文字板保留区采样）。"""
     from io import BytesIO
     yaml = """
 figure: {width: 100, height: 60}
@@ -953,14 +963,164 @@ elements:
     pw, ph = im.size
     sx, sy = pw / 100.0, ph / 60.0
 
-    def sample_center(rect):
-        x, y, w, h = rect
-        cx, cy = int((x + w / 2) * sx), int((y + h / 2) * sy)
+    def sample_xy(x_mm, y_mm):
+        cx, cy = int(x_mm * sx), int(y_mm * sy)
         return tuple(int(v) for v in arr[cy, cx])
 
-    solid_px = sample_center([55, 10, 30, 30])
-    ghost_px = sample_center([10, 10, 30, 30])
+    solid_px = sample_xy(70, 25)
+    # 幽灵盒底部远离 title 板，应为饱和色
+    ghost_px = sample_xy(25, 36)
     assert solid_px == (0xEE, 0xEE, 0xEE)
-    # 饱和色：与 #EEEEEE / 白 明显不同，且非近白
     assert ghost_px != (0xEE, 0xEE, 0xEE)
     assert max(ghost_px) < 240 or min(ghost_px) < 200
+
+
+def test_skeleton_draws_plate_reserve_tinted_and_aligned(tmp_path):
+    """幽灵盒文字板保留区：同色系提亮（非灰），矩形与渲染板精确同源。"""
+    from io import BytesIO
+    import colorsys
+    from paperfig.base import tint_reserve_color, _skeleton_palette
+    from paperfig.render import estimate_box_text_plate, render
+    from paperfig.theme import load_theme
+
+    yaml = """
+figure: {width: 100, height: 60}
+theme: sci
+base:
+  mode: skeleton
+  prompt: "x"
+  image: base/base.png
+elements:
+  - {type: box, id: g, rect: [10, 10, 40, 35], title: TitleHere, body: "sub line", valign: top}
+"""
+    base_dir = tmp_path / "base"
+    base_dir.mkdir()
+    Image.new("RGB", (200, 120), "#CCDDEE").save(base_dir / "base.png")
+    spec = load_spec(_write(tmp_path, yaml))
+    th = load_theme(spec.theme_cfg)
+    estimated = estimate_box_text_plate(spec.elements[0], th, spec.font_scale)
+    assert estimated is not None
+    assert estimated.w > 2 and estimated.h > 2
+
+    res = render(spec, dpi=72)
+    rendered = next(r for oid, r in res.text_plates if oid == "g")
+    assert abs(estimated.x - rendered.x) < 1e-6
+    assert abs(estimated.y - rendered.y) < 1e-6
+    assert abs(estimated.w - rendered.w) < 1e-6
+    assert abs(estimated.h - rendered.h) < 1e-6
+
+    palette = _skeleton_palette(spec.theme_cfg)
+    expected = tint_reserve_color(palette[0])
+    assert expected.upper() != "#EEEEEE"
+    # 提亮后仍带色相（非灰）
+    er, eg, eb = (int(expected[i : i + 2], 16) / 255.0 for i in (1, 3, 5))
+    _h, _l, sat = colorsys.rgb_to_hls(er, eg, eb)
+    assert sat > 0.05
+
+    data = render_skeleton(spec)
+    im = Image.open(BytesIO(data)).convert("RGB")
+    arr = np.asarray(im)
+    pw, ph = im.size
+    sx, sy = pw / 100.0, ph / 60.0
+    cx = int((estimated.x + estimated.w / 2) * sx)
+    cy = int((estimated.y + estimated.h / 2) * sy)
+    px = tuple(int(v) for v in arr[cy, cx])
+    exp_rgb = tuple(int(expected[i : i + 2], 16) for i in (1, 3, 5))
+    assert px == exp_rgb, (px, exp_rgb, expected)
+    # 盒底插画区仍为饱和色（非保留带）
+    bx = int(30 * sx)
+    by = int(40 * sy)
+    bot = tuple(int(v) for v in arr[by, bx])
+    assert bot != exp_rgb
+    assert bot != (0xEE, 0xEE, 0xEE)
+    assert max(bot) < 240 or min(bot) < 200
+
+
+def test_tint_reserve_color_hsl():
+    """tint_reserve_color：L≈0.88、S 减半。"""
+    from paperfig.base import tint_reserve_color
+    import colorsys
+    src = "#3B6EA5"
+    out = tint_reserve_color(src)
+    r0, g0, b0 = (int(src[i : i + 2], 16) / 255.0 for i in (1, 3, 5))
+    r1, g1, b1 = (int(out[i : i + 2], 16) / 255.0 for i in (1, 3, 5))
+    h0, _l0, s0 = colorsys.rgb_to_hls(r0, g0, b0)
+    h1, l1, s1 = colorsys.rgb_to_hls(r1, g1, b1)
+    # 8-bit 量化会带来微小色相漂移
+    assert abs(h0 - h1) < 0.01 or abs(abs(h0 - h1) - 1.0) < 0.01
+    assert abs(l1 - 0.88) < 0.02
+    assert abs(s1 - s0 * 0.5) < 0.02
+
+
+def test_tiles_grid_count_and_min_width(tmp_path):
+    """tiles：默认网格数量正确，单片宽 ≥1200，含 overview。"""
+    from paperfig.tiles import export_tiles, default_tile_grid
+    from PIL import Image as PILImage
+
+    yaml = """
+figure: {width: 120, height: 80}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [10, 10, 40, 30], title: A}
+  - {type: box, id: b, rect: [60, 30, 40, 30], title: B}
+"""
+    spec = load_spec(_write(tmp_path, yaml))
+    assert default_tile_grid(120) == (2, 2)
+    assert default_tile_grid(200) == (3, 3)
+
+    out = tmp_path / "tiles"
+    paths = export_tiles(spec, out, grid="2x2", dpi=72, min_tile_width=1200)
+    assert "overview.png" in paths
+    assert paths["overview.png"].is_file()
+    tiles = [n for n in paths if n.startswith("tile_")]
+    assert len(tiles) == 4
+    for name in tiles:
+        with PILImage.open(paths[name]) as im:
+            assert im.width >= 1200, (name, im.size)
+
+
+def test_lint_canvas_edge_gap_trigger_and_clean(tmp_path):
+    """canvas-edge-gap：底部大空带触发；贴边内容不触发。"""
+    from paperfig.render import render
+    from paperfig.lint import lint
+
+    # 内容贴顶，底部空隙远超阈值（h=100 → min(8,8)=8）
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 100}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [10, 5, 40, 25], title: A}
+  - {type: box, id: b, rect: [55, 5, 35, 25], title: B}
+"""))
+    res = render(spec, dpi=72)
+    gaps = [i for i in lint(spec, res) if i.code == "canvas-edge-gap"]
+    assert gaps, "应报 canvas-edge-gap"
+    assert any("bottom" in i.msg for i in gaps)
+    assert all(i.level == "W" for i in gaps)
+
+    # 矮画布：底部空隙 7.5mm ≈ 10%（> 8%=6mm）也应触发
+    spec_short = load_spec(_write(tmp_path, """
+figure: {width: 120, height: 75}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [5, 5, 50, 30], title: A}
+  - {type: box, id: b, rect: [60, 5, 50, 30], title: B}
+""", "short.yaml"))
+    res_s = render(spec_short, dpi=72)
+    assert any(
+        i.code == "canvas-edge-gap" and "bottom" in i.msg
+        for i in lint(spec_short, res_s)
+    )
+
+    # 四周贴边（空隙 < 阈值）
+    spec2 = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 60}
+theme: sci
+elements:
+  - {type: box, id: a, rect: [3, 3, 45, 25], title: A}
+  - {type: box, id: b, rect: [52, 3, 45, 25], title: B}
+  - {type: box, id: c, rect: [3, 32, 45, 25], title: C}
+  - {type: box, id: d, rect: [52, 32, 45, 25], title: D}
+"""))
+    res2 = render(spec2, dpi=72)
+    assert not any(i.code == "canvas-edge-gap" for i in lint(spec2, res2))

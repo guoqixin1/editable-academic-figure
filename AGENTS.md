@@ -92,7 +92,7 @@ base:                 # 可选：AI 整图底稿混合模式
 - `theme.palette`：8-role 覆盖，如 `{primary: "#00897B", secondary: "#FFB300", section_bg: "#ECEFF1"}`。
 - `variant`（box/panel/tokens）：`primary secondary tertiary accent highlight plain dark muted`。语义：primary=核心贡献，secondary=次要，muted/plain=常规。
 - `assets_style`：顶层英文插画语言，抽卡时与 theme 色板一并注入（跨素材风格锁）。
-- **`base:`**：有则进入混合模式——`base.image` 全画布打底；文字/箭头仍矢量。主题可调 `plate_fill` / `plate_opacity` / `plate_pad` / `plate_radius`。
+- **`base:`**：有则进入混合模式——`base.image` 全画布打底；文字/箭头仍矢量。主题可调 `plate_fill` / `plate_opacity` / `plate_pad` / `plate_radius`。**禁止**对底稿做板下漂白等破坏性后处理；对比度不足优先提高 `plate_opacity` / 加大保留带，再不行重抽。
 
 ### elements（`type` 区分）
 
@@ -171,7 +171,7 @@ base:                 # 可选：AI 整图底稿混合模式
 | **渐变色系列（浅→深）** | 逐盒 `fill` 指定色值（如 `#D6E4F5 → #3E6595`），深底配 `text_color: "#FFFFFF"`。 |
 | **白色子卡（模块内的次级卡片）** | `box` + `variant: plain` + `valign: top`，内部再放 asset/text；完全包含的嵌套不会报 node-overlap。 |
 | **换底稿重抽但文字不动** | 只改 `base.prompt`（或换 `--model`）→ `paperfig base gen … --force` → 目检 contact sheet → `base pick`；**不要动**文字/箭头 YAML，直接 `render`。 |
-| **底稿文字压花纹 / `base-text-contrast`** | ① 挪 `at`/`rect`/`label_offset` 到浅色净空；② 确认未关 `plate`（或主题调高 `plate_opacity`）；③ 仍差则改 prompt 要求 pastel 浅填后 `--force` 重抽。 |
+| **底稿文字压花纹 / `base-text-contrast`** | ① 挪 `at`/`rect`/`label_offset` 到浅色净空；② 确认未关 `plate`（或主题调高 `plate_opacity`）；③ **禁止**板下漂白等破坏性后处理；④ 仍差则改 prompt 要求 pastel 浅填后 `--force` 重抽。 |
 
 ---
 
@@ -207,6 +207,7 @@ python -m paperfig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {pro
 | `uneven-gap` | W | 同排/列节点**中心间距几乎相等却差一点** → 微调相邻坐标成等距（按中心距算，宽度不一也不误报） |
 | `asset-tiny` | W | 加大槽位或裁素材空白 |
 | `canvas-sparse`/`canvas-crowded` | W | 调 `figure` 尺寸贴合内容（覆盖率按叶元素，不计 panel/背景 group） |
+| `canvas-edge-gap` | W | 叶内容联合包围盒到某边空隙 >8mm **或** >该边长×8%（实现阈值 `min(8mm, 8%×边长)`）→ 收画布或外推内容 |
 | `region-empty`/`layout-imbalance` | W | 叶元素九宫格空洞（占用<0.05 且邻格>0.3）或极差>0.35 → 填内容/收画布/分散布局；宽<120mm 放宽 |
 | `R-empty-box` | W | 给 box 加 `body`/`sketch`/`icon`，或把子元素放进容器卡（**base 模式停用**） |
 | `R-no-section` | W | 加 `panel`（smallcaps）或带 `fill` 的 `group`（**base 停用**） |
@@ -244,6 +245,7 @@ base 模式另停用 `arrow-exit-over-content` 与 sketch 碰撞类检查（幽�
 | `base gen spec [-k KEY] [--model …] [--candidates N] [--force]` | 底稿抽卡（skeleton 先渲骨架作参考） |
 | `base pick spec INDEX` | 候选提升为 `base/base.png`（回写 `base.image`） |
 | `base grid spec` | 底稿叠 mm 网格 → `base/base_grid.png`（freeform 标区） |
+| `tiles spec [-o dir] [--grid 2x2\|3x3] [--dpi 300]` | 成图网格切片放大（循环目检；单片宽≥1200px + overview） |
 | `cutout in.png out.png [--threshold 238] [--shadow keep\|remove]` | 单张白底图抠图 |
 
 API key 也可用环境变量 `PAPERFIG_API_KEY`（兼容旧名 `SCIFIG_API_KEY`）。`base gen --model`：`nano-banana-fast`（默认）/ `nano-banana-2` / `nano-banana-pro`。

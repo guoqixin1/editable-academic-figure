@@ -178,6 +178,95 @@ def _union_span_plate(spans: list[_TextSpan], th: Theme) -> Rect | None:
     return Rect(x0, y0, x1 - x0, y1 - y0).expanded(th.plate_pad)
 
 
+def estimate_box_text_plate(
+    el: BoxEl,
+    th: Theme,
+    font_scale: float = 1.0,
+    *,
+    expand_mm: float = 0.0,
+) -> Rect | None:
+    """估算 box title/body 文字板矩形（与 `_render_box` 幽灵板摆放一致）。
+
+    供骨架保留区等渲染前用途；默认 ``expand_mm=0`` 与渲染板矩形精确同源。
+    无文字时返回 None。
+    """
+    r = el.rect
+    fs = font_scale
+    inner_w, avail_h = _shape_inner(el.shape, r, th.box_pad_x, th.box_pad_y)
+    content_x0 = r.x + th.box_pad_x
+    title_pt = (el.title_size or th.size_title) * fs
+    body_pt = (el.body_size or th.size_body) * fs
+    title_lines = wrap_text(el.title, title_pt, inner_w, bold=True) if el.title else []
+    body_lines = wrap_text(el.body, body_pt, inner_w) if el.body else []
+    if not title_lines and not body_lines:
+        return None
+
+    # 骨架/幽灵估算：不计 icon/sketch（底稿已有形象）
+    text_h = (
+        text_block_height_mm(len(title_lines), title_pt)
+        + (0.6 if title_lines and body_lines else 0.0)
+        + text_block_height_mm(len(body_lines), body_pt)
+    )
+    if el.valign == "top":
+        y = r.y + th.box_pad_y
+    else:
+        cy = r.cy + (_cyl_cap_ry(r) * 0.5 if el.shape == "cylinder" else 0.0)
+        y = cy - text_h / 2
+
+    spans: list[_TextSpan] = []
+    blocks = [b for b in ((title_lines, title_pt, True), (body_lines, body_pt, False)) if b[0]]
+    for bi, (lines, pt, bold) in enumerate(blocks):
+        if bi > 0:
+            y += 0.6
+        lh = pt * PT_TO_MM * LINE_HEIGHT
+        for ln in lines:
+            asc = line_ascent_mm(ln.text or "x", pt, bold)
+            if el.align == "left":
+                x = content_x0
+            else:
+                x = content_x0 + inner_w / 2 - ln.width_mm / 2
+            spans.append(_TextSpan(
+                x=x, baseline=y + asc, text=ln.text, pt=pt, bold=bold, color="#000",
+            ))
+            y += lh
+
+    plate = _union_span_plate(spans, th)
+    if plate is None:
+        return None
+    return plate.expanded(expand_mm) if expand_mm else plate
+
+
+def estimate_arrow_label_capsule(
+    el: ArrowEl,
+    node_rects: dict[str, Rect],
+    th: Theme,
+    font_scale: float = 1.0,
+    node_visual_rects: dict[str, Rect] | None = None,
+) -> Rect | None:
+    """静态可算的箭头标签胶囊（显式 offset / 非 auto pos）；auto 落位返回 None。
+
+    ``route: avoid`` 且无 ``via`` 时折线要到渲染期才定，也返回 None。
+    """
+    if not el.label or _use_auto_label(el):
+        return None
+    if el.route == "avoid" and not el.via:
+        return None
+
+    visual = node_visual_rects or node_rects
+    res = RenderResult()
+    res.node_rects = dict(node_rects)
+    res.node_visual_rects = dict(visual)
+    geom = _resolve_arrow_geometry(el, res, {})
+    if geom.skip or len(geom.pts) < 2:
+        return None
+    pt_size = th.size_arrow_label * font_scale
+    _span, cap = _arrow_label_layout(
+        geom.pts, el.label, el.label_offset, pt_size, th.arrow_head_len, th.muted,
+    )
+    # 与渲染期标签胶囊同源；auto/avoid 已在上方返回 None（无法静态定）
+    return cap
+
+
 def _embed_base_image(spec: FigureSpec) -> str:
     """底稿全画布底层：data URI 内嵌，铺满 figure 尺寸（mm）。"""
     path = spec.resolve_base_image()

@@ -32,7 +32,8 @@ description: >-
 3. **最小改动，每次改完必须验证**：改一处 → 渲染 → 读 lint 输出 → 目检 PNG → 再改下一处。E 级 lint 必须清零。
 4. **默认顶会观感**：新图默认 `theme: {preset: topconf}`，按四层分解法（全局→分区→标注→风格）写 spec，遵守信息密度 checklist（无空盒、≥50% 模块含 sketch/icon、主箭头有标签、有分区底色、多语义色必有 legend）。详见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)。
 5. **从零作图先优化需求**：尚无精确 spec 时，先用 [`prompts/FIGURE_BRIEF.md`](prompts/FIGURE_BRIEF.md) 把粗糙需求 / 论文片段扩写成 Figure Brief，再写 YAML（工作流 Phase 0.5 → Phase 1）。用户已给精确改图指令时可跳过。
-6. **混合模式何时用**：形象化场景 / 英雄图 / 演示材料 → `base:`（skeleton 优先）；严肃排版投稿主文图 → 纯矢量。base 抽卡后**必须**目检 contact sheet（查烤字/漂移）。
+6. **混合模式何时用**：形象化场景 / 英雄图 / 演示材料 → `base:`（skeleton 优先）；严肃排版投稿主文图 → 纯矢量。base 抽卡后**必须**目检 contact sheet（查烤字/**烤箭头/烤连接线**/漂移；核对骨架浅灰保留区是否被插画侵占）。
+7. **交付前必须切片循环复核**：`render`（≥300dpi）→ `paperfig tiles` → **逐片目检**按 checklist 记缺陷 → 修 spec/重抽 → 重渲复检 → **循环直到连续一整轮零新发现**（至少两轮）。未完成不得交付。
 
 ## 前置条件
 
@@ -68,6 +69,9 @@ python -m paperfig.cli select  spec.yaml ASSET_ID INDEX
 python -m paperfig.cli base gen   spec.yaml [-k KEY] [--model nano-banana-fast|nano-banana-2|nano-banana-pro] [--force]
 python -m paperfig.cli base pick  spec.yaml INDEX
 python -m paperfig.cli base grid  spec.yaml
+
+# 成图切片放大（循环目检用；默认宽≤180→2x2，更宽→3x3；单片宽≥1200px）
+python -m paperfig.cli tiles  spec.yaml [-o outdir] [--grid 2x2|3x3] [--dpi 300]
 ```
 
 `PAPERFIG_API_KEY` 环境变量可替代 `--api-key` / `-k`（仍兼容旧名 `SCIFIG_API_KEY`）。
@@ -75,7 +79,8 @@ python -m paperfig.cli base grid  spec.yaml
 ## 迭代循环
 
 ```
-改 spec → render --dpi 180 → 读 lint (E/W) → 读 PNG → 再改
+改 spec → render --dpi 180 → 读 lint (E/W) → tiles 逐片目检 → 再改
+定稿前：render ≥300dpi → tiles → 连续一整轮零新发现（至少两轮）
 ```
 
 体检码到修法的映射、arrow.route 全集、改图配方（含换底稿/文字压花纹）、陷阱——**都在 [AGENTS.md](AGENTS.md)**。混合模式分支流程见 [prompts/AGENT_WORKFLOW.md](prompts/AGENT_WORKFLOW.md)。
@@ -85,11 +90,11 @@ python -m paperfig.cli base grid  spec.yaml
 - **二次改图**（最常见）：用户给 `figure.yaml` + `figure.png`，说"挪一下 / 加连线 / 换色 / 换占位图"。查 AGENTS.md §3 配方表定位改哪个字段。base 图改文案直接重渲；换场景观感才 `base gen --force`。
 - **从零作图**：走 [prompts/AGENT_WORKFLOW.md](prompts/AGENT_WORKFLOW.md) 的分阶段流程——先用 [prompts/FIGURE_BRIEF.md](prompts/FIGURE_BRIEF.md) 生成 Figure Brief（Phase 0.5），再需求拆解写 spec → 占位布局 → 抽卡（物件或底稿）→ 评审 → 交付。
 - **复现论文图**：同样先走 FIGURE_BRIEF 需求优化；YAML 写法参照 `examples/rep_*/`（`rep_evdispatch`, `rep_uavedge`, `rep_codriving`, `rep_d3pgmodel`, `rep_ensemble`）。
-- **混合底稿图**：形象化 / illustrated figure 需求 → Brief 填「底稿场景描述」→ `base gen` → 目检 contact sheet → `pick` → `render`/`lint`。
+- **混合底稿图**：形象化 / illustrated figure 需求 → Brief 填「底稿场景描述」→ `base gen` → 目检 contact sheet（烤字+烤箭头）→ `pick` → `render`/`lint` → **tiles 切片循环复核**。
 
 ## 视觉评审
 
-机检（lint）过关后按 [prompts/visual_rubric.md](prompts/visual_rubric.md) 做目检：对齐、留白、箭头语义、**视觉丰度**（密度/层次/图例/素材统一）、配色、上下标、marker/tokens。用户说「太素」时走 AGENTS.md 升级配方。base 另查烤字残留与 `base-text-contrast`。
+机检（lint）过关后按 [prompts/visual_rubric.md](prompts/visual_rubric.md) 做目检：对齐、留白、箭头语义、**视觉丰度**（密度/层次/图例/素材统一）、配色、上下标、marker/tokens。用户说「太素」时走 AGENTS.md 升级配方。base 另查烤字残留与 `base-text-contrast`。**交付前强制 tiles 切片循环**（见硬规则 7）。
 
 ## 完整参考
 

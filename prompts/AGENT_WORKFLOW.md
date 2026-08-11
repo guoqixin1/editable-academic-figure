@@ -347,6 +347,8 @@ elements:
 
 顶层 `base:` 打开混合管线。底稿全画布打底；`box`/`asset`/`panel` 默认**幽灵**（不画壳，几何仍供锚点/路由/lint；`ghost: false` 恢复实体）；文字自动垫半透明白底板（`plate: false` 可关；主题 `plate_fill` / `plate_opacity` / `plate_pad` / `plate_radius` 调样式）。
 
+**禁止**对底稿做板下漂白等破坏性后处理（会洗掉仪表盘/齿轮等插画）。对比度不足优先提高 `plate_opacity` / 加大保留带；仍不够再改 prompt 后 `--force` 重抽。
+
 ```yaml
 base:
   mode: skeleton          # 或 freeform
@@ -364,16 +366,17 @@ base:
 1. **写 layout + 矢量标注**：与纯矢量相同写 `layout:` / `elements`（箭头 `route: avoid`、文字/legend 照常）。加 `base: {mode: skeleton, prompt: …}`。
 2. **抽底稿**：`python -m paperfig.cli base gen fig.yaml [-k KEY] [--model nano-banana-fast|nano-banana-2|nano-banana-pro] [--candidates N] [--force]`  
    → 自动渲无文字色块骨架 `base/skeleton.png` → 作参考图（API `urls`）喂 nano-banana 强编辑图生图 → 候选在 `base/candidates/`，contact sheet 在 `base/`。几何与 spec 对齐（实测质心偏移常 <3px）。
-3. **目检 contact sheet 筛卡（必经）**：淘汰烤字（字母/数字）、模块大漂移、深色花纹占满标签区、擅自画了箭头/连线的卡。
+3. **目检 contact sheet 筛卡（必经）**：淘汰烤字（字母/数字）、**烤箭头/烤连接线**、模块大漂移、深色花纹占满标签区、擅自画了箭头/连线的卡。骨架同色系浅色头带与浅灰块为文字板保留区——选卡时核对模型是否保持净空（未在保留区插画）。
 4. **选卡**：`python -m paperfig.cli base pick fig.yaml <n>`（回写 `base.image`）。
 5. **合成渲染**：`python -m paperfig.cli render fig.yaml -o fig.png --svg fig.svg`（矢量层按原坐标叠字/箭）。
-6. **lint**：清零 `base-text-contrast`（E）；留意 `base-region-drift` / `plate-overlap`（W）。base 模式停用 `R-empty-box` / `R-no-section` / `R-no-legend` / `arrow-exit-over-content` / sketch 碰撞等不适用项，其余照常。
+6. **lint**：清零 `base-text-contrast`（E）；留意 `base-region-drift` / `plate-overlap` / `canvas-edge-gap`（W）。base 模式停用 `R-empty-box` / `R-no-section` / `R-no-legend` / `arrow-exit-over-content` / sketch 碰撞等不适用项，其余照常。
 7. **只改文字**：改 YAML 文案后直接 `render`——**秒级重渲，不必重抽底稿**。
+8. **切片循环复核（交付前强制）**：见 Phase 4。
 
 ### freeform：纯文生图 + 人工标区
 
 1. 写 `base: {mode: freeform, prompt: …}`（可先无 `regions`）。
-2. `base gen`（无骨架参考，纯文生图）→ 目检 contact sheet → `base pick`。
+2. `base gen`（无骨架参考，纯文生图）→ 目检 contact sheet（烤字/**烤箭头**/漂移）→ `base pick`。
 3. `python -m paperfig.cli base grid fig.yaml` → 出 `base/base_grid.png`（叠 mm 网格），目测标注 `base.regions: {id: [x,y,w,h]}`。
 4. 元素用 `region: <id>` 锚定 → `render` → lint（同上；无 skeleton 对拍则无 `base-region-drift`）。
 
@@ -457,24 +460,43 @@ python -m paperfig.cli assets {project}/figure.yaml --api-key <KEY>
   ```
 - 全体候选风格都不合 → 改 prompt（仍勿写色调）后 `--force` 重抽。
 
-**混合模式（整图底稿）**：走上文「混合模式（base）」——`base gen` → **目检 contact sheet（查烤字/漂移）** → `base pick`（freeform 再 `base grid` 标 `regions`）。抽卡不满意先改 prompt 再换 model。
+**混合模式（整图底稿）**：走上文「混合模式（base）」——`base gen` → **目检 contact sheet（查烤字/烤箭头/漂移/保留区侵占）** → `base pick`（freeform 再 `base grid` 标 `regions`）。抽卡不满意先改 prompt 再换 model。
 
-## Phase 4：正式渲染 + 视觉评审闭环
+## Phase 4：正式渲染 + 切片循环复核（强制）
+
+成图评审必须走强制循环，不可口头跳过：
 
 ```bash
-python -m paperfig.cli render {project}/figure.yaml -o {project}/figure.png --svg {project}/figure.svg
+# 1) 高清渲染（定稿 ≥300dpi；投稿导出常用 600）
+python -m paperfig.cli render {project}/figure.yaml -o {project}/figure.png --svg {project}/figure.svg --dpi 300
+
+# 2) 网格切片放大（单片宽 ≥1200px + overview.png）
+python -m paperfig.cli tiles {project}/figure.yaml -o {project}/tiles --dpi 300
 ```
 
-按 `prompts/visual_rubric.md`：
+对 `tiles/tile_r*c*.png` **逐格目检**，按 checklist 记缺陷清单（有一条就记一条）：
 
-1. 机检：E 清零；纯矢量尽量清零 `R-empty-box` / `R-no-section` / `R-no-legend`；base 模式重点清零 `base-text-contrast`，并处理 `base-region-drift` / `plate-overlap`。
-2. 目检：对齐、留白、箭头语义、**视觉丰度**、配色、素材/底稿风格统一、文字/上下标；base 另查烤字残留与文字压花纹。
-3. 最多 3 轮修改；遗留项交用户。
+1. **字压图**：矢量文字/plate 压在插画主体或花纹上
+2. **烤字 / 烤箭头 / 烤连接线**：底稿残留字母数字或模型自绘箭头
+3. **箭头端点**：悬空、插进插画、未贴模块边
+4. **台阶折线**：不必要的直角折、绕行别扭
+5. **标签压折角或压内容**：箭头标签压折点 / 压模块 / 压其他字
+6. **空白带与密度失衡**：边缘空带、局部过挤或过空（对照 `canvas-edge-gap` 等机检）
+7. **图例语义与画面一致**：色键/虚线样式与图中对应
+8. **plate 互叠**：文字底板互相重叠遮挡
+
+然后：**修 spec 或重抽底稿 → 重渲 → 再 tiles → 再逐片目检**。
+
+**退出条件**：连续一整轮目检 **零新发现** 才可进入交付；**至少两轮**（第 1 轮发现问题并修好后，第 2 轮必须再扫一遍确认无新问题）。未满足不得交付。
+
+机检同步要求（`prompts/visual_rubric.md`）：
+
+1. E 清零；纯矢量尽量清零 `R-empty-box` / `R-no-section` / `R-no-legend`；base 重点清零 `base-text-contrast`，并处理 `base-region-drift` / `plate-overlap` / `canvas-edge-gap`。
+2. 目检以上 checklist + 对齐、留白、箭头语义、视觉丰度、配色、上下标。
 
 ## Phase 5：交付
 
-展示 `figure.png` + `figure.svg` + 体检结论。说明用户可改任意坐标重渲；物件素材可换卡/重抽；**base 模式改文字不必重抽底稿**，换场景观感才 `base gen --force`。
-
+展示 `figure.png` + `figure.svg` + 体检结论 + **切片复核已通过（最后一轮零新发现）**。说明用户可改任意坐标重渲；物件素材可换卡/重抽；**base 模式改文字不必重抽底稿**，换场景观感才 `base gen --force`。
 ---
 
 ## 避坑
