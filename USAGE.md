@@ -1,8 +1,8 @@
 # paperfig 使用说明
 
-**Editable Academic Figure** —— 受控学术作图工具：**布局用 YAML 逐毫米定死（可控、可复现、可微调），AI 只生成插画物件并抠成透明图（美观），文字/公式全部矢量渲染（杜绝乱码）**。目标是产出可直接进 Illustrator/Inkscape 的可编辑学术论文配图草稿，把手工调整压到最少。
+**Editable Academic Figure** —— 受控学术作图工具：**布局用 YAML 逐毫米定死（可控、可复现、可微调），AI 只生成插画物件并抠成透明图（美观），文字/公式全部矢量渲染（杜绝乱码）**。可选 **混合模式（base）**：AI 画整图底稿拉观感，文字/箭头仍矢量可编辑。目标是产出可直接进 Illustrator/Inkscape 的可编辑学术论文配图草稿，把手工调整压到最少。
 
-适合方法框架图、网络架构图、模块详解、对比消融、数据行为示意，以及体系结构 / 分布式 / 流程图。新图默认 **NeurIPS Soft Pastel**（`neurips`）。
+适合方法框架图、网络架构图、模块详解、对比消融、数据行为示意，以及体系结构 / 分布式 / 流程图。新图默认 **NeurIPS Soft Pastel**（`neurips`）。形象化英雄图 / 演示材料可走 base。
 
 > 人用本文档；让 AI 助手二次改图 → [AGENTS.md](AGENTS.md)。从零作图先读 [prompts/FIGURE_BRIEF.md](prompts/FIGURE_BRIEF.md) 与 [prompts/AGENT_WORKFLOW.md](prompts/AGENT_WORKFLOW.md)。
 
@@ -17,10 +17,11 @@
 5. [元素与字段](#5-元素与字段)
 6. [箭头与路由](#6-箭头与路由)
 7. [AI 素材抽卡](#7-ai-素材抽卡)
-8. [命令行与 studio](#8-命令行与-studio)
-9. [体检码速查](#9-体检码速查)
-10. [实践经验与常见坑](#10-实践经验与常见坑)
-11. [后期二次修改](#11-后期二次修改)
+8. [混合模式 base](#8-混合模式-base)
+9. [命令行与 studio](#9-命令行与-studio)
+10. [体检码速查](#10-体检码速查)
+11. [实践经验与常见坑](#11-实践经验与常见坑)
+12. [后期二次修改](#12-后期二次修改)
 
 ---
 
@@ -73,7 +74,7 @@ python -m paperfig.cli studio hello.yaml    # 拖拽 / 键盘微调
 
 **何时跳过 Phase 0.5**：用户已给精确改图指令（挪盒子 / 改色 / 加箭头），或已有完整可用 `figure.yaml` 只需微调 → 直接改 YAML。
 
-**核心心法**：布局先于素材定稿；真实实验图（频谱/热图/定量曲线）一律 `placeholder: true`，禁止 AI 生成。
+**核心心法**：布局先于素材定稿；真实实验图（频谱/热图/定量曲线）一律 `placeholder: true`，禁止 AI 生成。形象化场景可改走 [§8 混合模式](#8-混合模式-base)。
 
 ---
 
@@ -369,7 +370,34 @@ python -m paperfig.cli assets fig.yaml --only microscope --force   # 改 prompt 
 
 ---
 
-## 8. 命令行与 studio
+## 8. 混合模式 base
+
+严肃投稿主文图用纯矢量即可；**形象化场景 / 英雄图 / 演示材料**可用 `base:`：AI 抽整图底稿，文字与箭头仍矢量精确可编辑。
+
+```yaml
+base:
+  mode: skeleton          # 或 freeform
+  prompt: "flat pastel …" # 场景描述；禁字禁箭；浅色模块+净空
+  image: base/base.png
+  candidates: 3
+```
+
+```bash
+python -m paperfig.cli base gen fig.yaml -k "$PAPERFIG_API_KEY" \
+  [--model nano-banana-fast|nano-banana-2|nano-banana-pro] [--candidates N] [--force]
+python -m paperfig.cli base pick fig.yaml 2     # 目检 contact sheet 后选卡（查烤字/漂移）
+python -m paperfig.cli base grid fig.yaml       # freeform：叠 mm 网格标 regions
+python -m paperfig.cli render fig.yaml -o fig.png --svg fig.svg
+```
+
+- **skeleton**：`layout` → 自动渲 `base/skeleton.png` → 图生图对齐几何 → 矢量层按原坐标叠字。
+- **freeform**：纯文生图 → `base grid` 标 `regions` → 元素 `region: id` 锚定。
+- base 下 box/panel 默认幽灵（`ghost: false` 恢复实体）；文字默认底板（`plate: false` 可关）。
+- 改文案直接 `render`；换观感才改 prompt / `--force` 重抽。细节见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)。
+
+---
+
+## 9. 命令行与 studio
 
 | 命令 | 说明 |
 | --- | --- |
@@ -377,6 +405,9 @@ python -m paperfig.cli assets fig.yaml --only microscope --force   # 改 prompt 
 | `python -m paperfig.cli studio spec [--port 8323] [--no-open]` | 交互调图 |
 | `python -m paperfig.cli assets spec [--api-key KEY] [--only ids] [--force]` | 抽卡 |
 | `python -m paperfig.cli select spec ASSET_ID INDEX` | 换卡 |
+| `python -m paperfig.cli base gen spec [-k KEY] [--model …] [--force]` | 整图底稿抽卡 |
+| `python -m paperfig.cli base pick spec INDEX` | 选底稿 |
+| `python -m paperfig.cli base grid spec` | 底稿叠 mm 网格 |
 | `python -m paperfig.cli cutout in.png out.png [--shadow keep\|remove]` | 抠图 |
 
 ### studio
@@ -397,7 +428,7 @@ python -m paperfig.cli studio path/to/figure.yaml
 
 ---
 
-## 9. 体检码速查
+## 10. 体检码速查
 
 | 码 | 级 | 含义 | 修法 |
 | --- | --- | --- | --- |
@@ -406,15 +437,18 @@ python -m paperfig.cli studio path/to/figure.yaml
 | `text-overlap` | E | 文字重叠 | 挪 `at` |
 | `out-of-canvas` | E | 超出画布 | 调坐标或加大画布 |
 | `arrow-through-node` | E | 箭头穿无关节点 | 换 `route` 或 `via` |
+| `base-text-contrast` | E | 文字相对底稿对比不足 / 无板压花纹 | 挪字 / 开 plate / 重抽浅色底稿 |
 | `asset-placeholder` | W | 实验图待填（正常） | 投稿前放真图 |
 | `font-too-small` / `font-small` | W | 字号偏小 | 调大或 `font_scale` |
 | `node-overlap` | W | 节点重叠 | 调 `rect` |
 | `row/col-misaligned` / `uneven-gap` | W | 近失对齐/等距 | snap 同排 `y+h` 或同列 `x+w` |
 | `asset-tiny` | W | 素材显示过小 | 加大槽位 |
 | `canvas-sparse` / `canvas-crowded` | W | 留白过多/过挤 | 调画布尺寸 |
-| `R-empty-box` | W | 空心大盒子 | 加 `body`/`sketch`/`icon` |
-| `R-no-section` | W | 缺分区底色 | 加 `panel`（smallcaps）或 `group`+`fill` |
-| `R-no-legend` | W | 多语义色无图例 | 加 `legend`，或次要色改 `muted` |
+| `R-empty-box` | W | 空心大盒子 | 加 `body`/`sketch`/`icon`（base 停用） |
+| `R-no-section` | W | 缺分区底色 | 加 `panel`（smallcaps）或 `group`+`fill`（base 停用） |
+| `R-no-legend` | W | 多语义色无图例 | 加 `legend`，或次要色改 `muted`（base 停用） |
+| `base-region-drift` | W | skeleton 底稿相对骨架漂移 | 重抽 / 强调对齐 prompt |
+| `plate-overlap` | W | 文字底板互叠 | 错开文字 |
 | `arrow-approach` | W | 末段不垂直进入锚定边 | 改用正交 `route`；斜线 `via`/`straight` 只警告 |
 | `arrow-gap` | W | 端点悬空或压入视觉边 | 检查 accent/stack；调锚点 |
 | `arrow-label-tip` | W | 标签胶囊盖住尖端 | 挪 label / 改 `label_offset` / 关 `label_bg` |
@@ -424,7 +458,7 @@ python -m paperfig.cli studio path/to/figure.yaml
 
 ---
 
-## 10. 实践经验与常见坑
+## 11. 实践经验与常见坑
 
 **布局**
 - 先 `--grid` 占位定稿，再抽卡。
@@ -437,6 +471,10 @@ python -m paperfig.cli studio path/to/figure.yaml
 **YAML**
 - inline `{}` 含 `_ ^ { } ? : # [ ,` 的值必须加引号：`title: "E_{s}"`、`title: "loss 收敛?"`。
 - 冒号后必须有空格：`{id: a}` 对，`{id:a}` 错。
+
+**base 底稿**
+- prompt：扁平、pastel 浅填、禁字禁箭、模块净空；抽卡后**必看** contact sheet。
+- 不满意先改 prompt 再换 model（fast→pro）；改文字不必重抽。
 
 **学术诚信**
 - 实验产物一律 `placeholder: true`；AI 素材只画通用物件（显微镜/服务器/文档）。
@@ -452,7 +490,7 @@ python -m paperfig.cli studio path/to/figure.yaml
 
 ---
 
-## 11. 后期二次修改
+## 12. 后期二次修改
 
 版面全是显式坐标，最省力的微调是**让 AI 助手改 spec**。直接说：
 
@@ -460,6 +498,7 @@ python -m paperfig.cli studio path/to/figure.yaml
 - 「加一条残差，绕开右边」
 - 「换成 Teal+Amber palette，核心卡开 shadow」
 - 「太空了，按升级配方补 sketch 和 legend」
+- 「换一张底稿但标题别动」「文字压花纹了」
 
 AI 读 [AGENTS.md](AGENTS.md)（字段速查 + 改图配方）。你也可以用 `studio` 手调——三种方式随时混用。
 

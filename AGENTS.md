@@ -1,12 +1,13 @@
 # AGENTS.md — 用 paperfig 帮用户改图 / 作图
 
-本仓库是 **paperfig**：代码定布局、AI 只画物件素材、文字全走矢量渲染的受控科研作图工具。
+本仓库是 **paperfig**：代码定布局、AI 只画物件素材（或混合模式下画整图底稿）、文字全走矢量渲染的受控科研作图工具。
 本文件是给 **AI 助手**看的操作手册，重点解决**用户拿到草稿后的二次修改**。人类看 [`USAGE.md`](USAGE.md)。
 
 > 作为主流 coding agent 的 skill 使用时（Claude Skills / Cursor Skills / `npx skills`），发现入口是同目录的 [`SKILL.md`](SKILL.md)（含 YAML frontmatter 和触发描述）。本文件是它指向的详细手册——上下文有余量或用户提到"改图/配色/坐标/字段"等具体动作时，直接来这里查。
 
 你最常见的任务：用户已有 `figure.yaml` + 渲染出的 `figure.png`，用自然语言让你「挪一下」「加条线」「换个色」「把占位实验图换成真图」。
 一张图 = 一个 YAML `spec`，所有坐标 **mm**、字号 **pt**、原点在左上、`rect: [x, y, w, h]`。
+混合模式（`base:`）下另有整图底稿：改文字通常只改 YAML 重渲；换场景观感才重抽底稿。
 
 ---
 
@@ -71,7 +72,7 @@ elements:
 
 ## 2. 字段速查（完整）
 
-### figure / theme / assets / assets_style
+### figure / theme / assets / assets_style / base
 
 ```yaml
 figure: {width, height, dpi: 600, background: "#FFFFFF", font_scale: 1.0, assets_dir: assets}
@@ -79,20 +80,27 @@ theme: topconf        # 简写；或 {preset: topconf|airy|sci|warm|mono, palett
 assets_style: "clean isometric scientific icons, uniform 2px charcoal outline"  # 可选，图级素材风格包
 assets:               # 声明要 AI 生成的物件（抽卡对象）
   - {id, prompt, aspect: "1:1", candidates: 3, shadow: keep|remove}
+base:                 # 可选：AI 整图底稿混合模式
+  mode: skeleton      # skeleton | freeform
+  prompt: "…"         # 底稿场景描述
+  image: base/base.png
+  candidates: 3
+  regions: {enc: [12, 20, 40, 36]}   # freeform；skeleton 通常靠 layout 对齐
 ```
 
 - **新图默认** `theme.preset: topconf`（白底+色边框）；现代 ML/RL 示意用 `airy`。旧稿可继续 `sci`/`warm`/`mono`。
 - `theme.palette`：8-role 覆盖，如 `{primary: "#00897B", secondary: "#FFB300", section_bg: "#ECEFF1"}`。
 - `variant`（box/panel/tokens）：`primary secondary tertiary accent highlight plain dark muted`。语义：primary=核心贡献，secondary=次要，muted/plain=常规。
 - `assets_style`：顶层英文插画语言，抽卡时与 theme 色板一并注入（跨素材风格锁）。
+- **`base:`**：有则进入混合模式——`base.image` 全画布打底；文字/箭头仍矢量。主题可调 `plate_fill` / `plate_opacity` / `plate_pad` / `plate_radius`。
 
 ### elements（`type` 区分）
 
 | type | 关键字段（默认值） | 用途 |
 | --- | --- | --- |
-| `box` | `id, rect, title, body, variant(primary), shape(rect), icon, icon_h(10), title_size, body_size, align(center), valign(middle), gradient, gradient_dir(h), fill, stroke, text_color, stack(0), shadow, accent(left\|top), header_fill(false), sketch` | 带文字的节点 / 容器卡 |
-| `asset` | `id, rect, src, caption, halign(center), valign(middle), frame(false), placeholder(false)` | 独立素材图 + 图注 |
-| `panel` | `id, rect, title, variant(primary), header_fill, fill, title_size, header_h(7), header_style(banner\|smallcaps), shadow` | 分区容器；顶会风用 smallcaps |
+| `box` | `id, rect, title, body, variant(primary), shape(rect), icon, icon_h(10), title_size, body_size, align(center), valign(middle), gradient, gradient_dir(h), fill, stroke, text_color, stack(0), shadow, accent(left\|top), header_fill(false), sketch, region, ghost, plate` | 带文字的节点 / 容器卡 |
+| `asset` | `id, rect, src, caption, halign(center), valign(middle), frame(false), placeholder(false), region, ghost` | 独立素材图 + 图注 |
+| `panel` | `id, rect, title, variant(primary), header_fill, fill, title_size, header_h(7), header_style(banner\|smallcaps), shadow, ghost, plate` | 分区容器；顶会风用 smallcaps |
 | `sketch` | `id, rect, kind(waveform\|…), color, stroke_color, label, seed` | 单色缩略图（信息密度核心） |
 | `legend` | `id, at, items[{swatch,color,label}], columns(1), frame(true), fill, stroke, size(6)` | 自动排版图例 |
 | `tokens` | `id, rect, n(8), direction(h), variant(secondary), colors, gap(0.7), sizes, label` | token 序列 / 特征图条组 |
@@ -102,7 +110,7 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 | `badge` | `id, at, text("1"), size(5), color, text_color(#FFF)` | 编号圆点 |
 | `arrow` | `from, to, route(auto), style(solid\|dashed\|dotted\|block), label, color, head(arrow), bidir(false), label_offset(1.4), label_pos, via([]), width, fill, bend(0.25), weight(normal), label_bg(true)` | 连线 |
 | `group` | `id, members[] 或 rect, label, pad(2.5), style(dashed), fill, color, label_pos(top), label_size, lw, hatch(false), shadow` | 分组框 / 分区底 |
-| `text` | `id, at, text, size(7), bold(false), italic(false), color, anchor(middle), max_w, rotate(0), smallcaps(false)` | 自由文字 |
+| `text` | `id, at, text, size(7), bold(false), italic(false), color, anchor(middle), max_w, rotate(0), smallcaps(false), region, plate` | 自由文字 |
 | `panel_label` | `id, at, text` | a/b/c 面板号（自动加粗） |
 
 - **box.shape**：`rect stadium diamond cylinder parallelogram hexagon ellipse trapezoid`。
@@ -118,6 +126,9 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 - **group.fill / hatch / shadow**：分区浅底、斜线底纹、投影。
 - **text.smallcaps**：大写+字距；**text.rotate: -90**：竖排。
 - **文字记号**：`_{...}` / `^{...}`（值须加引号）。
+- **`region`**：锚定 `base.regions[id]`，代替手写 `rect`/`at`（需有 `base:`）。
+- **`ghost`**：`box`/`asset`/`panel`；base 下默认幽灵（不画壳）；`ghost: false` 恢复实体。
+- **`plate`**：base 下文字默认半透明白底板；`plate: false` 关闭。
 
 ---
 
@@ -159,6 +170,8 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 | **表达"×K 个重复单元"** | 画 2 个单元 + `text: "⋮"` 或 `"•••"` + 第 K 个，勿真画 K 个。 |
 | **渐变色系列（浅→深）** | 逐盒 `fill` 指定色值（如 `#D6E4F5 → #3E6595`），深底配 `text_color: "#FFFFFF"`。 |
 | **白色子卡（模块内的次级卡片）** | `box` + `variant: plain` + `valign: top`，内部再放 asset/text；完全包含的嵌套不会报 node-overlap。 |
+| **换底稿重抽但文字不动** | 只改 `base.prompt`（或换 `--model`）→ `paperfig base gen … --force` → 目检 contact sheet → `base pick`；**不要动**文字/箭头 YAML，直接 `render`。 |
+| **底稿文字压花纹 / `base-text-contrast`** | ① 挪 `at`/`rect`/`label_offset` 到浅色净空；② 确认未关 `plate`（或主题调高 `plate_opacity`）；③ 仍差则改 prompt 要求 pastel 浅填后 `--force` 重抽。 |
 
 ---
 
@@ -195,11 +208,15 @@ python -m paperfig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {pro
 | `asset-tiny` | W | 加大槽位或裁素材空白 |
 | `canvas-sparse`/`canvas-crowded` | W | 调 `figure` 尺寸贴合内容（覆盖率按叶元素，不计 panel/背景 group） |
 | `region-empty`/`layout-imbalance` | W | 叶元素九宫格空洞（占用<0.05 且邻格>0.3）或极差>0.35 → 填内容/收画布/分散布局；宽<120mm 放宽 |
-| `R-empty-box` | W | 给 box 加 `body`/`sketch`/`icon`，或把子元素放进容器卡 |
-| `R-no-section` | W | 加 `panel`（smallcaps）或带 `fill` 的 `group` |
-| `R-no-legend` | W | 加 `legend`，或把次要色改回 `muted`/`plain` |
+| `R-empty-box` | W | 给 box 加 `body`/`sketch`/`icon`，或把子元素放进容器卡（**base 模式停用**） |
+| `R-no-section` | W | 加 `panel`（smallcaps）或带 `fill` 的 `group`（**base 停用**） |
+| `R-no-legend` | W | 加 `legend`，或把次要色改回 `muted`/`plain`（**base 停用**） |
+| `base-text-contrast` | E | 文字相对有效背景对比 <3.0，或无 plate 压在繁忙花纹上 → 挪字 / 开 plate / 重抽浅色底稿 |
+| `base-region-drift` | W | skeleton：骨架色块与底稿墨迹质心偏移过大 → 重抽或改 prompt 强调对齐 |
+| `plate-overlap` | W | 文字底板互叠 >30% → 错开文字或关次要 `plate` |
 
 `render --strict`：有 E 级时返回非零（`asset-placeholder` 与 `R-*` 不触发），可接 CI。
+base 模式另停用 `arrow-exit-over-content` 与 sketch 碰撞类检查（幽灵盒无 sketch）。
 
 ---
 
@@ -224,9 +241,12 @@ python -m paperfig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {pro
 | `studio spec [--port 8323] [--no-open]` | 用户的交互式调图界面（本地网页：即时重渲、拖拽/键盘微调） |
 | `assets spec --api-key KEY [--only ids] [--force] [--no-auto-select]` | 抽卡生成 AI 素材（`--force` 清旧重抽） |
 | `select spec ASSET_ID INDEX` | 把候选 #INDEX 提为正式素材（零成本换卡） |
+| `base gen spec [-k KEY] [--model …] [--candidates N] [--force]` | 底稿抽卡（skeleton 先渲骨架作参考） |
+| `base pick spec INDEX` | 候选提升为 `base/base.png`（回写 `base.image`） |
+| `base grid spec` | 底稿叠 mm 网格 → `base/base_grid.png`（freeform 标区） |
 | `cutout in.png out.png [--threshold 238] [--shadow keep\|remove]` | 单张白底图抠图 |
 
-API key 也可用环境变量 `PAPERFIG_API_KEY`（兼容旧名 `SCIFIG_API_KEY`）。
+API key 也可用环境变量 `PAPERFIG_API_KEY`（兼容旧名 `SCIFIG_API_KEY`）。`base gen --model`：`nano-banana-fast`（默认）/ `nano-banana-2` / `nano-banana-pro`。
 
 studio 说明：你（AI）改图仍然直接编辑 YAML + `render` 验证；studio 是给**用户**手工微调用的（它对 YAML 的改写与你的编辑完全等价，可能在你两次会话之间发生——重读文件即可）。用户要求"打开调图界面"时，运行 `studio` 命令即可（默认端口 8323，自动开浏览器）。
 

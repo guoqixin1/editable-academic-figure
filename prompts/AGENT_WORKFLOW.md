@@ -1,10 +1,21 @@
 # paperfig · Agent 作图工作流
 
-给 AI agent 的操作指南：当用户要一张科研图（方法框架图、流程图、系统总览、pipeline 图等），按下面的分阶段流程驱动 paperfig。核心原则：**布局用代码精确控制，AI 只生成"物件"素材，默认产出顶会级信息密度，每步渲染后自检。**
+给 AI agent 的操作指南：当用户要一张科研图（方法框架图、流程图、系统总览、pipeline 图等），按下面的分阶段流程驱动 paperfig。核心原则：**布局用代码精确控制**；默认路径下 AI 只生成"物件"素材；需要更高观感上限时走 **混合模式（base）**——AI 画整图底稿、文字/箭头仍矢量精确可编辑。默认产出顶会级信息密度，每步渲染后自检。
 
 ---
 
 ## Step 0：风格决策（写 spec 之前）
+
+### 制图模式：纯矢量 vs 混合（base）
+
+| 选 | 适合 | 不适合 |
+| --- | --- | --- |
+| **纯矢量**（默认） | 严肃排版投稿、方法/架构主文图、需毫米级对齐与可复现 | 观感天花板偏「图框+物件」 |
+| **混合 base** | 形象化场景、英雄图、演示/封面/博客附图；模块可具象插画 | 纯符号堆叠、极克制线稿投稿（用纯矢量更稳） |
+
+混合模式要点：底稿拉观感上限，**文字/箭头/图例永远走矢量层**——改文案秒级重渲、不必重抽底稿。完整分支见下方「混合模式（base）」。
+
+---
 
 **默认主题（论文方法图）**：`theme: {preset: neurips}`  
 —— Soft Pastel 浅填 + Okabe 描边、印刷字号、无阴影、inline 图例。  
@@ -332,6 +343,58 @@ elements:
 
 ---
 
+## 混合模式（base）：AI 底稿 + 矢量标注
+
+顶层 `base:` 打开混合管线。底稿全画布打底；`box`/`asset`/`panel` 默认**幽灵**（不画壳，几何仍供锚点/路由/lint；`ghost: false` 恢复实体）；文字自动垫半透明白底板（`plate: false` 可关；主题 `plate_fill` / `plate_opacity` / `plate_pad` / `plate_radius` 调样式）。
+
+```yaml
+base:
+  mode: skeleton          # 或 freeform
+  prompt: "…"             # 底稿场景描述（构图/模块物件/风格/净空）
+  image: base/base.png    # 选中底稿（相对 spec 目录；pick 可回写）
+  candidates: 3
+  regions:                # freeform 必填；skeleton 由 layout 几何对齐，通常可不写
+    enc: [12, 20, 40, 36]
+```
+
+元素可用 `region: <id>` 锚定 `base.regions`（代替手写 `rect`/`at`）。CLI key 走 `PAPERFIG_API_KEY`（`-k` 亦可）。
+
+### skeleton（首选）：布局对齐图生图
+
+1. **写 layout + 矢量标注**：与纯矢量相同写 `layout:` / `elements`（箭头 `route: avoid`、文字/legend 照常）。加 `base: {mode: skeleton, prompt: …}`。
+2. **抽底稿**：`python -m paperfig.cli base gen fig.yaml [-k KEY] [--model nano-banana-fast|nano-banana-2|nano-banana-pro] [--candidates N] [--force]`  
+   → 自动渲无文字色块骨架 `base/skeleton.png` → 作参考图（API `urls`）喂 nano-banana 强编辑图生图 → 候选在 `base/candidates/`，contact sheet 在 `base/`。几何与 spec 对齐（实测质心偏移常 <3px）。
+3. **目检 contact sheet 筛卡（必经）**：淘汰烤字（字母/数字）、模块大漂移、深色花纹占满标签区、擅自画了箭头/连线的卡。
+4. **选卡**：`python -m paperfig.cli base pick fig.yaml <n>`（回写 `base.image`）。
+5. **合成渲染**：`python -m paperfig.cli render fig.yaml -o fig.png --svg fig.svg`（矢量层按原坐标叠字/箭）。
+6. **lint**：清零 `base-text-contrast`（E）；留意 `base-region-drift` / `plate-overlap`（W）。base 模式停用 `R-empty-box` / `R-no-section` / `R-no-legend` / `arrow-exit-over-content` / sketch 碰撞等不适用项，其余照常。
+7. **只改文字**：改 YAML 文案后直接 `render`——**秒级重渲，不必重抽底稿**。
+
+### freeform：纯文生图 + 人工标区
+
+1. 写 `base: {mode: freeform, prompt: …}`（可先无 `regions`）。
+2. `base gen`（无骨架参考，纯文生图）→ 目检 contact sheet → `base pick`。
+3. `python -m paperfig.cli base grid fig.yaml` → 出 `base/base_grid.png`（叠 mm 网格），目测标注 `base.regions: {id: [x,y,w,h]}`。
+4. 元素用 `region: <id>` 锚定 → `render` → lint（同上；无 skeleton 对拍则无 `base-region-drift`）。
+
+### 底稿 prompt 写法（必须遵守）
+
+**要写**：扁平插画；**浅色 / pastel 模块填充**（配合文字板可读性）；每模块具象物件与构图；模块间留净空；标签落点留浅色平整区。
+
+**禁止（写进 prompt，仍须目检）**：
+- 画面内**任何文字、字母、数字**（模型仍偶发烤字 → contact sheet 筛卡是必经步骤）
+- **不要画箭头 / 连接线**（矢量层负责）
+- 深色满铺、重纹理占满模块、外框装饰、照片级写实 / 霓虹
+
+**抽卡不满意**：先改 `base.prompt` 再 `--force`；仍差再换 model（`nano-banana-fast` → `nano-banana-2` / `nano-banana-pro`）。
+
+**反例**：
+- ❌ `"图上标注 Encoder / Decoder 和箭头"` → 必烤字 + 抢矢量层
+- ❌ `"赛博朋克霓虹，深色背景写满公式"` → 对比度崩、文字板救不回来
+- ✅ `"flat pastel scientific illustration, left CT scanner module, center U-Net block, right report desk; light fills; no text no arrows; clear gaps between modules"`
+
+---
+
 ## Phase 0.5：需求优化（生成 Figure Brief）
 
 在 Step 0 / 四层分解落 YAML **之前**，先用 [`FIGURE_BRIEF.md`](FIGURE_BRIEF.md) 把粗糙需求扩写成结构化 **Figure Brief**（图类型、分区与盒子的 title/body/sketch、箭头语义、风格、素材清单、密度自检）。
@@ -343,7 +406,7 @@ elements:
 | 用户已给出**精确 spec 修改指令**（挪盒子、改色、加箭头、换卡等） | **跳过** → 直接改 YAML（见 [`../AGENTS.md`](../AGENTS.md)） |
 | 用户已提供完整可用的 `figure.yaml` 并只要微调 | **跳过** |
 
-做法：将 `FIGURE_BRIEF.md` 当作 system/指令，用户需求（+ 可选论文原文）作输入 → 得到 Brief → Brief 末尾若有「必须向用户确认」（≤3 问）则先问清再进入 Phase 1。
+做法：将 `FIGURE_BRIEF.md` 当作 system/指令，用户需求（+ 可选论文原文）作输入 → 得到 Brief → Brief 末尾若有「必须向用户确认」（≤3 问）则先问清再进入 Phase 1。混合模式时 Brief 须填「底稿场景描述」（仅 base 需要）。
 
 产出：一份 Figure Brief（markdown）。**本阶段不写 YAML。**
 
@@ -353,11 +416,12 @@ elements:
 
 以 Phase 0.5 的 Figure Brief 为权威输入（若已跳过 0.5，则直接从用户描述提取），在 Step 0 色系与四层分解之后落笔：
 
+- **制图模式**：按 Step 0 选择纯矢量或 `base:`（skeleton 优先；freeform 回退）。base 时写入 `base.prompt`（来自 Brief 底稿场景描述）。
 - **画布 / 分区 / 节点 / 连接**：按 Brief 的 Layout / Annotations；分区优先 `panel`+`smallcaps`，节点按语义选 `shape`。
 - **专用示意**：`network` / `scatter` / `tokens` / `badge` / `marker` / `sketch` / `legend`。
 - **数学记号**：`_{...}` / `^{...}`，含特殊字符的 YAML 值加引号。
 - **可训练/冻结**：`marker: fire|snow`。
-- **素材**：具象物件进 `assets`（prompt 只写「是什么+形态」）；抽象概念用 box+sketch，**不要** AI 生成文字/公式。
+- **素材**：纯矢量路径下具象物件进 `assets`；**base 混合模式**形象主要在整图底稿里，一般不再为同语义再抽物件素材。
 - **真实实验图**：频谱/波形/热图/定量曲线 → `placeholder: true`，禁止 AI 生成。
 
 产出：`{project}/figure.yaml` 初稿。复现论文图见 `examples/rep_*`。
@@ -365,7 +429,7 @@ elements:
 ## Phase 2：布局草稿（占位渲染）
 
 1. 用 `layout:` 写行列结构（叶子只写 `{ref, w, h}`，元素节不写 `rect`）。
-2. `python -m paperfig.cli render figure.yaml --grid -o draft.png --dpi 180`（内部自动 resolve）。
+2. `python -m paperfig.cli render figure.yaml --grid -o draft.png --dpi 180`（内部自动 resolve）。base 未选底稿时仍可调几何。
 3. 结构满意后：`python -m paperfig.cli resolve figure.yaml -o figure.resolved.yaml`，后续微调改 resolved 版。
 
 ```bash
@@ -374,10 +438,12 @@ python -m paperfig.cli render {project}/figure.yaml --grid -o {project}/draft.pn
 
 - `--grid` 叠 10mm 网格核对齐。
 - 缺失素材 → 虚线占位，不阻塞。
-- **读 PNG** + 清零 E 级；尽量消化 `R-*` 与几何 W。
-- 布局在**无素材时**定稿。
+- **读 PNG** + 清零 E 级；尽量消化 `R-*` 与几何 W（base 模式部分 `R-*` 已停用）。
+- 布局在**无素材 / 未定底稿时**定稿。
 
-## Phase 3：素材抽卡
+## Phase 3：素材 / 底稿抽卡
+
+**纯矢量（物件素材）**：
 
 ```bash
 python -m paperfig.cli assets {project}/figure.yaml --api-key <KEY>
@@ -391,6 +457,8 @@ python -m paperfig.cli assets {project}/figure.yaml --api-key <KEY>
   ```
 - 全体候选风格都不合 → 改 prompt（仍勿写色调）后 `--force` 重抽。
 
+**混合模式（整图底稿）**：走上文「混合模式（base）」——`base gen` → **目检 contact sheet（查烤字/漂移）** → `base pick`（freeform 再 `base grid` 标 `regions`）。抽卡不满意先改 prompt 再换 model。
+
 ## Phase 4：正式渲染 + 视觉评审闭环
 
 ```bash
@@ -399,13 +467,13 @@ python -m paperfig.cli render {project}/figure.yaml -o {project}/figure.png --sv
 
 按 `prompts/visual_rubric.md`：
 
-1. 机检：E 清零；`R-empty-box` / `R-no-section` / `R-no-legend` 尽量清零。
-2. 目检：对齐、留白、箭头语义、**视觉丰度**、配色、素材风格统一、文字/上下标。
+1. 机检：E 清零；纯矢量尽量清零 `R-empty-box` / `R-no-section` / `R-no-legend`；base 模式重点清零 `base-text-contrast`，并处理 `base-region-drift` / `plate-overlap`。
+2. 目检：对齐、留白、箭头语义、**视觉丰度**、配色、素材/底稿风格统一、文字/上下标；base 另查烤字残留与文字压花纹。
 3. 最多 3 轮修改；遗留项交用户。
 
 ## Phase 5：交付
 
-展示 `figure.png` + `figure.svg` + 体检结论。说明用户可改任意坐标重渲；素材可换卡/重抽。
+展示 `figure.png` + `figure.svg` + 体检结论。说明用户可改任意坐标重渲；物件素材可换卡/重抽；**base 模式改文字不必重抽底稿**，换场景观感才 `base gen --force`。
 
 ---
 
@@ -428,10 +496,11 @@ python -m paperfig.cli render {project}/figure.yaml -o {project}/figure.png --sv
 
 - 不要用 AI 素材承载文字/公式/精确数字。
 - 不要把真实实验结果交给 AI 生成。
-- 空标题框交稿前必须补 body/sketch/icon。
-- 多语义色忘记 `legend` → `R-no-legend`。
+- 空标题框交稿前必须补 body/sketch/icon（base 幽灵盒除外，形象在底稿里）。
+- 多语义色忘记 `legend` → `R-no-legend`（base 模式该检查已停用，仍建议需要时手加）。
 - 箭头穿盒 → 先 `route: avoid`，不满再用 `via`；文字溢出 → 加高或缩短。
 - 上下标 YAML 忘加引号。
 - 素材风格不统一 → 补 `assets_style`，色板跟 `theme.palette`。
 - **真实实验图绝不 AI 生成**（频谱/波形/热图/生成样本/定量曲线）→ 一律 `asset` + `placeholder: true`。
 - **文字/公式/数字走代码**，AI 素材只画物件、prompt 禁止文字。
+- **base 底稿**禁止烤字/箭头；contact sheet 目检不可省；文字压花纹 → 挪字 / 开 plate / 重抽浅色底稿。

@@ -3,7 +3,7 @@
 > **用途**：本文件可被任何 LLM / coding agent 直接当作 system prompt 或指令使用。  
 > **输入**：用户的粗糙作图需求 +（可选）论文章节原文 / 参考图说明。  
 > **输出**：一份结构化的 **Figure Brief**（图纸设计说明）——供下一步按 [`AGENT_WORKFLOW.md`](AGENT_WORKFLOW.md) 写成 paperfig YAML `spec` 并渲染。  
-> **不是**：给扩散模型的英文生图 prompt；文字与布局最终由 paperfig 矢量渲染，AI 只生成物件素材。
+> **不是**：给扩散模型的英文生图 prompt；文字与布局最终由 paperfig 矢量渲染。默认路径下 AI 只生成物件素材；若选用 **混合模式（base）**，另需「底稿场景描述」供整图底稿抽卡（仍禁止底稿内文字）。
 
 ---
 
@@ -14,11 +14,12 @@ Your job is to expand a vague figure request into a complete, unambiguous **Figu
 You do **not** write YAML in this step. You do **not** invent experimental plots. You produce a Brief that encodes layout, semantics, style, and asset needs so the YAML step becomes mechanical.
 
 CRITICAL RULES:
-1. Every content box in the Brief must state **title / body / sketch** semantics (or explicitly mark a field as N/A with reason). Empty boxes are forbidden.
-2. Prefer programmatic `sketch` kinds for abstract visuals; reserve AI `assets` for physical/object icons only. Never put text, formulas, or numbers into AI asset prompts.
+1. Every content box in the Brief must state **title / body / sketch** semantics (or explicitly mark a field as N/A with reason). Empty boxes are forbidden. **base 混合模式**下形象在底稿里，盒子仍须写清 title/body（sketch 可标 `none（形象在底稿）`）。
+2. Prefer programmatic `sketch` kinds for abstract visuals; reserve AI `assets` for physical/object icons only. Never put text, formulas, or numbers into AI asset prompts. Hybrid **base** mode: figurative scene goes into「底稿场景描述」, not into per-box asset prompts.
 3. Real experimental images (spectra, waveforms, heatmaps, quantitative curves, sample outputs) → mark as `placeholder: true` assets for the user to fill — never generate them.
 4. If critical information is missing, list **at most 3** clarifying questions under「必须向用户确认」and still produce a best-effort Brief with explicit assumptions.
 5. Use only paperfig-real element types and field names (see schema below). Do not invent fields.
+6. Decide **制图模式**：严肃投稿主文图默认纯矢量；形象化场景 / 英雄图 / 演示材料可标 `mode: base`（skeleton 优先）。「底稿场景描述」**仅 base 需要**；纯矢量填 `N/A`。
 
 ═══════════════════════════════════════════════════════════════
 SECTION 1: 需求萃取清单（先读后写）
@@ -39,11 +40,13 @@ From the user request and optional paper text, extract:
 | 9 | **真实实验图槽位**（必须 placeholder） | Assets → placeholder |
 | 10 | **配色偏好 / 参考图风格**（若无则默认 neurips Soft Pastel） | Style |
 | 11 | **具象锚点**（≤3，放输入/输出侧；中间保持抽象模块） | Assets → figurative_anchors |
+| 12 | **制图模式**（纯矢量 vs base 混合）及 **底稿场景描述**（仅 base） | Style → render_mode / base_scene |
 
 缺信息时，在 Brief 末尾列出「必须向用户确认的问题」（≤3），例如：
 - 画布是单栏（~85mm）还是双栏（~180mm）？
 - 核心模块内部要展示哪些子操作 / 公式？
 - 对比列有几个变体、差异点是什么？
+- 要严肃投稿线稿，还是形象化英雄图（base 混合）？
 
 对已做假设的字段，用 `（假设：…）` 标注，便于用户纠正。
 
@@ -131,6 +134,12 @@ For each panel / major region:
 - **panel_case**: ml | lower | upper（Nature 小写 / Science 大写）
 - **legend.style**: inline（学术默认）| card
 - **shadow / accent**: neurips 默认无阴影；仅核心卡可显式 `accent: left|top`
+- **render_mode**: vector | base（skeleton 优先；freeform 仅当无法布局对齐时）
+- **底稿场景描述**（**仅 base 模式需要**；纯矢量写 `N/A`）:
+  - 构图 / 阅读方向（左→右模块落点）
+  - 每模块的具象物件（设备、场景、材质——不要写屏幕上的字）
+  - 风格：扁平插画、**浅色/pastel 模块填充**
+  - 净空：模块间留缝；标签区浅色平整；**禁止文字字母数字**；**不要画箭头/连接线**
 
 ## 4. Assets — 素材清单
 ### 具象锚点清单（figurative_anchors，≤3）
@@ -169,10 +178,11 @@ SECTION 4: 质量自检清单（输出前必须过一遍）
 - [ ] **图例完备**：设计建议 ≥2 种非 muted 语义色时 legend.items 非空（机检 ≥3 色才报）；学术主题用 `style: inline`
 - [ ] **灰度可读**：不靠颜色 alone 区分关键类别（配合 shape / dashed / label）
 - [ ] **数学记号**：上下标写成 `_{...}` / `^{...}` 形式，提醒 YAML 加引号
-- [ ] **素材边界**：AI prompt 无文字/公式/色调词；实验图全部 placeholder
-- [ ] **具象预算**：figurative_anchors ≤3，放 I/O 侧；面积直觉 ≤30%
-- [ ] **字段真实**：只用 paperfig 存在的 type/字段（box, panel, group, arrow, sketch, legend, tokens, marker, badge, network, scatter, text, panel_label, asset）
+- [ ] **素材边界**：AI prompt 无文字/公式/色调词；实验图全部 placeholder；若 `render_mode: base` 则已填「底稿场景描述」（构图/物件/浅色扁平/禁字禁箭/净空）
+- [ ] **具象预算**：figurative_anchors ≤3，放 I/O 侧；面积直觉 ≤30%（base 模式下具象可进底稿，仍控制叙事焦点）
+- [ ] **字段真实**：只用 paperfig 存在的 type/字段（box, panel, group, arrow, sketch, legend, tokens, marker, badge, network, scatter, text, panel_label, asset；base 另有 `base:`/`region`/`ghost`/`plate`）
 - [ ] **无省略**：不用 "…" / "etc." 跳过模块清单
+- [ ] **制图模式**：已选 vector 或 base；base 时注明 skeleton（默认）或 freeform
 
 ═══════════════════════════════════════════════════════════════
 SECTION 5: 配色速查（写入 Style 时选用）
