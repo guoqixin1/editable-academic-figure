@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import shutil
 import sys
@@ -36,6 +37,12 @@ API_HOST = "https://grsai.dakka.com.cn"
 DRAW_ENDPOINT = "/v1/draw/nano-banana"
 RESULT_ENDPOINT = "/v1/draw/result"
 DEFAULT_MODEL = "nano-banana-fast"
+# 可用模型：nano-banana-fast（默认）/ nano-banana-2 / nano-banana-pro
+# （nano-banana 已下架）
+
+# 直连 API，忽略环境代理（本机 http_proxy 常拒连）。
+_SESSION = requests.Session()
+_SESSION.trust_env = False
 
 # 旧后缀保留作兼容别名；新管线改用 build_full_prompt + 图级风格包。
 PROMPT_SUFFIX = (
@@ -341,11 +348,41 @@ def resolve_style_for_assets(
 
 # ---------------------------------------------------------------- API
 
-def _submit(prompt: str, api_key: str, aspect: str, model: str) -> str | None:
-    resp = requests.post(
+def _encode_reference_images(paths: list[str]) -> list[str]:
+    """本地图片 → raw base64（无 data:image/... 前缀），供 draw 接口 urls 参数。"""
+    encoded: list[str] = []
+    for p in paths:
+        path = Path(p)
+        if not path.is_file():
+            print(f"[WARN] 参考图不存在，已跳过: {path}", file=sys.stderr)
+            continue
+        encoded.append(base64.b64encode(path.read_bytes()).decode("ascii"))
+    return encoded
+
+
+def _submit(
+    prompt: str,
+    api_key: str,
+    aspect: str,
+    model: str,
+    reference_images: list[str] | None = None,
+) -> str | None:
+    """提交生图任务。reference_images 为本地路径列表，编码进 payload['urls']。"""
+    payload: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "aspectRatio": aspect,
+        "imageSize": "1K",
+        "webHook": "-1",
+        "shutProgress": True,
+    }
+    if reference_images:
+        urls = _encode_reference_images(reference_images)
+        if urls:
+            payload["urls"] = urls
+    resp = _SESSION.post(
         f"{API_HOST}{DRAW_ENDPOINT}",
-        json={"model": model, "prompt": prompt, "aspectRatio": aspect,
-              "imageSize": "1K", "webHook": "-1", "shutProgress": True},
+        json=payload,
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
         timeout=30,
     )
@@ -362,7 +399,7 @@ def _poll(task_id: str, api_key: str, timeout: int = 300) -> str | None:
     interval = 2.0
     while time.time() - start < timeout:
         time.sleep(interval)
-        resp = requests.post(
+        resp = _SESSION.post(
             f"{API_HOST}{RESULT_ENDPOINT}", json={"id": task_id},
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
             timeout=30,
@@ -386,7 +423,7 @@ def _poll(task_id: str, api_key: str, timeout: int = 300) -> str | None:
 
 def _download(url: str, path: Path) -> bool:
     try:
-        resp = requests.get(url, timeout=60, stream=True)
+        resp = _SESSION.get(url, timeout=60, stream=True)
         resp.raise_for_status()
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
@@ -398,11 +435,20 @@ def _download(url: str, path: Path) -> bool:
         return False
 
 
-def _generate_one(prompt: str, api_key: str, aspect: str, model: str, out_raw: Path) -> bool:
+def _generate_one(
+    prompt: str,
+    api_key: str,
+    aspect: str,
+    model: str,
+    out_raw: Path,
+    reference_images: list[str] | None = None,
+) -> bool:
     """单个候选：提交→轮询→下载。任何网络异常都吞掉并返回 False，
     以免一张候选失败拖垮整批抽卡。"""
     try:
-        task_id = _submit(prompt, api_key, aspect, model)
+        task_id = _submit(
+            prompt, api_key, aspect, model, reference_images=reference_images
+        )
         if not task_id:
             return False
         url = _poll(task_id, api_key)

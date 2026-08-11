@@ -136,6 +136,73 @@ class RenderResult:
         self.overflow_boxes: list[str] = []          # 文本溢出的 box id
         # 渲染期软警告（level, code, msg），由 lint 合并；如 route-avoid-fallback
         self.soft_issues: list[tuple[str, str, str]] = []
+        # base 混合模式
+        self.base_mode: bool = False
+        # 文字底板几何（owner_id, plate_rect），供后续 lint
+        self.text_plates: list[tuple[str, Rect]] = []
+
+
+def _is_ghost(el, base_mode: bool) -> bool:
+    """base 模式下 box/asset/panel 默认幽灵；元素 ghost: false 恢复实体。"""
+    if not base_mode:
+        return False
+    g = getattr(el, "ghost", None)
+    return True if g is None else bool(g)
+
+
+def _use_plate(el, base_mode: bool) -> bool:
+    """base 模式下默认开文字底板；元素 plate: false 关闭。"""
+    if not base_mode:
+        return False
+    p = getattr(el, "plate", None)
+    return True if p is None else bool(p)
+
+
+def _plate_svg(r: Rect, th: Theme) -> str:
+    return (
+        f'<rect x="{r.x:.3f}" y="{r.y:.3f}" width="{r.w:.3f}" height="{r.h:.3f}" '
+        f'rx="{th.plate_radius:.3f}" fill="{th.plate_fill}" '
+        f'fill-opacity="{th.plate_opacity}"/>'
+    )
+
+
+def _union_span_plate(spans: list[_TextSpan], th: Theme) -> Rect | None:
+    """文字 span 包围盒并集 + plate_pad。"""
+    bbs = [s.bbox() for s in spans if s.text.strip()]
+    if not bbs:
+        return None
+    x0 = min(b.x for b in bbs)
+    y0 = min(b.y for b in bbs)
+    x1 = max(b.right for b in bbs)
+    y1 = max(b.bottom for b in bbs)
+    return Rect(x0, y0, x1 - x0, y1 - y0).expanded(th.plate_pad)
+
+
+def _embed_base_image(spec: FigureSpec) -> str:
+    """底稿全画布底层：data URI 内嵌，铺满 figure 尺寸（mm）。"""
+    path = spec.resolve_base_image()
+    if path is None:
+        return ""
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"底稿文件不存在: {path}（spec.base.image={spec.base.image!r}，"
+            f"路径相对 spec 目录 {spec.path.parent}）"
+        )
+    suf = path.suffix.lower()
+    mime = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }.get(suf, "image/png")
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    return (
+        f'<image x="0" y="0" width="{spec.width}" height="{spec.height}" '
+        f'preserveAspectRatio="none" data-base="1" '
+        f'xlink:href="data:{mime};base64,{data}" '
+        f'xmlns:xlink="http://www.w3.org/1999/xlink"/>'
+    )
 
 
 # 叠影每层向右下错位（与 _render_box 一致）
@@ -177,6 +244,8 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
     theme = load_theme(spec.theme_cfg)
     fs = spec.font_scale
     res = RenderResult()
+    base_mode = spec.base is not None
+    res.base_mode = base_mode
 
     body: list[str] = []
 
@@ -184,7 +253,11 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
     for el in spec.elements:
         if isinstance(el, (BoxEl, AssetEl, PanelEl, TokensEl, NetworkEl, ScatterEl, SketchEl)):
             res.node_rects[el.id] = el.rect
-            res.node_visual_rects[el.id] = visual_rect_for(el)
+            # 幽灵盒不画 accent/stack，视觉边界 = 逻辑 rect
+            if isinstance(el, BoxEl) and _is_ghost(el, base_mode):
+                res.node_visual_rects[el.id] = el.rect
+            else:
+                res.node_visual_rects[el.id] = visual_rect_for(el)
 
     # 绘制顺序：panel 最底 → group → box/asset/tokens/network/scatter/sketch → arrow → 标注层
     panels = [e for e in spec.elements if isinstance(e, PanelEl)]
@@ -245,11 +318,15 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
     if grid:
         body.append(_render_grid(spec))
 
+    # 底稿打底：白底之上、一切矢量之下
+    base_img = _embed_base_image(spec) if base_mode else ""
+
     svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{spec.width}mm" height="{spec.height}mm" '
         f'viewBox="0 0 {spec.width} {spec.height}">'
         f'<rect x="0" y="0" width="{spec.width}" height="{spec.height}" fill="{spec.background}"/>'
+        + base_img
         + "".join(body) + "</svg>"
     )
     res.svg = svg
@@ -428,39 +505,42 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
     fill = el.fill or v.fill
     stroke = el.stroke or v.stroke
     lw = _variant_lw(v, th)
+    ghost = _is_ghost(el, res.base_mode)
     out = []
-    if _use_shadow(el.shadow, th):
-        out.append(_soft_shadow_svg(r, th.corner_radius))
-    if el.gradient:
-        gid = f"grad_{el.id}"
-        x2, y2 = ("100%", "0%") if el.gradient_dir == "h" else ("0%", "100%")
-        out.append(
-            f'<defs><linearGradient id="{gid}" x1="0%" y1="0%" x2="{x2}" y2="{y2}">'
-            f'<stop offset="0%" stop-color="{el.gradient[0]}"/>'
-            f'<stop offset="100%" stop-color="{el.gradient[1]}"/>'
-            f'</linearGradient></defs>')
-        fill = f"url(#{gid})"
-    # 叠影（层叠卡片/文档效果）：由远及近画在主体后面，向右下错位
-    for k in range(el.stack, 0, -1):
-        off = 1.5 * k
-        sr = Rect(r.x + off, r.y + off, r.w, r.h)
-        out.append(_shape_svg(el.shape, sr, el.fill or v.fill, stroke, lw, th.corner_radius))
-    out.append(_shape_svg(el.shape, r, fill, stroke, lw, th.corner_radius))
 
-    # accent 色条画在逻辑框*外侧*，与箭头视觉锚点一致（尖端落在色条外缘）
-    if el.accent == "left":
-        aw = _box_accent_thickness(el, r)
-        accent_r = Rect(r.x - aw, r.y, aw, r.h)
-        res.sketch_rects.append((el.id, "accent-left", accent_r))
-        out.append(f'<rect x="{accent_r.x:.3f}" y="{accent_r.y:.3f}" width="{accent_r.w:.3f}" '
-                   f'height="{accent_r.h:.3f}" '
-                   f'rx="{min(th.corner_radius, aw / 2):.3f}" fill="{stroke}"/>')
-    elif el.accent == "top":
-        ah = _box_accent_thickness(el, r)
-        accent_r = Rect(r.x, r.y - ah, r.w, ah)
-        res.sketch_rects.append((el.id, "accent-top", accent_r))
-        out.append(f'<rect x="{accent_r.x:.3f}" y="{accent_r.y:.3f}" width="{accent_r.w:.3f}" '
-                   f'height="{accent_r.h:.3f}" fill="{stroke}"/>')
+    if not ghost:
+        if _use_shadow(el.shadow, th):
+            out.append(_soft_shadow_svg(r, th.corner_radius))
+        if el.gradient:
+            gid = f"grad_{el.id}"
+            x2, y2 = ("100%", "0%") if el.gradient_dir == "h" else ("0%", "100%")
+            out.append(
+                f'<defs><linearGradient id="{gid}" x1="0%" y1="0%" x2="{x2}" y2="{y2}">'
+                f'<stop offset="0%" stop-color="{el.gradient[0]}"/>'
+                f'<stop offset="100%" stop-color="{el.gradient[1]}"/>'
+                f'</linearGradient></defs>')
+            fill = f"url(#{gid})"
+        # 叠影（层叠卡片/文档效果）：由远及近画在主体后面，向右下错位
+        for k in range(el.stack, 0, -1):
+            off = 1.5 * k
+            sr = Rect(r.x + off, r.y + off, r.w, r.h)
+            out.append(_shape_svg(el.shape, sr, el.fill or v.fill, stroke, lw, th.corner_radius))
+        out.append(_shape_svg(el.shape, r, fill, stroke, lw, th.corner_radius))
+
+        # accent 色条画在逻辑框*外侧*，与箭头视觉锚点一致（尖端落在色条外缘）
+        if el.accent == "left":
+            aw = _box_accent_thickness(el, r)
+            accent_r = Rect(r.x - aw, r.y, aw, r.h)
+            res.sketch_rects.append((el.id, "accent-left", accent_r))
+            out.append(f'<rect x="{accent_r.x:.3f}" y="{accent_r.y:.3f}" width="{accent_r.w:.3f}" '
+                       f'height="{accent_r.h:.3f}" '
+                       f'rx="{min(th.corner_radius, aw / 2):.3f}" fill="{stroke}"/>')
+        elif el.accent == "top":
+            ah = _box_accent_thickness(el, r)
+            accent_r = Rect(r.x, r.y - ah, r.w, ah)
+            res.sketch_rects.append((el.id, "accent-top", accent_r))
+            out.append(f'<rect x="{accent_r.x:.3f}" y="{accent_r.y:.3f}" width="{accent_r.w:.3f}" '
+                       f'height="{accent_r.h:.3f}" fill="{stroke}"/>')
 
     inner_w, avail_h = _shape_inner(el.shape, r, th.box_pad_x, th.box_pad_y)
     # accent 已外置，内容区不再为色条让位
@@ -471,13 +551,14 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
     title_lines = wrap_text(el.title, title_pt, inner_w, bold=True) if el.title else []
     body_lines = wrap_text(el.body, body_pt, inner_w) if el.body else []
 
-    has_icon = bool(el.icon) and el.icon_h > 0
+    # 幽灵模式：不画 icon/sketch（底稿已有形象）
+    has_icon = (not ghost) and bool(el.icon) and el.icon_h > 0
     icon_h = el.icon_h if has_icon else 0.0
     icon_gap = 1.2 if has_icon else 0.0
     text_h = (text_block_height_mm(len(title_lines), title_pt)
               + (0.6 if title_lines and body_lines else 0.0)
               + text_block_height_mm(len(body_lines), body_pt))
-    has_sketch = bool(el.sketch)
+    has_sketch = (not ghost) and bool(el.sketch)
     sketch_gap = 1.0 if has_sketch and (title_lines or body_lines or has_icon) else 0.0
     # sketch 占用标题/正文下方剩余空间
     sketch_h = 0.0
@@ -493,8 +574,8 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
     elif has_sketch and (icon_h + icon_gap + text_h) > avail_h + 0.05:
         res.overflow_boxes.append(el.id)
 
-    # header_fill：标题区浅底 + 分隔线
-    if el.header_fill and title_lines:
+    # header_fill：标题区浅底 + 分隔线（幽灵模式跳过）
+    if (not ghost) and el.header_fill and title_lines:
         hh = text_block_height_mm(len(title_lines), title_pt) + th.box_pad_y + 0.8
         hh = min(hh, r.h * 0.45)
         out.append(f'<path d="M {r.x + th.corner_radius:.3f},{r.y:.3f} '
@@ -520,6 +601,8 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
         out.append(_embed_image(icon_path, slot, "center", "middle", el.icon + "@" + el.id, res))
         y += icon_h + icon_gap
 
+    text_out: list[str] = []
+    text_spans_here: list[_TextSpan] = []
     blocks = [b for b in ((title_lines, title_pt, True), (body_lines, body_pt, False)) if b[0]]
     for bi, (lines, pt, bold) in enumerate(blocks):
         if bi > 0:
@@ -534,8 +617,17 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
             span = _TextSpan(x=x, baseline=y + asc, text=ln.text, pt=pt, bold=bold,
                              color=el.text_color or v.text)
             res.text_spans.append(span)
-            out.append(span.to_svg())
+            text_spans_here.append(span)
+            text_out.append(span.to_svg())
             y += lh
+
+    # 幽灵盒文字底板：title+body 合并一块板
+    if ghost and _use_plate(el, res.base_mode) and text_spans_here:
+        plate = _union_span_plate(text_spans_here, th)
+        if plate is not None:
+            res.text_plates.append((el.id, plate))
+            out.append(_plate_svg(plate, th))
+    out.extend(text_out)
 
     if has_sketch and sketch_h > 2.0:
         y += sketch_gap
@@ -553,6 +645,7 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
 def _render_asset(el: AssetEl, spec: FigureSpec, th: Theme, fs: float, res: RenderResult) -> str:
     path = spec.resolve_asset(el.src)
     out = []
+    ghost = _is_ghost(el, res.base_mode)
     cap_pt = th.size_caption * fs
     cap_h = 0.0
     cap_lines = []
@@ -561,13 +654,17 @@ def _render_asset(el: AssetEl, spec: FigureSpec, th: Theme, fs: float, res: Rend
         cap_h = text_block_height_mm(len(cap_lines), cap_pt) + 0.8
 
     img_rect = Rect(el.rect.x, el.rect.y, el.rect.w, el.rect.h - cap_h)
-    if el.placeholder and not path.exists():
-        # 意图性占位：真实实验结果（频谱图/照片/mesh 等）后续手动插入
-        res.placeholder_assets.append(el.src)
-        out.append(_placeholder_slot(img_rect, f"[{Path(el.src).stem}]", res))
+    if not ghost:
+        if el.placeholder and not path.exists():
+            # 意图性占位：真实实验结果（频谱图/照片/mesh 等）后续手动插入
+            res.placeholder_assets.append(el.src)
+            out.append(_placeholder_slot(img_rect, f"[{Path(el.src).stem}]", res))
+        else:
+            out.append(_embed_image(path, img_rect, el.halign, el.valign, el.src, res,
+                                    frame=el.frame, theme=th))
     else:
-        out.append(_embed_image(path, img_rect, el.halign, el.valign, el.src, res,
-                                frame=el.frame, theme=th))
+        # 幽灵：不画图，仍记几何供锚点/避障
+        res.asset_boxes[el.src] = img_rect
 
     y = img_rect.bottom + 0.8
     lh = cap_pt * PT_TO_MM * LINE_HEIGHT
@@ -1637,6 +1734,8 @@ def _render_text(el: TextEl, th: Theme, fs: float, res: RenderResult) -> str:
     ]
     lh = pt * PT_TO_MM * LINE_HEIGHT
     cy = y
+    text_spans_here: list[_TextSpan] = []
+    text_out: list[str] = []
     for ln in lines:
         tw = ln.width_mm
         if el.anchor == "start":
@@ -1651,8 +1750,15 @@ def _render_text(el: TextEl, th: Theme, fs: float, res: RenderResult) -> str:
                          rotate=el.rotate, rot_cx=x, rot_cy=y,
                          smallcaps=el.smallcaps, letter_spacing=ls)
         res.text_spans.append(span)
-        out.append(span.to_svg())
+        text_spans_here.append(span)
+        text_out.append(span.to_svg())
         cy += lh
+    if _use_plate(el, res.base_mode) and text_spans_here:
+        plate = _union_span_plate(text_spans_here, th)
+        if plate is not None:
+            res.text_plates.append((el.id, plate))
+            out.append(_plate_svg(plate, th))
+    out.extend(text_out)
     return "".join(out)
 
 
@@ -1710,13 +1816,44 @@ def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult) -> str:
     body_fill = el.fill or v.fill
     cr = th.corner_radius + 0.4
     lw = _variant_lw(v, th)
+    ghost = _is_ghost(el, res.base_mode)
     out = []
-    if _use_shadow(el.shadow, th):
+    if (not ghost) and _use_shadow(el.shadow, th):
         out.append(_soft_shadow_svg(r, cr))
 
     band = _panel_title_band_rect(el, th, fs)
     if band is not None:
         res.panel_title_bands.append((el.id, band))
+
+    if ghost:
+        # base 模式默认：只画标题文字，不画底色/边框；文字落底稿上则垫板
+        if el.title:
+            if el.header_style == "smallcaps":
+                label = el.title.upper()
+                pt = (el.title_size or th.size_caption) * fs * 0.95
+                ls = 0.45
+                w = measure_markup_mm(label, pt, bold=True) + max(len(label) - 1, 0) * ls
+                asc = line_ascent_mm(label, pt, bold=True)
+                lx = r.x + 2.5
+                baseline = r.y + 2.2 + asc
+                span = _TextSpan(x=lx, baseline=baseline, text=label, pt=pt, bold=True,
+                                 color=header_fill, letter_spacing=ls, smallcaps=True)
+            else:
+                pt = (el.title_size or th.size_title) * fs
+                w = measure_markup_mm(el.title, pt, bold=True)
+                asc = line_ascent_mm(el.title, pt, bold=True)
+                hh = min(el.header_h, r.h * 0.45)
+                baseline = r.y + hh / 2 + asc / 2 - 0.3
+                span = _TextSpan(x=r.cx - w / 2, baseline=baseline, text=el.title,
+                                 pt=pt, bold=True, color=th.ink)
+            res.text_spans.append(span)
+            if _use_plate(el, res.base_mode):
+                plate = _union_span_plate([span], th)
+                if plate is not None:
+                    res.text_plates.append((el.id, plate))
+                    out.append(_plate_svg(plate, th))
+            out.append(span.to_svg())
+        return "".join(out)
 
     if el.header_style == "smallcaps":
         # 顶会克制风：无色条 banner，改为 small-caps 标签 + 细灰分隔线

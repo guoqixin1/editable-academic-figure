@@ -10,22 +10,26 @@
     - 文本超出画布
     - 素材缺失
     - 箭头穿过无关节点（含 legend / 独立 sketch / asset；端点仅豁免法向 stub）
-    - 箭头标签压 sketch/accent（arrow-label-over-sketch，交 >0.8mm²）
+    - 箭头标签压 sketch/accent（arrow-label-over-sketch，交 >0.8mm²；base 模式跳过）
     - 箭头标签深入节点 inner（arrow-label-in-node；显式 label_offset 不豁免）
     - 箭头标签压到 panel 标题带（arrow-label-on-title）
+    - base 底稿文字对比度（base-text-contrast：有效背景对比 <3.0 或无 plate 花纹繁忙；
+      ghost:false 实体盒用填充色作有效背景）
   W 级（警告，建议修）
     - 字号低于下限（印刷缩放后 <6pt）
     - 节点重叠
     - 素材实际显示尺寸过小（槽位浪费）
     - 画布利用率过低 / 元素过挤（覆盖率按叶元素，剔除 panel/背景 group）
     - 九宫格空洞 / 失衡（region-empty / layout-imbalance）
-    - 视觉丰度（R-*）：空盒子 / 无分区底 / 多色无图例
+    - 视觉丰度（R-*）：空盒子 / 无分区底 / 多色无图例（base 模式均停用）
     - 箭头体检：末段不垂直进入（arrow-approach）/ 端点悬空或压入（arrow-gap）
-    - 箭头出口落在本盒 sketch 带且法向净空不足（arrow-exit-over-content）
+    - 箭头出口落在本盒 sketch 带且法向净空不足（arrow-exit-over-content；base 模式跳过）
     - 绕行穿空场（arrow-route-awkward）
     - 箭头标签盖住尖端（arrow-label-tip）/ 压到其他文字（arrow-label-over-text）
     - 箭头标签中心距折线过远（arrow-label-far，>6mm；含显式 offset）
     - 近距候选全硬拒已折中放置（arrow-label-crowded，由 render soft_issues 注入）
+    - base 区域漂移（base-region-drift，skeleton）：骨架矩形与底稿墨迹对拍
+    - 文字底板互叠（plate-overlap，交 >30%）
 """
 
 from __future__ import annotations
@@ -33,14 +37,19 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
-from .render import RenderResult, visual_rect_for
+import numpy as np
+from PIL import Image
+
+from .render import RenderResult, _is_ghost, visual_rect_for
 from .routing import LABEL_DIST_FAR_LINT_MM, cap_path_distance
 from .spec import (
     ArrowEl, AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl, LegendEl,
     MarkerEl, NetworkEl, PanelEl, Rect, ScatterEl, SketchEl, TextEl, TokensEl,
     parse_anchor,
 )
+from .theme import load_theme
 
 # 箭头体检容差（mm）
 _ARROW_GAP_FLOAT = 0.8       # 悬空超过此值 → W
@@ -63,6 +72,18 @@ _SMALL_CANVAS_W = 120.0         # 小于此宽放宽九宫格阈值
 _ROUTE_AWKWARD_DETOUR = 1.3
 _ROUTE_AWKWARD_SEG = 15.0       # mm：中段落在低占用格
 _ROUTE_AWKWARD_CELL_OCC = 0.08
+
+# base 混合模式
+_BASE_CONTRAST_MIN = 3.0          # WCAG 近似对比率下限 → 低于此 E
+_BASE_BUSY_VAR = 0.012            # 无 plate 时底稿亮度方差上限（花纹繁忙）
+_ARROW_LABEL_BG_FILL = "#FFFFFF"
+_ARROW_LABEL_BG_OPACITY = 0.92
+_PLATE_OVERLAP_FRAC = 0.30        # 两块文字底板重叠占较小者面积比例 → W
+_DRIFT_RING_MM = 6.0              # 骨架矩形外扩环带宽度
+_DRIFT_EMPTY_IN = 0.08            # 矩形内非白占比低于此 → 近空
+_DRIFT_SPILL_FRAC = 0.40          # 环带墨迹占（内+环）比例；宽松，3px 偏移约 0.07
+_DRIFT_SPILL_MIN_INK = 60         # 环带至少这么多非白像素才谈溢出
+_INK_WHITE_LUMA = 0.92            # 高于此亮度视作"白/近白"底
 
 MIN_FONT_PT = 5.5   # 旧主题 font-too-small 下限（lint_min_font 未设时）
 IDEAL_MIN_FONT_PT = 6.0  # 旧主题 font-small 软下限（lint_min_font 未设时）
@@ -95,6 +116,7 @@ class Issue:
 
 def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues: list[Issue] = []
+    base_mode = bool(getattr(res, "base_mode", False) or spec.base is not None)
 
     for ref in res.missing_assets:
         issues.append(Issue("E", "asset-missing", f"素材未找到: {ref}（渲染为占位框）"))
@@ -116,9 +138,11 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues += _check_node_overlap(spec, res)
     issues += _check_arrow_crossings(spec, res)
     issues += _check_arrow_geometry(spec, res)
-    issues += _check_arrow_exit_over_content(spec, res)
+    # base 幽灵盒无 sketch；停用出口/标签压 sketch 类检查，避免误报
+    if not base_mode:
+        issues += _check_arrow_exit_over_content(spec, res)
+        issues += _check_arrow_label_over_sketch(res)
     issues += _check_arrow_label_occlusion(spec, res)
-    issues += _check_arrow_label_over_sketch(res)
     issues += _check_arrow_label_in_node(spec, res)
     issues += _check_arrow_label_on_title(res)
     issues += _check_arrow_label_far(res)
@@ -127,8 +151,12 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues += _check_density(spec, res)
     issues += _check_region_balance(spec, res)
     issues += _check_alignment(spec, res)
-    issues += _check_visual_richness(spec, res)
+    issues += _check_visual_richness(spec, res, base_mode=base_mode)
     issues += _check_figurative_overload(spec, res)
+    if base_mode:
+        issues += _check_plate_overlap(res)
+        issues += _check_base_text_contrast(spec, res)
+        issues += _check_base_region_drift(spec, res)
     return issues
 
 
@@ -1032,9 +1060,16 @@ def _semantic_color_keys(spec: FigureSpec) -> set[str]:
     return keys
 
 
-def _check_visual_richness(spec: FigureSpec, res: RenderResult) -> list[Issue]:
-    """视觉丰度软检查（一律 W 级，不阻断）。"""
+def _check_visual_richness(
+    spec: FigureSpec, res: RenderResult, *, base_mode: bool = False,
+) -> list[Issue]:
+    """视觉丰度软检查（一律 W 级，不阻断）。
+
+    base 模式：形象在底稿里，停用 R-empty-box / R-no-section / R-no-legend。
+    """
     del res  # 几何信息已在其他检查使用；丰度只看 spec 结构
+    if base_mode:
+        return []
     issues: list[Issue] = []
 
     # R-empty-box：既无 body 又无 sketch/icon，且非容器 / 非长标题 / 非小标签条
@@ -1083,3 +1118,448 @@ def _check_visual_richness(spec: FigureSpec, res: RenderResult) -> list[Issue]:
         ))
 
     return issues
+
+
+# ── base 混合模式：对比度 / 区域漂移 / 底板重叠 ──────────────
+
+
+def _hex_to_rgb01(hex_color: str) -> tuple[float, float, float]:
+    h = (hex_color or "").lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    if len(h) != 6:
+        return 0.5, 0.5, 0.5
+    try:
+        r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+        return r, g, b
+    except ValueError:
+        return 0.5, 0.5, 0.5
+
+
+def _srgb_to_lin(c: float | np.ndarray) -> float | np.ndarray:
+    """sRGB → 线性光（WCAG 相对亮度）。"""
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def _luma01(r, g, b):
+    """WCAG 相对亮度；标量或 ndarray。"""
+    return (
+        0.2126 * _srgb_to_lin(r)
+        + 0.7152 * _srgb_to_lin(g)
+        + 0.0722 * _srgb_to_lin(b)
+    )
+
+
+def _contrast_ratio(l1: float, l2: float) -> float:
+    a, b = (l1, l2) if l1 >= l2 else (l2, l1)
+    return (a + 0.05) / (b + 0.05)
+
+
+def _load_base_rgb(spec: FigureSpec) -> tuple[np.ndarray, float, float] | None:
+    """加载底稿为 float RGB [0,1]；无 image 或文件不存在则 None（跳过相关检查）。"""
+    path = spec.resolve_base_image()
+    if path is None:
+        return None
+    p = Path(path)
+    if not p.is_file():
+        return None
+    try:
+        with Image.open(p) as im:
+            arr = np.asarray(im.convert("RGB"), dtype=np.float32) / 255.0
+    except OSError:
+        return None
+    if arr.size == 0 or arr.shape[0] < 2 or arr.shape[1] < 2:
+        return None
+    sx = arr.shape[1] / max(spec.width, 1e-6)
+    sy = arr.shape[0] / max(spec.height, 1e-6)
+    return arr, sx, sy
+
+
+def _sample_rect_rgb(
+    arr: np.ndarray, sx: float, sy: float, rect: Rect,
+) -> np.ndarray | None:
+    """按 mm→px 映射采样矩形像素；空则 None。"""
+    h, w = arr.shape[:2]
+    x0 = int(math.floor(rect.x * sx))
+    y0 = int(math.floor(rect.y * sy))
+    x1 = int(math.ceil(rect.right * sx))
+    y1 = int(math.ceil(rect.bottom * sy))
+    x0 = max(0, min(w - 1, x0))
+    y0 = max(0, min(h - 1, y0))
+    x1 = max(x0 + 1, min(w, x1))
+    y1 = max(y0 + 1, min(h, y1))
+    patch = arr[y0:y1, x0:x1]
+    return patch if patch.size else None
+
+
+def _simple_luma(r, g, b):
+    """感知近似亮度（墨迹/花纹方差用；非 WCAG）。"""
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _ink_density(patch: np.ndarray) -> float:
+    """非白像素占比（简单亮度 < _INK_WHITE_LUMA）。"""
+    if patch is None or patch.size == 0:
+        return 0.0
+    luma = _simple_luma(patch[..., 0], patch[..., 1], patch[..., 2])
+    return float(np.mean(luma < _INK_WHITE_LUMA))
+
+
+def _effective_bg_luma(
+    patch: np.ndarray,
+    *,
+    has_plate: bool,
+    plate_rgb: tuple[float, float, float],
+    plate_opacity: float,
+) -> tuple[float, float]:
+    """返回 (有效背景 WCAG 平均亮度, 底稿局部简单亮度方差)。"""
+    base_simple = _simple_luma(patch[..., 0], patch[..., 1], patch[..., 2])
+    var = float(np.var(base_simple))
+    if has_plate:
+        op = max(0.0, min(1.0, plate_opacity))
+        pr, pg, pb = plate_rgb
+        er = pr * op + patch[..., 0] * (1.0 - op)
+        eg = pg * op + patch[..., 1] * (1.0 - op)
+        eb = pb * op + patch[..., 2] * (1.0 - op)
+        eff = _luma01(er, eg, eb)
+        return float(np.mean(eff)), var
+    return float(np.mean(_luma01(patch[..., 0], patch[..., 1], patch[..., 2]))), var
+
+
+def _plate_for_span(
+    bbox: Rect, plates: list[tuple[str, Rect]],
+) -> Rect | None:
+    """文字包围盒中心落在的底板；取面积最小者（更贴字）。"""
+    cx, cy = bbox.cx, bbox.cy
+    hits = [r for _, r in plates if r.x <= cx <= r.right and r.y <= cy <= r.bottom]
+    if not hits:
+        # 中心未命中时，用高重叠兜底
+        best: Rect | None = None
+        best_frac = 0.0
+        area = max(bbox.w * bbox.h, 1e-6)
+        for _, r in plates:
+            inter = bbox.intersection_area(r)
+            frac = inter / area
+            if frac > best_frac:
+                best_frac = frac
+                best = r
+        return best if best_frac >= 0.35 else None
+    return min(hits, key=lambda r: r.w * r.h)
+
+
+def _blend_rgb01(
+    under: tuple[float, float, float],
+    over: tuple[float, float, float],
+    opacity: float,
+) -> tuple[float, float, float]:
+    op = max(0.0, min(1.0, opacity))
+    return (
+        under[0] * (1.0 - op) + over[0] * op,
+        under[1] * (1.0 - op) + over[1] * op,
+        under[2] * (1.0 - op) + over[2] * op,
+    )
+
+
+def _solid_fill_under_text(
+    bbox: Rect, spec: FigureSpec, res: RenderResult, th,
+) -> tuple[float, float, float] | None:
+    """文字落在 ghost:false 实体元素内时，返回该层填充色 RGB[0,1]。
+
+    覆盖 box / panel / 有外框的 legend；多层重叠取 elements 绘制顺序最靠上者。
+    panel banner 标题带用 header_fill；box header_fill 用描边 10% 叠在 body 上。
+    """
+    if spec.base is None:
+        return None
+    cx, cy = bbox.cx, bbox.cy
+    found: tuple[float, float, float] | None = None
+
+    for el in spec.elements:
+        if isinstance(el, BoxEl):
+            if _is_ghost(el, True):
+                continue
+            r = res.node_rects.get(el.id) or el.rect
+            if not (r.x <= cx <= r.right and r.y <= cy <= r.bottom):
+                continue
+            v = th.variants.get(el.variant)
+            if v is None:
+                continue
+            if el.gradient and len(el.gradient) >= 2:
+                a = _hex_to_rgb01(el.gradient[0])
+                b = _hex_to_rgb01(el.gradient[1])
+                body = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
+            else:
+                body = _hex_to_rgb01(el.fill or v.fill)
+            if el.header_fill:
+                # 与 render 一致：标题区 stroke@0.10 叠在 body 上
+                hh = min(r.h * 0.45, th.box_pad_y + 6.0)
+                if cy <= r.y + hh:
+                    stroke = _hex_to_rgb01(el.stroke or v.stroke)
+                    found = _blend_rgb01(body, stroke, 0.10)
+                else:
+                    found = body
+            else:
+                found = body
+
+        elif isinstance(el, PanelEl):
+            if _is_ghost(el, True):
+                continue
+            r = res.node_rects.get(el.id) or el.rect
+            if not (r.x <= cx <= r.right and r.y <= cy <= r.bottom):
+                continue
+            v = th.variants.get(el.variant)
+            if v is None:
+                continue
+            body = _hex_to_rgb01(el.fill or v.fill)
+            header = _hex_to_rgb01(el.header_fill or v.stroke)
+            if el.header_style != "smallcaps":
+                hh = min(el.header_h, r.h * 0.45)
+                found = header if cy <= r.y + hh else body
+            else:
+                found = body
+
+        elif isinstance(el, LegendEl):
+            legend_style = el.style or th.default_legend_style or "card"
+            inline = legend_style == "inline"
+            use_frame = el.frame if el.frame_explicit else (False if inline else el.frame)
+            if not use_frame:
+                continue
+            r = res.node_rects.get(el.id)
+            if r is None:
+                continue
+            if not (r.x <= cx <= r.right and r.y <= cy <= r.bottom):
+                continue
+            found = _hex_to_rgb01(el.fill or "#FAFAFA")
+
+    return found
+
+
+def _check_plate_overlap(res: RenderResult) -> list[Issue]:
+    """文字底板互相重叠超过较小者 30% → W。"""
+    issues: list[Issue] = []
+    plates = list(getattr(res, "text_plates", []) or [])
+    for i in range(len(plates)):
+        id1, r1 = plates[i]
+        a1 = max(r1.w * r1.h, 1e-6)
+        for j in range(i + 1, len(plates)):
+            id2, r2 = plates[j]
+            if id1 == id2:
+                continue
+            a2 = max(r2.w * r2.h, 1e-6)
+            inter = r1.intersection_area(r2)
+            frac = inter / min(a1, a2)
+            if frac > _PLATE_OVERLAP_FRAC:
+                issues.append(Issue(
+                    "W", "plate-overlap",
+                    f"文字底板 '{id1}' 与 '{id2}' 重叠 {frac:.0%}（>{_PLATE_OVERLAP_FRAC:.0%}）；"
+                    f"文字过挤，拉开间距或缩短文案",
+                ))
+    return issues
+
+
+def _check_base_text_contrast(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """对落在底稿上的文字采样有效背景，对比率 <3.0 或无 plate 花纹繁忙 → E。
+
+    有效背景：文字落在 ghost:false 实体元素内时用该元素填充色（不再采样底稿）；
+    否则采样底稿。有 plate（含箭头 label_bg）时按 opacity 与上述底色混合。
+    底稿缺失时跳过（render 会在 image 路径无效时报错）。
+    """
+    loaded = _load_base_rgb(spec)
+    if loaded is None:
+        return []
+    arr, sx, sy = loaded
+    th = load_theme(spec.theme_cfg)
+    plate_rgb = _hex_to_rgb01(th.plate_fill)
+    plate_op = float(th.plate_opacity)
+    arrow_plate_rgb = _hex_to_rgb01(_ARROW_LABEL_BG_FILL)
+
+    plates = list(getattr(res, "text_plates", []) or [])
+    arrows = {el.id: el for el in spec.elements if isinstance(el, ArrowEl)}
+    # 箭头标签：label_bg 开着视同有 plate
+    arrow_caps: dict[str, tuple[Rect, bool, str]] = {}
+    for aid, cap, label in getattr(res, "arrow_label_boxes", []) or []:
+        el = arrows.get(aid)
+        arrow_caps[aid] = (cap, bool(el.label_bg) if el is not None else True, label)
+
+    issues: list[Issue] = []
+    seen_keys: set[str] = set()
+
+    # 1) 箭头标签（用胶囊几何；label_bg → plate）
+    for aid, (cap, has_plate, label) in arrow_caps.items():
+        solid = _solid_fill_under_text(cap, spec, res, th)
+        if solid is not None:
+            patch = np.full((1, 1, 3), solid, dtype=np.float32)
+        else:
+            patch = _sample_rect_rgb(arr, sx, sy, cap)
+        if patch is None:
+            continue
+        # 找对应 span 颜色
+        color = None
+        for s in res.text_spans:
+            if s.text == label and not getattr(s, "diagnostic", False):
+                if cap.intersection_area(s.bbox()) > 0:
+                    color = s.color
+                    break
+        if not color:
+            color = th.muted
+        tr, tg, tb = _hex_to_rgb01(color)
+        text_l = _luma01(tr, tg, tb)
+        bg_l, var = _effective_bg_luma(
+            patch, has_plate=has_plate,
+            plate_rgb=arrow_plate_rgb, plate_opacity=_ARROW_LABEL_BG_OPACITY,
+        )
+        ratio = _contrast_ratio(text_l, bg_l)
+        key = f"arrow:{aid}"
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        if ratio < _BASE_CONTRAST_MIN:
+            issues.append(Issue(
+                "E", "base-text-contrast",
+                f"箭头 '{aid}' 标签 “{label[:14]}” 与底稿有效背景对比 {ratio:.2f}"
+                f"（<{_BASE_CONTRAST_MIN}）；开 label_bg 或换净空区",
+            ))
+        elif (not has_plate) and var > _BASE_BUSY_VAR:
+            issues.append(Issue(
+                "E", "base-text-contrast",
+                f"箭头 '{aid}' 标签 “{label[:14]}” 无底板且底稿花纹繁忙"
+                f"（亮度方差 {var:.3f}>{_BASE_BUSY_VAR}）；开 label_bg 或换净空",
+            ))
+
+    # 2) 其余文字 span（box/text/panel…）
+    arrow_label_texts = {lab for _, _, lab in getattr(res, "arrow_label_boxes", []) or []}
+    for s in res.text_spans:
+        if not s.text.strip() or getattr(s, "diagnostic", False):
+            continue
+        # 箭头标签已在上面检查
+        if s.text in arrow_label_texts:
+            continue
+        bbox = s.bbox()
+        if bbox.w < 0.2 or bbox.h < 0.2:
+            continue
+        plate_r = _plate_for_span(bbox, plates)
+        has_plate = plate_r is not None
+        solid = _solid_fill_under_text(bbox, spec, res, th)
+        if solid is not None:
+            patch = np.full((1, 1, 3), solid, dtype=np.float32)
+        else:
+            patch = _sample_rect_rgb(arr, sx, sy, bbox)
+        if patch is None:
+            continue
+        tr, tg, tb = _hex_to_rgb01(s.color)
+        text_l = _luma01(tr, tg, tb)
+        bg_l, var = _effective_bg_luma(
+            patch, has_plate=has_plate,
+            plate_rgb=plate_rgb, plate_opacity=plate_op,
+        )
+        ratio = _contrast_ratio(text_l, bg_l)
+        key = f"span:{s.text[:24]}:{bbox.x:.1f}:{bbox.y:.1f}"
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        snippet = s.text.strip()[:14]
+        if ratio < _BASE_CONTRAST_MIN:
+            issues.append(Issue(
+                "E", "base-text-contrast",
+                f"文字 “{snippet}” 与底稿有效背景对比 {ratio:.2f}"
+                f"（<{_BASE_CONTRAST_MIN}）；开 plate 或换净空区",
+            ))
+        elif (not has_plate) and var > _BASE_BUSY_VAR:
+            issues.append(Issue(
+                "E", "base-text-contrast",
+                f"文字 “{snippet}” 无底板且底稿花纹繁忙"
+                f"（亮度方差 {var:.3f}>{_BASE_BUSY_VAR}）；开 plate 或换净空",
+            ))
+    return issues
+
+
+def _check_base_region_drift(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """skeleton 模式：布局矩形内外墨迹对拍；近空或大量溢出环带 → W。
+
+    用墨迹像素计数比（spill = 环带/(内+环)），阈值宽松：好卡 <3px 偏移
+    spill≈0.07，不应误伤。freeform / 无底稿跳过。
+    ghost:false 实体盒不参与（底稿被矢量填充盖住，漂移无意义）。
+    """
+    if spec.base is None or spec.base.mode != "skeleton":
+        return []
+    loaded = _load_base_rgb(spec)
+    if loaded is None:
+        return []
+    arr, sx, sy = loaded
+    issues: list[Issue] = []
+
+    # 与骨架导出一致：对拍 box/asset 色块矩形（panel 极浅底不做漂移判据）
+    for el in spec.elements:
+        if not isinstance(el, (BoxEl, AssetEl)):
+            continue
+        # 实体盒盖住底稿，不参与漂移对拍
+        if not _is_ghost(el, True):
+            continue
+        r = res.node_rects.get(el.id) or el.rect
+        if r.w < 4 or r.h < 4:
+            continue
+        inner = _sample_rect_rgb(arr, sx, sy, r)
+        if inner is None:
+            continue
+        inner_luma = _simple_luma(inner[..., 0], inner[..., 1], inner[..., 2])
+        ink_in = int(np.sum(inner_luma < _INK_WHITE_LUMA))
+        dens_in = float(ink_in / max(inner_luma.size, 1))
+
+        outer_patch_meta = _sample_rect_with_origin(arr, sx, sy, r.expanded(_DRIFT_RING_MM))
+        if outer_patch_meta is None:
+            continue
+        outer_patch, ox0, oy0 = outer_patch_meta
+        ring_mask = np.ones(outer_patch.shape[:2], dtype=bool)
+        ix0 = int(math.floor(r.x * sx)) - ox0
+        iy0 = int(math.floor(r.y * sy)) - oy0
+        ix1 = int(math.ceil(r.right * sx)) - ox0
+        iy1 = int(math.ceil(r.bottom * sy)) - oy0
+        ix0 = max(0, ix0); iy0 = max(0, iy0)
+        ix1 = min(outer_patch.shape[1], ix1); iy1 = min(outer_patch.shape[0], iy1)
+        if ix1 > ix0 and iy1 > iy0:
+            ring_mask[iy0:iy1, ix0:ix1] = False
+        if not np.any(ring_mask):
+            continue
+        ring_luma = _simple_luma(
+            outer_patch[..., 0], outer_patch[..., 1], outer_patch[..., 2],
+        )
+        ink_ring = int(np.sum((ring_luma < _INK_WHITE_LUMA) & ring_mask))
+        total_ink = ink_in + ink_ring
+        spill = (ink_ring / total_ink) if total_ink > 0 else 0.0
+
+        near_empty = dens_in < _DRIFT_EMPTY_IN
+        overflow = (
+            spill >= _DRIFT_SPILL_FRAC
+            and ink_ring >= _DRIFT_SPILL_MIN_INK
+            and dens_in < 0.70
+        )
+        if near_empty or overflow:
+            why = []
+            if near_empty:
+                why.append(f"内密度 {dens_in:.2f}<{_DRIFT_EMPTY_IN}")
+            if overflow:
+                why.append(f"环带墨迹溢出比 {spill:.0%}≥{_DRIFT_SPILL_FRAC:.0%}")
+            issues.append(Issue(
+                "W", "base-region-drift",
+                f"模块 '{el.id}' 与底稿内容疑似漂移（{'; '.join(why)}）；"
+                f"建议重抽/换卡或核对骨架对齐",
+            ))
+    return issues
+
+
+def _sample_rect_with_origin(
+    arr: np.ndarray, sx: float, sy: float, rect: Rect,
+) -> tuple[np.ndarray, int, int] | None:
+    """采样矩形像素并返回左上角像素坐标。"""
+    h, w = arr.shape[:2]
+    x0 = int(math.floor(rect.x * sx))
+    y0 = int(math.floor(rect.y * sy))
+    x1 = int(math.ceil(rect.right * sx))
+    y1 = int(math.ceil(rect.bottom * sy))
+    x0c = max(0, min(w - 1, x0))
+    y0c = max(0, min(h - 1, y0))
+    x1c = max(x0c + 1, min(w, x1))
+    y1c = max(y0c + 1, min(h, y1))
+    patch = arr[y0c:y1c, x0c:x1c]
+    if patch.size == 0:
+        return None
+    return patch, x0c, y0c

@@ -343,6 +343,12 @@ class Theme:
     # lint font-small 软下限（pt）；None=沿用 IDEAL_MIN_FONT_PT(6.0) 旧行为
     lint_min_font: float | None = None
 
+    # base 模式文字底板（半透明白圆角，保证插画上可读）
+    plate_fill: str = "#FFFFFF"
+    plate_opacity: float = 0.82
+    plate_pad: float = 1.2       # mm，文字包围盒外扩
+    plate_radius: float = 1.2    # mm
+
 
 _PRESETS = {
     "sci": _SCI_VARIANTS,

@@ -6,6 +6,9 @@
   python -m paperfig.cli assets  spec.yaml --api-key KEY [--only id1,id2] [--force] [--no-auto-select]
   python -m paperfig.cli select  spec.yaml ASSET_ID INDEX
   python -m paperfig.cli cutout  in.png out.png [--threshold 238] [--shadow keep|remove]
+  python -m paperfig.cli base gen  spec.yaml [--api-key|-k] [--model] [--force] [--candidates N]
+  python -m paperfig.cli base pick spec.yaml N
+  python -m paperfig.cli base grid spec.yaml
 """
 
 from __future__ import annotations
@@ -18,11 +21,20 @@ from pathlib import Path
 import yaml
 
 from .assets import auto_select, gacha_generate, save_report, select_candidate
+from .base import base_gacha, overlay_mm_grid, pick_base, render_skeleton
 from .cutout import cutout_white_bg
 from .layout import LayoutError, document_has_layout, materialize_yaml
 from .lint import lint
 from .render import render
 from .spec import load_spec
+
+
+def _resolve_api_key(args: argparse.Namespace) -> str:
+    return (
+        getattr(args, "api_key", None)
+        or os.environ.get("PAPERFIG_API_KEY")
+        or os.environ.get("SCIFIG_API_KEY", "")
+    )
 
 
 def cmd_render(args: argparse.Namespace) -> int:
@@ -83,12 +95,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 
 def cmd_assets(args: argparse.Namespace) -> int:
     spec = load_spec(args.spec)
-    # Prefer PAPERFIG_API_KEY; fall back to SCIFIG_API_KEY for backward compatibility.
-    api_key = (
-        args.api_key
-        or os.environ.get("PAPERFIG_API_KEY")
-        or os.environ.get("SCIFIG_API_KEY", "")
-    )
+    api_key = _resolve_api_key(args)
     if not api_key:
         print(
             "需要 --api-key 或环境变量 PAPERFIG_API_KEY（兼容 SCIFIG_API_KEY）",
@@ -133,6 +140,66 @@ def cmd_cutout(args: argparse.Namespace) -> int:
 def cmd_studio(args: argparse.Namespace) -> int:
     from .studio import serve
     serve(args.spec, port=args.port, open_browser=not args.no_open)
+    return 0
+
+
+def cmd_base_gen(args: argparse.Namespace) -> int:
+    """底稿抽卡：skeleton 模式先渲骨架图，经 urls 作图生图参考。"""
+    spec = load_spec(args.spec)
+    if spec.base is None:
+        print("spec 缺少 base: 段（mode/prompt 必填）", file=sys.stderr)
+        return 2
+
+    api_key = _resolve_api_key(args)
+    if not api_key:
+        print(
+            "需要 --api-key/-k 或环境变量 PAPERFIG_API_KEY（兼容 SCIFIG_API_KEY）",
+            file=sys.stderr,
+        )
+        return 2
+
+    base_dir = spec.base_dir()
+    base_dir.mkdir(parents=True, exist_ok=True)
+    reference = None
+    if spec.base.mode == "skeleton":
+        sk_path = base_dir / "skeleton.png"
+        render_skeleton(spec, sk_path)
+        print(f"骨架图: {sk_path}")
+        reference = sk_path
+
+    n = args.candidates if args.candidates is not None else None
+    result = base_gacha(
+        args.spec,
+        api_key,
+        model=args.model,
+        force=args.force,
+        candidates=n,
+        reference_image=reference,
+    )
+    if not result.candidates:
+        return 0 if (base_dir / "base.png").exists() else 1
+    ok_n = sum(1 for c in result.candidates if c.verdict != "reject")
+    print(f"完成: {ok_n}/{len(result.candidates)} 候选可用；用 paperfig base pick 选卡")
+    return 0 if ok_n else 1
+
+
+def cmd_base_pick(args: argparse.Namespace) -> int:
+    try:
+        pick_base(args.spec, args.index)
+    except (ValueError, FileNotFoundError) as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_base_grid(args: argparse.Namespace) -> int:
+    spec = load_spec(args.spec)
+    try:
+        out = overlay_mm_grid(spec)
+    except FileNotFoundError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    print(f"网格底稿: {out}")
     return 0
 
 
@@ -183,6 +250,30 @@ def main(argv: list[str] | None = None) -> int:
     pst.add_argument("--port", type=int, default=8323)
     pst.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
     pst.set_defaults(func=cmd_studio)
+
+    pb = sub.add_parser("base", help="AI 整图底稿：骨架导出 / 抽卡 / 选卡 / mm 网格")
+    pb_sub = pb.add_subparsers(dest="base_cmd", required=True)
+
+    pbg = pb_sub.add_parser("gen", help="底稿抽卡（skeleton 先渲骨架作参考）")
+    pbg.add_argument("spec")
+    pbg.add_argument("-k", "--api-key", default=None)
+    pbg.add_argument(
+        "--model",
+        default="nano-banana-fast",
+        help="生图模型：nano-banana-fast（默认）/ nano-banana-2 / nano-banana-pro",
+    )
+    pbg.add_argument("--force", action="store_true", help="已有 base/base.png 也重抽")
+    pbg.add_argument("--candidates", type=int, default=None, help="候选数（覆盖 base.candidates）")
+    pbg.set_defaults(func=cmd_base_gen)
+
+    pbp = pb_sub.add_parser("pick", help="把候选提升为 base/base.png")
+    pbp.add_argument("spec")
+    pbp.add_argument("index", type=int, help="候选编号（从 1 起）")
+    pbp.set_defaults(func=cmd_base_pick)
+
+    pbgrid = pb_sub.add_parser("grid", help="底稿叠 mm 网格 → base/base_grid.png")
+    pbgrid.add_argument("spec")
+    pbgrid.set_defaults(func=cmd_base_grid)
 
     args = p.parse_args(argv)
     return args.func(args)

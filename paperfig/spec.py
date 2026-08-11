@@ -72,6 +72,23 @@ class AssetRequest:
     shadow: str = "keep"  # keep | remove，见 cutout.py
 
 
+_BASE_MODES = {"skeleton", "freeform"}
+
+
+@dataclass
+class BaseSpec:
+    """AI 整图底稿配置（混合模式）：底稿由生图模型抽卡，文字/箭头由矢量层渲染。
+
+    skeleton: 布局树解出的模块矩形渲成色块骨架 → 图生图参考，regions 渲染时由 layout 充当。
+    freeform: 纯文生图底稿 → agent 目测标注 regions。
+    """
+    mode: str                          # skeleton | freeform
+    prompt: str                        # 底稿场景/构图描述
+    image: str | None = None           # 选中底稿路径（相对 spec 目录）
+    candidates: int = 3
+    regions: dict[str, Rect] = field(default_factory=dict)  # freeform 模块区域
+
+
 @dataclass
 class BoxEl:
     id: str
@@ -97,6 +114,10 @@ class BoxEl:
     accent: str | None = None    # left | top：色条（取 variant 边框色）
     header_fill: bool = False    # 标题区浅底 + 分隔线
     sketch: str | None = None    # 内嵌单色缩略图 kind（见 SketchEl）
+    # base 混合模式
+    region: str | None = None    # 锚定 base.regions[id]，代替手写 rect
+    ghost: bool | None = None    # None=base 模式下默认幽灵；false 恢复实体
+    plate: bool | None = None    # None=base 模式下默认开文字底板；false 关闭
 
 
 @dataclass
@@ -109,6 +130,8 @@ class AssetEl:
     valign: str = "middle"       # top | middle | bottom
     frame: bool = False          # 是否加细边框
     placeholder: bool = False    # 真实实验结果的占位槽（体检降为提示，不算错误）
+    region: str | None = None    # 锚定 base.regions[id]，代替手写 rect
+    ghost: bool | None = None    # None=base 模式下默认幽灵；false 恢复实体
 
 
 @dataclass
@@ -124,6 +147,8 @@ class PanelEl:
     header_h: float = 7.0        # 标题条高度 mm
     header_style: str = "banner"  # banner | smallcaps（顶会克制风分区标签）
     shadow: bool | None = None   # None=跟随 theme.default_shadow
+    ghost: bool | None = None    # None=base 模式下默认只画标题；false 恢复底色边框
+    plate: bool | None = None    # None=base 模式下标题加文字底板
 
 
 @dataclass
@@ -207,6 +232,8 @@ class TextEl:
     max_w: float | None = None   # 给定则自动换行
     rotate: float = 0.0          # 绕 at 点旋转（度）；-90 即竖排（自下而上读）
     smallcaps: bool = False      # 大写 + letter-spacing 模拟 small-caps
+    region: str | None = None    # 锚定 base.regions[id] 中心，代替手写 at
+    plate: bool | None = None    # None=base 模式下默认开文字底板；false 关闭
 
 
 @dataclass
@@ -323,6 +350,7 @@ class FigureSpec:
     elements: list[Element]
     background_explicit: bool = False  # figure 是否显式写了 background
     grid_bg: bool | None = None        # None=跟随 theme.grid_bg
+    base: BaseSpec | None = None       # AI 底稿混合模式（底稿 + 矢量标注）
 
     def find(self, el_id: str) -> Element | None:
         for el in self.elements:
@@ -336,15 +364,26 @@ class FigureSpec:
             return self.assets_dir / f"{ref}.png"
         return (self.path.parent / ref).resolve()
 
+    def resolve_base_image(self) -> Path | None:
+        """选中底稿路径；相对 spec 目录。"""
+        if self.base is None or not self.base.image:
+            return None
+        return (self.path.parent / self.base.image).resolve()
+
+    def base_dir(self) -> Path:
+        """底稿产物目录：spec 旁 base/。"""
+        return self.path.parent / "base"
+
 
 _ALLOWED_KEYS = {
     "box": {"type", "id", "rect", "title", "body", "variant", "shape", "icon", "icon_h",
             "title_size", "body_size", "align", "valign", "gradient", "gradient_dir",
             "fill", "stroke", "text_color", "stack", "shadow", "accent", "header_fill",
-            "sketch"},
-    "asset": {"type", "id", "rect", "src", "caption", "halign", "valign", "frame", "placeholder"},
+            "sketch", "region", "ghost", "plate"},
+    "asset": {"type", "id", "rect", "src", "caption", "halign", "valign", "frame",
+              "placeholder", "region", "ghost"},
     "text": {"type", "id", "at", "text", "size", "bold", "italic", "color", "anchor",
-             "max_w", "rotate", "smallcaps"},
+             "max_w", "rotate", "smallcaps", "region", "plate"},
     "arrow": {"type", "id", "from", "to", "route", "style", "label", "color",
               "head", "bidir", "label_offset", "label_pos", "via", "width", "fill",
               "bend", "label_bg", "weight", "semantic"},
@@ -352,7 +391,7 @@ _ALLOWED_KEYS = {
               "color", "label_pos", "label_size", "lw", "hatch", "shadow"},
     "panel_label": {"type", "id", "at", "text"},
     "panel": {"type", "id", "rect", "title", "variant", "header_fill", "fill",
-              "title_size", "header_h", "header_style", "shadow"},
+              "title_size", "header_h", "header_style", "shadow", "ghost", "plate"},
     "tokens": {"type", "id", "rect", "n", "direction", "variant", "colors", "gap",
                "sizes", "label"},
     "marker": {"type", "id", "at", "icon", "size", "color"},
@@ -487,8 +526,9 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
         ids.add(eid)
 
         if etype == "box":
-            if "rect" not in e:
-                raise SpecError(f"{ctx}: box 需要 rect")
+            region = str(e["region"]) if e.get("region") is not None else None
+            if "rect" not in e and not region:
+                raise SpecError(f"{ctx}: box 需要 rect 或 region")
             shape = str(e.get("shape", "rect"))
             if shape not in _SHAPES:
                 raise SpecError(f"{ctx}: 未知 shape '{shape}'（可选 {sorted(_SHAPES)}）")
@@ -508,8 +548,12 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 if sketch not in _SKETCH_KINDS:
                     raise SpecError(f"{ctx}: 未知 sketch kind '{sketch}'（可选 {sorted(_SKETCH_KINDS)}）")
             shadow = e.get("shadow")
+            ghost = e.get("ghost")
+            plate = e.get("plate")
+            # region 解析前用占位 rect；_apply_regions 会覆盖
+            rect = _rect(e["rect"], ctx) if "rect" in e else Rect(0, 0, 1, 1)
             elements.append(BoxEl(
-                id=eid, rect=_rect(e["rect"], ctx),
+                id=eid, rect=rect,
                 title=str(e.get("title", "")), body=str(e.get("body", "")),
                 variant=str(e.get("variant", "primary")), shape=shape,
                 icon=e.get("icon"), icon_h=float(e.get("icon_h", 10.0)),
@@ -520,17 +564,24 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 text_color=e.get("text_color"), stack=int(e.get("stack", 0)),
                 shadow=bool(shadow) if shadow is not None else None,
                 accent=accent, header_fill=bool(e.get("header_fill", False)),
-                sketch=sketch,
+                sketch=sketch, region=region,
+                ghost=bool(ghost) if ghost is not None else None,
+                plate=bool(plate) if plate is not None else None,
             ))
         elif etype == "asset":
-            if "rect" not in e or "src" not in e:
-                raise SpecError(f"{ctx}: asset 需要 rect 和 src")
+            region = str(e["region"]) if e.get("region") is not None else None
+            if ("rect" not in e and not region) or "src" not in e:
+                raise SpecError(f"{ctx}: asset 需要 rect（或 region）和 src")
+            rect = _rect(e["rect"], ctx) if "rect" in e else Rect(0, 0, 1, 1)
+            ghost = e.get("ghost")
             elements.append(AssetEl(
-                id=eid, rect=_rect(e["rect"], ctx), src=str(e["src"]),
+                id=eid, rect=rect, src=str(e["src"]),
                 caption=str(e.get("caption", "")),
                 halign=str(e.get("halign", "center")), valign=str(e.get("valign", "middle")),
                 frame=bool(e.get("frame", False)),
                 placeholder=bool(e.get("placeholder", False)),
+                region=region,
+                ghost=bool(ghost) if ghost is not None else None,
             ))
         elif etype == "panel":
             if "rect" not in e:
@@ -539,6 +590,8 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
             if header_style not in _PANEL_HEADER_STYLES:
                 raise SpecError(f"{ctx}: header_style 必须是 banner/smallcaps")
             shadow = e.get("shadow")
+            ghost = e.get("ghost")
+            plate = e.get("plate")
             elements.append(PanelEl(
                 id=eid, rect=_rect(e["rect"], ctx), title=str(e.get("title", "")),
                 variant=str(e.get("variant", "primary")),
@@ -547,6 +600,8 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 header_h=float(e.get("header_h", 7.0)),
                 header_style=header_style,
                 shadow=bool(shadow) if shadow is not None else None,
+                ghost=bool(ghost) if ghost is not None else None,
+                plate=bool(plate) if plate is not None else None,
             ))
         elif etype == "tokens":
             if "rect" not in e:
@@ -573,14 +628,21 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 size=float(e.get("size", 5.0)), color=e.get("color"),
             ))
         elif etype == "text":
+            region = str(e["region"]) if e.get("region") is not None else None
+            if "at" not in e and not region:
+                raise SpecError(f"{ctx}: text 需要 at 或 region")
+            at = _point(e.get("at"), ctx) if "at" in e else (0.0, 0.0)
+            plate = e.get("plate")
             elements.append(TextEl(
-                id=eid, at=_point(e.get("at"), ctx), text=str(e.get("text", "")),
+                id=eid, at=at, text=str(e.get("text", "")),
                 size=float(e.get("size", 7.0)), bold=bool(e.get("bold", False)),
                 italic=bool(e.get("italic", False)),
                 color=e.get("color"), anchor=str(e.get("anchor", "middle")),
                 max_w=float(e["max_w"]) if e.get("max_w") is not None else None,
                 rotate=float(e.get("rotate", 0.0)),
                 smallcaps=bool(e.get("smallcaps", False)),
+                region=region,
+                plate=bool(plate) if plate is not None else None,
             ))
         elif etype == "arrow":
             if "from" not in e or "to" not in e:
@@ -739,14 +801,84 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
     if isinstance(theme_cfg, str):
         theme_cfg = {"preset": theme_cfg}
 
+    base = _parse_base(raw.get("base"), ids)
+    _apply_regions(elements, base)
+
     spec = FigureSpec(
         path=p, width=width, height=height, dpi=dpi, background=background,
         font_scale=font_scale, theme_cfg=theme_cfg,
         background_explicit=background_explicit, grid_bg=grid_bg,
         assets_dir=assets_dir, asset_requests=asset_requests, elements=elements,
+        base=base,
     )
     _validate_refs(spec)
     return spec
+
+
+def _apply_regions(elements: list[Element], base: BaseSpec | None) -> None:
+    """把 element.region 解析为 rect/at；region id 必须存在于 base.regions。"""
+    for el in elements:
+        rid = getattr(el, "region", None)
+        if not rid:
+            continue
+        if base is None:
+            raise SpecError(f"元素 '{el.id}' 使用了 region: {rid!r}，但 spec 无 base: 段")
+        if rid not in base.regions:
+            raise SpecError(
+                f"元素 '{el.id}' 的 region '{rid}' 不存在于 base.regions"
+                f"（已知: {sorted(base.regions) or '无'}）")
+        rr = base.regions[rid]
+        if isinstance(el, (BoxEl, AssetEl)):
+            el.rect = Rect(rr.x, rr.y, rr.w, rr.h)
+        elif isinstance(el, TextEl):
+            el.at = (rr.cx, rr.cy)
+
+
+def _parse_base(raw: object, element_ids: set[str]) -> BaseSpec | None:
+    """解析顶层 base: 段；缺省则返回 None。"""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise SpecError("base: 必须是 mapping")
+    allowed = {"mode", "prompt", "image", "candidates", "regions"}
+    extra = set(raw) - allowed
+    if extra:
+        raise SpecError(f"base: 未知字段 {sorted(extra)}（可用: {sorted(allowed)}）")
+    if "mode" not in raw:
+        raise SpecError("base: 需要 mode（skeleton|freeform）")
+    if "prompt" not in raw:
+        raise SpecError("base: 需要 prompt（底稿场景描述）")
+    mode = str(raw["mode"]).strip().lower()
+    if mode not in _BASE_MODES:
+        raise SpecError(f"base.mode 必须是 skeleton|freeform，得到 {raw['mode']!r}")
+    prompt = str(raw["prompt"]).strip()
+    if not prompt:
+        raise SpecError("base.prompt 不能为空")
+    image = raw.get("image")
+    if image is not None:
+        image = str(image).strip() or None
+    candidates = int(raw.get("candidates", 3))
+    if candidates < 1:
+        raise SpecError(f"base.candidates 必须 ≥1，得到 {candidates}")
+
+    regions: dict[str, Rect] = {}
+    regions_raw = raw.get("regions") or {}
+    if regions_raw is None:
+        regions_raw = {}
+    if not isinstance(regions_raw, dict):
+        raise SpecError("base.regions 必须是 {id: [x,y,w,h]} mapping")
+    for rid, rv in regions_raw.items():
+        rid_s = str(rid)
+        if rid_s in element_ids:
+            raise SpecError(f"base.regions 的 id '{rid_s}' 与 elements 冲突")
+        if rid_s in regions:
+            raise SpecError(f"base.regions 的 id '{rid_s}' 重复")
+        regions[rid_s] = _rect(rv, f"base.regions['{rid_s}']")
+
+    return BaseSpec(
+        mode=mode, prompt=prompt, image=image,
+        candidates=candidates, regions=regions,
+    )
 
 
 def _validate_refs(spec: FigureSpec) -> None:
