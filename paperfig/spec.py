@@ -73,6 +73,7 @@ class AssetRequest:
 
 
 _BASE_MODES = {"skeleton", "freeform"}
+_BASE_STYLES = {"journal-schematic", "technical-lineart", "sci-flat-pro"}
 
 
 @dataclass
@@ -87,6 +88,8 @@ class BaseSpec:
     image: str | None = None           # 选中底稿路径（相对 spec 目录）
     candidates: int = 3
     regions: dict[str, Rect] = field(default_factory=dict)  # freeform 模块区域
+    style: str | None = None           # journal-schematic|technical-lineart|sci-flat-pro；缺省按 theme 映射
+    accent: list[str] = field(default_factory=list)  # 关键路径 element id（骨架强调色）
 
 
 @dataclass
@@ -840,7 +843,7 @@ def _parse_base(raw: object, element_ids: set[str]) -> BaseSpec | None:
         return None
     if not isinstance(raw, dict):
         raise SpecError("base: 必须是 mapping")
-    allowed = {"mode", "prompt", "image", "candidates", "regions"}
+    allowed = {"mode", "prompt", "image", "candidates", "regions", "style", "accent"}
     extra = set(raw) - allowed
     if extra:
         raise SpecError(f"base: 未知字段 {sorted(extra)}（可用: {sorted(allowed)}）")
@@ -861,6 +864,32 @@ def _parse_base(raw: object, element_ids: set[str]) -> BaseSpec | None:
     if candidates < 1:
         raise SpecError(f"base.candidates 必须 ≥1，得到 {candidates}")
 
+    style = raw.get("style")
+    if style is not None:
+        style = str(style).strip().lower() or None
+        if style is not None and style not in _BASE_STYLES:
+            raise SpecError(
+                f"base.style 必须是 {'|'.join(sorted(_BASE_STYLES))}，得到 {raw['style']!r}"
+            )
+
+    accent_raw = raw.get("accent", [])
+    if accent_raw is None:
+        accent_raw = []
+    if isinstance(accent_raw, str):
+        accent_raw = [accent_raw]
+    if not isinstance(accent_raw, list):
+        raise SpecError("base.accent 必须是 element id 列表")
+    accent: list[str] = []
+    for a in accent_raw:
+        aid = str(a).strip()
+        if not aid:
+            continue
+        if aid not in element_ids:
+            raise SpecError(f"base.accent 引用了不存在的元素 '{aid}'")
+        if aid in accent:
+            raise SpecError(f"base.accent 重复 id '{aid}'")
+        accent.append(aid)
+
     regions: dict[str, Rect] = {}
     regions_raw = raw.get("regions") or {}
     if regions_raw is None:
@@ -877,7 +906,7 @@ def _parse_base(raw: object, element_ids: set[str]) -> BaseSpec | None:
 
     return BaseSpec(
         mode=mode, prompt=prompt, image=image,
-        candidates=candidates, regions=regions,
+        candidates=candidates, regions=regions, style=style, accent=accent,
     )
 
 

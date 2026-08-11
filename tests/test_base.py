@@ -10,11 +10,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from paperfig.base import (
     _BASE_HARD_CONSTRAINTS,
+    _LINEART_ACCENT,
+    _LINEART_GREYS,
+    _SKELETON_EDIT_LINEART_EXTRA,
     base_pixel_size,
     build_base_prompt,
     figure_aspect_ratio,
     overlay_mm_grid,
     render_skeleton,
+    skeleton_ghost_fill,
 )
 from paperfig.spec import SpecError, load_spec
 
@@ -236,12 +240,14 @@ def test_figure_aspect_and_pixel_size():
 def test_base_prompt_has_hard_constraints():
     p = build_base_prompt("医学 CAD 管线插画", theme_cfg="sci", skeleton=True)
     assert p.startswith("医学 CAD")
-    assert "STYLE SPECIFICATIONS:" in p
+    assert "STYLE PACK (sci-flat-pro):" in p
     assert "HARD CONSTRAINTS" in p
     assert "禁止任何文字" in p or "No text" in p
     assert "铺满画布" in p or "Full-bleed" in p
     assert "单物件居中" in p or "NOT a single centered" in p
     assert "不要画外框" in p or "Do not draw outer frames" in p
+    assert "Match the named style pack above" in p
+    assert "Avoid:" in p
     # 强编辑指令（探测结论：弱 prompt 会原样吐色块）
     assert "Replace each colored block's flat fill" in p
     assert "Do not translate, scale, merge" in p
@@ -253,6 +259,11 @@ def test_base_prompt_has_hard_constraints():
     # 素材版硬约束不应混入
     assert "Single centered object" not in p
     assert _BASE_HARD_CONSTRAINTS.splitlines()[0] in p
+    # 污染词不得出现在正向段/硬约束（Avoid 段可列作禁止项）
+    before_avoid = p.split("Avoid:")[0].lower()
+    assert "flat vector illustration" not in before_avoid
+    assert "friendly rounded" not in before_avoid
+    assert "Avoid:" in p
 
 
 def test_base_prompt_freeform_no_skeleton_extra():
@@ -260,6 +271,7 @@ def test_base_prompt_freeform_no_skeleton_extra():
     assert "Replace each colored block's flat fill" not in p
     assert "强编辑" not in p
     assert "Do not translate, scale, merge" not in p
+    assert "STYLE PACK (sci-flat-pro):" in p  # warm → 缺省 sci-flat-pro
 
 
 def test_base_prompt_skeleton_strong_edit():
@@ -272,6 +284,93 @@ def test_base_prompt_skeleton_strong_edit():
     assert "reserved for later text plates" in sk
     # no-text 硬约束仍在
     assert "No text" in sk or "禁止任何文字" in sk
+
+
+# ── base.style 注册表 / 映射 / prompt 组装 ───────────────
+
+def test_base_style_packs_registry():
+    from paperfig.styles import BASE_STYLE_NAMES, BASE_STYLE_PACKS, get_style_pack
+
+    assert set(BASE_STYLE_NAMES) == {
+        "journal-schematic", "technical-lineart", "sci-flat-pro",
+    }
+    for name in BASE_STYLE_NAMES:
+        pack = get_style_pack(name)
+        assert pack["positive"].strip()
+        assert pack["negative"].strip()
+        assert name in BASE_STYLE_PACKS
+
+
+def test_base_style_theme_default_mapping():
+    from paperfig.styles import resolve_base_style
+
+    assert resolve_base_style(None, "neurips") == "sci-flat-pro"
+    assert resolve_base_style(None, "topconf") == "sci-flat-pro"
+    assert resolve_base_style(None, "sci") == "sci-flat-pro"
+    assert resolve_base_style(None, "editorial") == "journal-schematic"
+    assert resolve_base_style(None, "isosystem") == "technical-lineart"
+    assert resolve_base_style(None, "warm") == "sci-flat-pro"
+    assert resolve_base_style(None, "unknown_xyz") == "sci-flat-pro"
+    assert resolve_base_style("technical-lineart", "sci") == "technical-lineart"
+    assert resolve_base_style("journal-schematic", {"preset": "neurips"}) == "journal-schematic"
+
+
+def test_base_style_schema_valid_and_invalid(tmp_path):
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 80, height: 50}
+theme: editorial
+base:
+  mode: skeleton
+  prompt: "lab pipeline"
+  style: journal-schematic
+elements:
+  - {type: box, id: a, rect: [5, 5, 20, 15], title: A}
+"""))
+    assert spec.base.style == "journal-schematic"
+
+    spec2 = load_spec(_write(tmp_path, """
+figure: {width: 80, height: 50}
+theme: sci
+base: {mode: skeleton, prompt: "x"}
+elements:
+  - {type: box, id: a, rect: [5, 5, 20, 15], title: A}
+""", "no_style.yaml"))
+    assert spec2.base.style is None
+
+    try:
+        load_spec(_write(tmp_path, """
+figure: {width: 80, height: 50}
+base: {mode: skeleton, prompt: "x", style: cartoon-sticker}
+elements:
+  - {type: box, id: a, rect: [5, 5, 20, 15], title: A}
+""", "bad_style.yaml"))
+        assert False, "应抛 SpecError"
+    except SpecError as e:
+        assert "base.style" in str(e)
+
+
+def test_base_prompt_uses_style_pack_and_avoid():
+    p = build_base_prompt(
+        "medical CAD",
+        theme_cfg="sci",
+        base_style="journal-schematic",
+        skeleton=True,
+    )
+    assert "STYLE PACK (journal-schematic):" in p
+    assert "Nature Methods pipeline figures" in p
+    assert "Avoid:" in p
+    assert "mascot faces" in p
+    # 正向段与硬约束不得含污染词组（Avoid 段除外，负向清单逐字保留）
+    before_avoid = p.split("Avoid:")[0].lower()
+    assert "flat vector illustration" not in before_avoid
+    assert "friendly rounded" not in before_avoid
+
+    p2 = build_base_prompt("rl loop", theme_cfg="isosystem", skeleton=False)
+    assert "STYLE PACK (technical-lineart):" in p2
+    assert "OSDI/SOSP" in p2
+    before2 = p2.split("Avoid:")[0].lower()
+    assert "flat vector illustration" not in before2
+    assert "friendly rounded" not in before2
 
 
 # ── 参考图 payload（mock，不联网）───────────────────────
@@ -1050,6 +1149,173 @@ def test_tint_reserve_color_hsl():
     assert abs(h0 - h1) < 0.01 or abs(abs(h0 - h1) - 1.0) < 0.01
     assert abs(l1 - 0.88) < 0.02
     assert abs(s1 - s0 * 0.5) < 0.02
+
+
+def _sample_skeleton_box(arr, spec, box_id, *, y_frac=0.72):
+    """采幽灵盒下部像素（避开文字板头带）。"""
+    el = next(e for e in spec.elements if getattr(e, "id", None) == box_id)
+    pw, ph = arr.shape[1], arr.shape[0]
+    sx, sy = pw / spec.width, ph / spec.height
+    cx = int((el.rect.x + el.rect.w * 0.5) * sx)
+    cy = int((el.rect.y + el.rect.h * y_frac) * sy)
+    return tuple(int(v) for v in arr[cy, cx])
+
+
+def test_skeleton_fills_by_style_and_accent(tmp_path):
+    """三种 base.style 的幽灵块配色分派 + accent 钢蓝关键路径。"""
+    from io import BytesIO
+    import colorsys
+
+    yaml_lineart = """
+figure: {width: 120, height: 60}
+theme: sci
+base:
+  mode: skeleton
+  style: technical-lineart
+  accent: [crit]
+  prompt: "x"
+elements:
+  - {type: box, id: a, rect: [5, 10, 25, 35], title: A}
+  - {type: box, id: crit, rect: [35, 10, 25, 35], title: Crit}
+  - {type: box, id: b, rect: [65, 10, 25, 35], title: B}
+  - {type: box, id: c, rect: [95, 10, 20, 35], title: C}
+"""
+    spec = load_spec(_write(tmp_path, yaml_lineart, "lineart.yaml"))
+    assert spec.base.accent == ["crit"]
+    arr = np.asarray(Image.open(BytesIO(render_skeleton(spec))).convert("RGB"))
+    px_a = _sample_skeleton_box(arr, spec, "a")
+    px_crit = _sample_skeleton_box(arr, spec, "crit")
+    px_b = _sample_skeleton_box(arr, spec, "b")
+    accent_rgb = tuple(int(_LINEART_ACCENT[i : i + 2], 16) for i in (1, 3, 5))
+    assert px_crit == accent_rgb
+    grey_set = {
+        tuple(int(g[i : i + 2], 16) for i in (1, 3, 5)) for g in _LINEART_GREYS
+    }
+    assert px_a in grey_set
+    assert px_b in grey_set
+    assert px_a != px_b  # 相邻档位区分
+    # 非关键路径近灰阶（冷灰允许 R/G/B 微差）
+    assert max(px_a) - min(px_a) <= 16
+    assert max(px_b) - min(px_b) <= 16
+
+    # 缺省 accent=[] → 全灰阶
+    yaml_grey = """
+figure: {width: 80, height: 50}
+theme: sci
+base: {mode: skeleton, style: technical-lineart, prompt: "x"}
+elements:
+  - {type: box, id: g1, rect: [5, 5, 30, 35], title: G1}
+  - {type: box, id: g2, rect: [40, 5, 30, 35], title: G2}
+"""
+    spec_g = load_spec(_write(tmp_path, yaml_grey, "grey.yaml"))
+    assert spec_g.base.accent == []
+    arr_g = np.asarray(Image.open(BytesIO(render_skeleton(spec_g))).convert("RGB"))
+    for bid in ("g1", "g2"):
+        px = _sample_skeleton_box(arr_g, spec_g, bid)
+        assert px in grey_set
+        assert px != accent_rgb
+
+    # journal-schematic：浅中性 L≥0.8
+    yaml_journal = """
+figure: {width: 80, height: 50}
+theme: sci
+base: {mode: skeleton, style: journal-schematic, prompt: "x"}
+elements:
+  - {type: box, id: j1, rect: [5, 5, 30, 35], title: J1}
+  - {type: box, id: j2, rect: [40, 5, 30, 35], title: J2}
+"""
+    spec_j = load_spec(_write(tmp_path, yaml_journal, "journal.yaml"))
+    arr_j = np.asarray(Image.open(BytesIO(render_skeleton(spec_j))).convert("RGB"))
+    for bid in ("j1", "j2"):
+        px = _sample_skeleton_box(arr_j, spec_j, bid)
+        r, g, b = (v / 255.0 for v in px)
+        _h, l, s = colorsys.rgb_to_hls(r, g, b)
+        assert l >= 0.8 - 1e-6, (bid, px, l)
+        assert s < 0.35  # 色相仅微弱区分
+
+    # sci-flat-pro：维持饱和区分（相对 journal 更深/更艳）
+    yaml_flat = """
+figure: {width: 80, height: 50}
+theme: sci
+base: {mode: skeleton, style: sci-flat-pro, prompt: "x"}
+elements:
+  - {type: box, id: f1, rect: [5, 5, 30, 35], title: F1}
+"""
+    spec_f = load_spec(_write(tmp_path, yaml_flat, "flat.yaml"))
+    arr_f = np.asarray(Image.open(BytesIO(render_skeleton(spec_f))).convert("RGB"))
+    px_f = _sample_skeleton_box(arr_f, spec_f, "f1")
+    rf, gf, bf = (v / 255.0 for v in px_f)
+    _hf, lf, sf = colorsys.rgb_to_hls(rf, gf, bf)
+    assert sf > 0.15
+    assert lf < 0.75
+
+
+def test_base_accent_field_validation(tmp_path):
+    """base.accent：合法 id 列表；未知/重复报 SpecError；缺省空列表。"""
+    ok = """
+figure: {width: 60, height: 40}
+theme: sci
+base:
+  mode: skeleton
+  style: technical-lineart
+  accent: [a, b]
+  prompt: "x"
+elements:
+  - {type: box, id: a, rect: [5, 5, 20, 20], title: A}
+  - {type: box, id: b, rect: [30, 5, 20, 20], title: B}
+"""
+    spec = load_spec(_write(tmp_path, ok, "accent_ok.yaml"))
+    assert spec.base.accent == ["a", "b"]
+
+    try:
+        load_spec(_write(tmp_path, """
+figure: {width: 60, height: 40}
+base: {mode: skeleton, prompt: "x", accent: [missing]}
+elements:
+  - {type: box, id: a, rect: [5, 5, 20, 20], title: A}
+""", "accent_missing.yaml"))
+        assert False, "应抛 SpecError"
+    except SpecError as e:
+        assert "base.accent" in str(e)
+        assert "missing" in str(e)
+
+    try:
+        load_spec(_write(tmp_path, """
+figure: {width: 60, height: 40}
+base: {mode: skeleton, prompt: "x", accent: [a, a]}
+elements:
+  - {type: box, id: a, rect: [5, 5, 20, 20], title: A}
+""", "accent_dup.yaml"))
+        assert False, "应抛 SpecError"
+    except SpecError as e:
+        assert "重复" in str(e)
+
+    # skeleton_ghost_fill 单元：accent 与灰阶档
+    assert skeleton_ghost_fill("technical-lineart", "sci", 0, is_accent=True) == _LINEART_ACCENT
+    assert skeleton_ghost_fill("technical-lineart", "sci", 1, is_accent=False) == _LINEART_GREYS[1]
+
+
+def test_base_prompt_lineart_skeleton_color_discipline():
+    """technical-lineart + skeleton 强编辑 prompt 含灰阶/关键路径句。"""
+    p = build_base_prompt(
+        "rl loop",
+        theme_cfg="sci",
+        base_style="technical-lineart",
+        skeleton=True,
+    )
+    assert "greyscale technical shading only" in p
+    assert "critical path" in p
+    assert "only accent hue" in p
+    assert _SKELETON_EDIT_LINEART_EXTRA.splitlines()[0] in p
+    # 非 lineart 或非 skeleton 不加
+    p_j = build_base_prompt(
+        "med", theme_cfg="sci", base_style="journal-schematic", skeleton=True,
+    )
+    assert "greyscale technical shading only" not in p_j
+    p_ns = build_base_prompt(
+        "rl", theme_cfg="sci", base_style="technical-lineart", skeleton=False,
+    )
+    assert "greyscale technical shading only" not in p_ns
 
 
 def test_tiles_grid_count_and_min_width(tmp_path):

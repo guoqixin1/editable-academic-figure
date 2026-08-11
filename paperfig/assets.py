@@ -46,7 +46,7 @@ _SESSION.trust_env = False
 
 # 旧后缀保留作兼容别名；新管线改用 build_full_prompt + 图级风格包。
 PROMPT_SUFFIX = (
-    "，扁平插画风格，简洁的科研图示素材，背景纯白色，我会根据像素值做裁剪背景一定要纯白"
+    "，技术性示意插画风格，简洁的科研图示素材，背景纯白色，我会根据像素值做裁剪背景一定要纯白"
     "不能有其他色块，画面中不要出现任何文字字母或数字"
 )
 
@@ -67,46 +67,52 @@ _PALETTE_ROLE_ORDER = ("primary", "secondary", "accent", "highlight", "plain", "
 
 _STYLE_BY_PRESET: dict[str, str] = {
     "sci": (
-        "clean flat vector-style scientific illustration, icon-level abstraction with "
-        "moderate detail, uniform ~2px dark outline (#2A2A2A) on every edge, simple "
-        "geometric shapes, subtle flat shading (exactly two tones per color, no "
-        "gradients), required three-quarter view, consistent corner radius as if drawn "
-        "by one illustrator for a single academic figure"
+        "clean technical schematic scientific illustration, iconographic laboratory "
+        "glyphs with moderate detail, hairline ~1px dark technical stroke (#2A2A2A) on "
+        "every edge, simple geometric shapes, subtle flat shading (exactly two tones per "
+        "color, no gradients), orthographic or restrained equipment-catalog three-quarter "
+        "view, consistent barely-rounded corner radius as if drawn by one illustrator for "
+        "a single academic figure"
     ),
     "warm": (
-        "clean flat vector-style scientific illustration with warm earthy character, "
-        "icon-level abstraction with moderate detail, uniform ~2px dark warm-brown "
-        "outline (#3A2E22) on every edge, simple geometric shapes, subtle flat shading "
-        "(exactly two tones per color, no gradients), required three-quarter view, "
-        "consistent corner radius as if drawn by one illustrator"
+        "clean technical schematic scientific illustration with warm earthy character, "
+        "iconographic laboratory glyphs with moderate detail, hairline ~1px dark "
+        "warm-brown technical stroke (#3A2E22) on every edge, simple geometric shapes, "
+        "subtle flat shading (exactly two tones per color, no gradients), orthographic "
+        "or restrained equipment-catalog three-quarter view, consistent barely-rounded "
+        "corner radius as if drawn by one illustrator"
     ),
     "mono": (
-        "clean flat vector-style scientific illustration in restrained greyscale, "
-        "icon-level abstraction with moderate detail, uniform ~2px dark outline "
-        "(#1A1A1A) on every edge, simple geometric shapes, subtle flat shading "
-        "(exactly two grey tones per surface, no gradients), required three-quarter "
-        "view, consistent corner radius as if drawn by one illustrator"
+        "clean technical schematic scientific illustration in restrained greyscale, "
+        "iconographic laboratory glyphs with moderate detail, hairline ~1px dark "
+        "technical stroke (#1A1A1A) on every edge, simple geometric shapes, subtle flat "
+        "shading (exactly two grey tones per surface, no gradients), orthographic or "
+        "restrained equipment-catalog three-quarter view, consistent barely-rounded "
+        "corner radius as if drawn by one illustrator"
     ),
     "topconf": (
-        "clean flat vector-style scientific illustration for top-conference papers, "
-        "icon-level abstraction with moderate detail, uniform ~2px dark outline "
-        "(#333333) on every edge, simple geometric shapes, subtle flat shading "
-        "(exactly two tones per color, no gradients), required three-quarter view, "
-        "colorblind-friendly accents, consistent corner radius as if drawn by one "
-        "illustrator"
+        "clean technical schematic scientific illustration for top-conference papers, "
+        "abstract labeled blocks with moderate detail, hairline ~1px dark technical "
+        "stroke (#333333) on every edge, simple geometric shapes, subtle flat shading "
+        "(exactly two tones per color, no gradients), orthographic or restrained "
+        "equipment-catalog three-quarter view, colorblind-friendly accents, consistent "
+        "barely-rounded corner radius as if drawn by one illustrator"
     ),
     "airy": (
-        "soft pastel flat vector-style scientific illustration, friendly rounded "
-        "shapes, icon-level abstraction with moderate detail, uniform ~2px soft dark "
-        "outline (#546E7A) on every edge, subtle flat shading (exactly two soft tones "
-        "per color, no gradients), required three-quarter view, airy modern ML-paper "
-        "look, consistent corner radius as if drawn by one illustrator"
+        "muted editorial palette scientific illustration, sharp geometric modules with "
+        "barely-rounded panels, iconographic laboratory glyphs with moderate detail, "
+        "hairline ~1px soft dark technical stroke (#546E7A) on every edge, subtle flat "
+        "shading (exactly two soft tones per color, no gradients), orthographic or "
+        "restrained equipment-catalog three-quarter view, Nature-branded hierarchy "
+        "coloring for ML-paper figures, consistent barely-rounded corner radius as if "
+        "drawn by one illustrator"
     ),
     "neurips": (
-        "clean flat vector-style scientific illustration, icon-level abstraction, "
-        "uniform 2px dark outline (#333333), simple geometric shapes, "
+        "clean technical schematic scientific illustration, abstract labeled blocks, "
+        "hairline ~1px dark technical stroke (#333333), simple geometric shapes, "
         "subtle flat shading (exactly two tones per color, no gradients), "
-        "three-quarter view, colorblind-friendly accents from palette "
+        "orthographic or restrained equipment-catalog three-quarter view, "
+        "colorblind-friendly accents from palette "
         "[#0072B2, #E69F00, #009E73], academic paper figure asset "
         "(not children's book, not sticker), no neon, no glassmorphism"
     ),
@@ -118,7 +124,7 @@ _STYLE_BY_PRESET: dict[str, str] = {
     ),
     "isosystem": (
         "isometric scientific illustration, true 30-degree axonometric, "
-        "flat vector shading (two tones), uniform 1.5–2px outline, "
+        "flat technical schematic shading (two tones), hairline ~1px technical stroke, "
         "no perspective foreshortening, no photoreal materials, "
         "palette [#3D5A80, #E8EEF5, #EE6C4D], white background, "
         "single system module, academic schematic (not game asset, not voxels)"
@@ -137,16 +143,20 @@ textures, or colored floor planes (downstream pixel cutout requires pure white).
 - No drop shadow, or at most an extremely faint ground contact shadow (no cast shadow, no glow).
 - 无投影或仅极浅贴地阴影。
 - Do not introduce colors outside the restricted palette above (plus neutral greys / white).
-- Abstraction level locked: icon-level abstraction, moderate detail only; \
-no photorealistic rendering; no PCB-level or blueprint-level micro detail.
+- Abstraction level locked: iconographic laboratory glyphs / abstract labeled blocks, \
+moderate detail only; no photorealistic rendering; no PCB-level or blueprint-level micro detail.
 - 抽象层级锁定：图标级适度细节，禁止写实渲染与 PCB/蓝图级微观细节。
-- Outline lock: uniform outline weight (~2px) across the whole object; \
+- Outline lock: hairline uniform stroke weight (~1px) across the whole object; \
 do not mix thick and thin strokes on the same object.
-- 描边锁定：整物件统一约 2px 线宽，禁止粗细混用。
-- Viewing angle required: three-quarter view for every object \
+- 描边锁定：整物件统一约 1px 细线，禁止粗细混用。
+- Viewing angle required: orthographic or restrained equipment-catalog three-quarter \
+view for every object \
 (pure front or side elevation only if the object naturally suits a flat silhouette); \
 match the same viewing-angle family as sibling assets in this figure.
-- 视角必须统一为三分之四视角（仅当物件天然适合正视/侧视时例外），并与同图其他素材同一视角族。"""
+- 视角必须统一为正交或克制器材目录式三分之四视角（仅当物件天然适合正视/侧视时例外），\
+并与同图其他素材同一视角族。
+- Avoid: mascot faces, smiley, cartoon character, sticker, storybook, marketing infographic.
+- 禁止吉祥物脸、笑脸、卡通角色、贴纸、故事书风、营销信息图。"""
 
 
 @dataclass
@@ -261,11 +271,13 @@ def build_style_pack(
         "(#F5F5F5, #BDBDBD, #757575) and pure white #FFFFFF. "
         "Do not introduce neon, rainbow, or off-palette hues.\n"
         f"- Illustration language (shared across all assets in this figure): {style}\n"
-        "- Abstraction level (locked): icon-level abstraction, moderate detail only; "
+        "- Abstraction level (locked): iconographic laboratory glyphs / abstract "
+        "labeled blocks, moderate detail only; "
         "no photorealistic rendering; no PCB-level or blueprint-level micro detail.\n"
-        "- Outline lock: uniform outline weight (~2px) across the whole object; "
+        "- Outline lock: hairline uniform stroke weight (~1px) across the whole object; "
         "do not mix thick and thin strokes.\n"
-        "- Viewing angle (required): three-quarter view for every object "
+        "- Viewing angle (required): orthographic or restrained equipment-catalog "
+        "three-quarter view for every object "
         "(pure front/side only if the object naturally suits a flat silhouette); "
         "same viewing-angle family for all assets in this figure.\n"
         "- Same illustrator, same outline weight, same shading rules, same viewing angle "

@@ -130,7 +130,7 @@ python -m paperfig.cli base pick fig.yaml 2                      # 目检 contac
 python -m paperfig.cli base grid fig.yaml                        # freeform：叠 mm 网格标 regions
 ```
 
-流程与 prompt 要点见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)「混合模式（base）」与 [USAGE §8](USAGE.md#8-混合模式-base)。样例在 [`examples/hybrid/`](examples/hybrid/)。
+流程与 prompt 要点见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)「混合模式（base）」与 [USAGE §8](USAGE.md#8-混合模式-base)。底稿风格用 `base.style`（`journal-schematic` / `technical-lineart` / `sci-flat-pro`）。样例在 [`examples/hybrid/`](examples/hybrid/)。
 
 **医学影像 CAD · 混合版**（学术混搭：顶行形象模块交 AI 底稿，中底排统计/I/O 面板保持矢量）：
 

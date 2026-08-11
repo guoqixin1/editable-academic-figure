@@ -32,7 +32,7 @@ description: >-
 3. **最小改动，每次改完必须验证**：改一处 → 渲染 → 读 lint 输出 → 目检 PNG → 再改下一处。E 级 lint 必须清零。
 4. **默认顶会观感**：新图默认 `theme: {preset: topconf}`，按四层分解法（全局→分区→标注→风格）写 spec，遵守信息密度 checklist（无空盒、≥50% 模块含 sketch/icon、主箭头有标签、有分区底色、多语义色必有 legend）。详见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)。
 5. **从零作图先优化需求**：尚无精确 spec 时，先用 [`prompts/FIGURE_BRIEF.md`](prompts/FIGURE_BRIEF.md) 把粗糙需求 / 论文片段扩写成 Figure Brief，再写 YAML（工作流 Phase 0.5 → Phase 1）。用户已给精确改图指令时可跳过。
-6. **混合模式何时用**：形象化场景 / 英雄图 / 演示材料 → `base:`（skeleton 优先）；严肃排版投稿主文图 → 纯矢量。base 抽卡后**必须**目检 contact sheet（查烤字/**烤箭头/烤连接线**/漂移；核对骨架浅灰保留区是否被插画侵占）。
+6. **混合模式何时用**：形象化场景 / 英雄图 / 演示材料 → `base:`（skeleton 优先）；严肃排版投稿主文图 → 纯矢量。`base.style` 三选一（医学管线→`journal-schematic`，系统/RL→`technical-lineart`，通用→`sci-flat-pro`）。base 抽卡后**必须**目检 contact sheet（查烤字/**烤箭头/烤连接线**/漂移；核对骨架浅灰保留区是否被插画侵占）。
 7. **交付前必须切片循环复核**：`render`（≥300dpi）→ `paperfig tiles` → **逐片目检**按 checklist 记缺陷 → 修 spec/重抽 → 重渲复检 → **循环直到连续一整轮零新发现**（至少两轮）。未完成不得交付。
 
 ## 前置条件

@@ -352,7 +352,8 @@ elements:
 ```yaml
 base:
   mode: skeleton          # 或 freeform
-  prompt: "…"             # 底稿场景描述（构图/模块物件/风格/净空）
+  prompt: "…"             # 底稿场景描述（构图/模块物件/净空；风格走 style 字段）
+  style: sci-flat-pro     # 可选；journal-schematic|technical-lineart|sci-flat-pro
   image: base/base.png    # 选中底稿（相对 spec 目录；pick 可回写）
   candidates: 3
   regions:                # freeform 必填；skeleton 由 layout 几何对齐，通常可不写
@@ -360,6 +361,18 @@ base:
 ```
 
 元素可用 `region: <id>` 锚定 `base.regions`（代替手写 `rect`/`at`）。CLI key 走 `PAPERFIG_API_KEY`（`-k` 亦可）。
+
+### 风格包选择（`base.style`）
+
+| 包名 | 适用 | 一句话 |
+| --- | --- | --- |
+| `journal-schematic` | 医学/生物管线、临床流程、测序/成像 CAD | Nature/Cell methods 风：技术性简化器物 + 低饱和点缀色 |
+| `technical-lineart` | 系统/RL/架构、训练管线、模型结构 | OSDI/SOSP + ResNet 工程制图：细线、灰阶、纯模块块图 |
+| `sci-flat-pro` | 通用底稿（默认兜底） | 去卡通化专业扁平：可读色块，告别贴纸先验 |
+
+缺省按 theme 映射：`neurips`/`topconf`/`sci`→`sci-flat-pro`，`editorial`→`journal-schematic`，`isosystem`→`technical-lineart`，其余→`sci-flat-pro`。
+
+**禁用污染词**（写进 `base.prompt` / `assets_style` 也会把模型拉向童书贴纸）：`flat vector illustration`、`friendly rounded`、`soft pastel`、`uniform 2px outline`、裸 `three-quarter view`（应写 orthographic / equipment-catalog）。
 
 ### skeleton（首选）：布局对齐图生图
 
@@ -382,19 +395,21 @@ base:
 
 ### 底稿 prompt 写法（必须遵守）
 
-**要写**：扁平插画；**浅色 / pastel 模块填充**（配合文字板可读性）；每模块具象物件与构图；模块间留净空；标签落点留浅色平整区。
+**要写**：技术性示意 / 浅色模块填充（配合文字板可读性）；每模块具象物件与构图；模块间留净空；标签落点留浅色平整区。风格用 `base.style` 包，**不要**在 prompt 里堆 `flat vector illustration` / `friendly rounded`。
 
 **禁止（写进 prompt，仍须目检）**：
 - 画面内**任何文字、字母、数字**（模型仍偶发烤字 → contact sheet 筛卡是必经步骤）
 - **不要画箭头 / 连接线**（矢量层负责）
 - 深色满铺、重纹理占满模块、外框装饰、照片级写实 / 霓虹
+- 污染词：`flat vector illustration`、`friendly rounded`、吉祥物/笑脸/贴纸隐喻
 
-**抽卡不满意**：先改 `base.prompt` 再 `--force`；仍差再换 model（`nano-banana-fast` → `nano-banana-2` / `nano-banana-pro`）。
+**抽卡不满意**：先改 `base.prompt` 或 `base.style` 再 `--force`；仍差再换 model（`nano-banana-fast` → `nano-banana-2` / `nano-banana-pro`）。
 
 **反例**：
 - ❌ `"图上标注 Encoder / Decoder 和箭头"` → 必烤字 + 抢矢量层
 - ❌ `"赛博朋克霓虹，深色背景写满公式"` → 对比度崩、文字板救不回来
-- ✅ `"flat pastel scientific illustration, left CT scanner module, center U-Net block, right report desk; light fills; no text no arrows; clear gaps between modules"`
+- ❌ `"flat vector illustration, friendly rounded pastel icons"` → 童书贴纸先验
+- ✅ `"biomedical methods pipeline; left CT scanner module (catalog-style), center U-Net block, right report panel; light fills; no text no arrows; clear gaps"` + `style: journal-schematic`
 
 ---
 
@@ -452,7 +467,7 @@ python -m paperfig.cli render {project}/figure.yaml --grid -o {project}/draft.pn
 python -m paperfig.cli assets {project}/figure.yaml --api-key <KEY>
 ```
 
-- 顶层可写 `assets_style`（英文插画语言），工具会注入与 `theme`/`palette` 一致的 STYLE SPECIFICATIONS（含统一色板、~2px 描边、图标级抽象、三分之四视角硬约束）。
+- 顶层可写 `assets_style`（英文插画语言），工具会注入与 `theme`/`palette` 一致的 STYLE SPECIFICATIONS（含统一色板、hairline ~1px 描边、技术性示意抽象、正交/器材目录视角硬约束；**禁用** `flat vector illustration` / `friendly rounded`）。
 - `assets[].prompt`：**只写「是什么 + 形态」**（如「一块 GPU 加速卡，斜俯视角」）；**不要写色调/风格词**（蓝灰、扁平插画、赛博朋克等——交给风格包，避免与 STYLE SPEC 抢权）；**不要写文字**；避免负面人像/审核敏感词。
 - **必须目检** `contact_sheet_{id}.png` 再定稿：自动选卡**只看抠图洁净度**（前景占比/连通块/贴边），**不保证**跨素材视角与细节密度一致。优先选与同图其他素材视角族一致的候选；换卡零成本：
   ```bash

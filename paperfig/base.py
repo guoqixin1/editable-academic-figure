@@ -24,10 +24,13 @@ from .assets import (
     Candidate,
     GachaResult,
     _generate_one,
-    build_style_pack,
-    resolve_style_for_assets,
 )
 from .spec import AssetEl, ArrowEl, BoxEl, FigureSpec, PanelEl, load_spec
+from .styles import (
+    format_avoid_section,
+    format_base_style_section,
+    resolve_base_style,
+)
 from .theme import load_theme
 
 # 底稿版硬约束（与素材版不同：整幅构图、不抠图、模块落点）
@@ -48,9 +51,9 @@ image when a reference is provided (skeleton mode); keep module positions aligne
 - 白色或极浅背景。
 - Do not draw outer frames, borders, page margins, or decorative chrome around the canvas.
 - 不要画外框/边框装饰。
-- Flat vector illustration language consistent with the theme style pack above; \
+- Match the named style pack above (journal-schematic | technical-lineart | sci-flat-pro); \
 no photorealism, no 3D render, no neon glow.
-- 扁平矢量插画风格与主题一致。"""
+- 匹配上方命名风格包；禁止写实/3D/霓虹。"""
 
 # skeleton 强编辑指令：弱 prompt 会原样吐色块，必须明确 replace fill + 禁止几何变换
 _SKELETON_EDIT_INSTRUCTIONS = """\
@@ -63,6 +66,17 @@ blocks are reserved for later text plates — keep them plain and unillustrated.
 - 强编辑：把每个色块的平面填充替换成插画内容；保持每个模块的位置与 footprint \
 完全不变；禁止平移、缩放、合并或拆分模块。
 - 模块内同色系浅色头带与浅灰占位块为文字板保留区：保持平面净空，不要插画或装饰。"""
+
+# technical-lineart 骨架额外纪律：灰阶块 + 至多一条钢蓝关键路径
+_SKELETON_EDIT_LINEART_EXTRA = """\
+- Color discipline (technical-lineart): fill modules with greyscale technical \
+shading only; the single blue-tinted block is the critical path and may carry \
+the only accent hue.
+- 色彩纪律：模块只许灰阶技术阴影；唯一偏蓝色块为关键路径，可保留唯一强调色相。"""
+
+# technical-lineart 幽灵块灰阶档（暗→亮）；相邻块循环取不同档
+_LINEART_GREYS = ("#C9CED4", "#D2D6DB", "#DBDFE3", "#E4E7EA")
+_LINEART_ACCENT = "#3D5A80"  # 钢蓝：仅 base.accent 关键路径
 
 # nano-banana 常见宽高比；按 figure mm 比例就近匹配
 _ASPECT_CHOICES: list[tuple[float, str]] = [
@@ -139,7 +153,7 @@ def base_pixel_size(
 
 
 def _skeleton_palette(theme_cfg: dict | str | None) -> list[str]:
-    """饱和区分色：优先 theme variant 描边色，循环取用。"""
+    """饱和区分色：优先 theme variant 描边色，循环取用（sci-flat-pro / 缺省）。"""
     th = load_theme(theme_cfg)
     colors: list[str] = []
     seen: set[str] = set()
@@ -160,17 +174,50 @@ def _skeleton_palette(theme_cfg: dict | str | None) -> list[str]:
     return colors
 
 
+def _journal_light_fill(fill: str, *, lightness: float = 0.85) -> str:
+    """journal-schematic 浅中性块：保留微弱色相，L≥0.8，S 压低。"""
+    r, g, b = _hex_to_rgb01(fill)
+    h, _l, s = colorsys.rgb_to_hls(r, g, b)
+    l = max(float(lightness), 0.8)
+    nr, ng, nb = colorsys.hls_to_rgb(h, l, s * 0.28)
+    return _rgb01_to_hex(nr, ng, nb)
+
+
+def skeleton_ghost_fill(
+    style: str,
+    theme_cfg: dict | str | None,
+    color_i: int,
+    *,
+    is_accent: bool = False,
+) -> str:
+    """按 base.style 分派幽灵块填色。
+
+    - technical-lineart：灰阶档循环；accent 关键路径 → 钢蓝 #3D5A80
+    - journal-schematic：主题色浅中性化（L≥0.8，微弱色相）
+    - sci-flat-pro / 其余：主题饱和区分色（旧行为）
+    """
+    if style == "technical-lineart":
+        if is_accent:
+            return _LINEART_ACCENT
+        return _LINEART_GREYS[color_i % len(_LINEART_GREYS)]
+    palette = _skeleton_palette(theme_cfg)
+    raw = palette[color_i % len(palette)]
+    if style == "journal-schematic":
+        return _journal_light_fill(raw)
+    return raw
+
+
 def render_skeleton(
     spec: FigureSpec,
     out_path: str | Path | None = None,
     *,
     long_side: int = _SKELETON_LONG_SIDE,
 ) -> Path | bytes:
-    """渲无文字色块骨架图：幽灵 box/asset 饱和色块，ghost:false 浅灰占位；白底。
+    """渲无文字色块骨架图：幽灵 box/asset 按 base.style 配色，ghost:false 浅灰占位；白底。
 
     panel 默认极浅底；ghost:false panel 同样用浅灰保留区。
     幽灵盒的 title/body 文字板矩形与渲染板同源（零外扩），填该盒色块的同色系提亮
-    （读作模块浅色头带，而非灰补丁）。
+    （灰阶块→更浅灰；彩色块→同色系浅头带）。
     像素尺寸与底稿目标一致（长边 long_side）。返回写入路径，或未给 out_path 时返回 PNG bytes。
     """
     from .render import (
@@ -182,8 +229,15 @@ def render_skeleton(
     pw, ph = base_pixel_size(spec.width, spec.height, long_side=long_side)
     sx = pw / spec.width
     sy = ph / spec.height
-    palette = _skeleton_palette(spec.theme_cfg)
+    base = spec.base
+    style = resolve_base_style(
+        None if base is None else base.style,
+        spec.theme_cfg,
+    )
+    accent_ids = set(() if base is None else (base.accent or []))
     th = load_theme(spec.theme_cfg)
+    # sci-flat-pro 文字板缺省回退色
+    fallback_fill = _skeleton_palette(spec.theme_cfg)[0]
 
     img = Image.new("RGB", (pw, ph), "#FFFFFF")
     draw = ImageDraw.Draw(img)
@@ -225,7 +279,10 @@ def render_skeleton(
         node_rects[el.id] = r
         node_visual[el.id] = visual_rect_for(el)
         if _skeleton_is_ghost(el):
-            fill = palette[color_i % len(palette)]
+            fill = skeleton_ghost_fill(
+                style, spec.theme_cfg, color_i,
+                is_accent=el.id in accent_ids,
+            )
             color_i += 1
             ghost_fills[el.id] = fill
         else:
@@ -249,7 +306,7 @@ def render_skeleton(
             continue
         pret = estimate_box_text_plate(el, th, spec.font_scale)  # expand_mm=0
         if pret is not None:
-            base_fill = ghost_fills.get(el.id, palette[0])
+            base_fill = ghost_fills.get(el.id, fallback_fill)
             _fill_rect_mm(pret, tint_reserve_color(base_fill))
 
     # 箭头标签胶囊：仅静态可算（显式 offset / 非 auto）；auto/avoid 不画
@@ -277,16 +334,29 @@ def render_skeleton(
 def build_base_prompt(
     scene_prompt: str,
     theme_cfg: dict | str | None = None,
-    assets_style: str | None = None,
-    style_pack: str | None = None,
     *,
+    base_style: str | None = None,
+    style_pack: str | None = None,
     skeleton: bool = False,
 ) -> str:
-    """组装底稿生图 prompt：场景描述 + 主题风格包 + 底稿版硬约束。"""
+    """组装底稿生图 prompt：场景 + 风格包正向段 + 硬约束 + Avoid 负向段。
+
+    base_style: 包名（journal-schematic | technical-lineart | sci-flat-pro）；
+    缺省按 theme 映射。style_pack 若给出则覆盖正向段正文（测试/高级覆盖用）。
+    """
     subject = (scene_prompt or "").rstrip("。，,.\n ")
-    pack = style_pack if style_pack is not None else build_style_pack(theme_cfg, assets_style)
-    extra = f"\n{_SKELETON_EDIT_INSTRUCTIONS}" if skeleton else ""
-    return f"{subject}\n\n{pack}\n\n{_BASE_HARD_CONSTRAINTS}{extra}"
+    style_name = resolve_base_style(base_style, theme_cfg)
+    if style_pack is not None:
+        pack = style_pack
+    else:
+        pack = format_base_style_section(style_name)
+    avoid = format_avoid_section(style_name)
+    extra = ""
+    if skeleton:
+        extra = f"\n{_SKELETON_EDIT_INSTRUCTIONS}"
+        if style_name == "technical-lineart":
+            extra += f"\n{_SKELETON_EDIT_LINEART_EXTRA}"
+    return f"{subject}\n\n{pack}\n\n{_BASE_HARD_CONSTRAINTS}{extra}\n\n{avoid}"
 
 
 def _score_base_image(path: Path) -> tuple[float, str, dict[str, Any]]:
@@ -409,16 +479,10 @@ def base_gacha(
         print(f"[跳过] 底稿已存在: {final_path}（加 --force 重抽）")
         return result
 
-    pack, theme_cfg, assets_style = resolve_style_for_assets(
-        base_dir,
-        theme_cfg=spec.theme_cfg,
-        spec_path=spec.path,
-    )
     full_prompt = build_base_prompt(
         spec.base.prompt,
-        theme_cfg=theme_cfg,
-        assets_style=assets_style,
-        style_pack=pack,
+        theme_cfg=spec.theme_cfg,
+        base_style=spec.base.style,
         skeleton=(spec.base.mode == "skeleton"),
     )
     result.full_prompt = full_prompt

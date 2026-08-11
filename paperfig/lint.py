@@ -84,6 +84,7 @@ _ARROW_LABEL_BG_OPACITY = 0.92
 _PLATE_OVERLAP_FRAC = 0.30        # 两块文字底板重叠占较小者面积比例 → W
 _DRIFT_RING_MM = 6.0              # 骨架矩形外扩环带宽度
 _DRIFT_EMPTY_IN = 0.08            # 矩形内非白占比低于此 → 近空
+_DRIFT_DENSE_IN = 0.50          # 内密度≥此则视作实心板，抑制环带误报（浅底稀疏图标勿用 0.70）
 _DRIFT_SPILL_FRAC = 0.40          # 环带墨迹占（内+环）比例；宽松，3px 偏移约 0.07
 _DRIFT_SPILL_MIN_INK = 60         # 环带至少这么多非白像素才谈溢出
 _INK_WHITE_LUMA = 0.92            # 高于此亮度视作"白/近白"底
@@ -1547,6 +1548,8 @@ def _check_base_region_drift(spec: FigureSpec, res: RenderResult) -> list[Issue]
     用墨迹像素计数比（spill = 环带/(内+环)），阈值宽松：好卡 <3px 偏移
     spill≈0.07，不应误伤。freeform / 无底稿跳过。
     ghost:false 实体盒不参与（底稿被矢量填充盖住，漂移无意义）。
+    环带排除其他幽灵模块矩形，避免紧邻管线把邻居墨迹算成「溢出」
+    （journal-schematic 浅底+稀疏图标时 dens 门闩会放大该误报）。
     """
     if spec.base is None or spec.base.mode != "skeleton":
         return []
@@ -1556,16 +1559,19 @@ def _check_base_region_drift(spec: FigureSpec, res: RenderResult) -> list[Issue]
     arr, sx, sy = loaded
     issues: list[Issue] = []
 
-    # 与骨架导出一致：对拍 box/asset 色块矩形（panel 极浅底不做漂移判据）
+    # 预收集幽灵模块矩形，供环带邻居剔除
+    ghost_rects: list[tuple[str, Rect]] = []
     for el in spec.elements:
         if not isinstance(el, (BoxEl, AssetEl)):
             continue
-        # 实体盒盖住底稿，不参与漂移对拍
         if not _is_ghost(el, True):
             continue
-        r = res.node_rects.get(el.id) or el.rect
-        if r.w < 4 or r.h < 4:
-            continue
+        gr = res.node_rects.get(el.id) or el.rect
+        if gr.w >= 4 and gr.h >= 4:
+            ghost_rects.append((el.id, gr))
+
+    # 与骨架导出一致：对拍 box/asset 色块矩形（panel 极浅底不做漂移判据）
+    for el_id, r in ghost_rects:
         inner = _sample_rect_rgb(arr, sx, sy, r)
         if inner is None:
             continue
@@ -1578,14 +1584,16 @@ def _check_base_region_drift(spec: FigureSpec, res: RenderResult) -> list[Issue]
             continue
         outer_patch, ox0, oy0 = outer_patch_meta
         ring_mask = np.ones(outer_patch.shape[:2], dtype=bool)
-        ix0 = int(math.floor(r.x * sx)) - ox0
-        iy0 = int(math.floor(r.y * sy)) - oy0
-        ix1 = int(math.ceil(r.right * sx)) - ox0
-        iy1 = int(math.ceil(r.bottom * sy)) - oy0
-        ix0 = max(0, ix0); iy0 = max(0, iy0)
-        ix1 = min(outer_patch.shape[1], ix1); iy1 = min(outer_patch.shape[0], iy1)
-        if ix1 > ix0 and iy1 > iy0:
-            ring_mask[iy0:iy1, ix0:ix1] = False
+        # 挖掉自身 + 其他幽灵模块（邻居不算溢出）
+        for _, nr in ghost_rects:
+            ix0 = int(math.floor(nr.x * sx)) - ox0
+            iy0 = int(math.floor(nr.y * sy)) - oy0
+            ix1 = int(math.ceil(nr.right * sx)) - ox0
+            iy1 = int(math.ceil(nr.bottom * sy)) - oy0
+            ix0 = max(0, ix0); iy0 = max(0, iy0)
+            ix1 = min(outer_patch.shape[1], ix1); iy1 = min(outer_patch.shape[0], iy1)
+            if ix1 > ix0 and iy1 > iy0:
+                ring_mask[iy0:iy1, ix0:ix1] = False
         if not np.any(ring_mask):
             continue
         ring_luma = _simple_luma(
@@ -1599,7 +1607,7 @@ def _check_base_region_drift(spec: FigureSpec, res: RenderResult) -> list[Issue]
         overflow = (
             spill >= _DRIFT_SPILL_FRAC
             and ink_ring >= _DRIFT_SPILL_MIN_INK
-            and dens_in < 0.70
+            and dens_in < _DRIFT_DENSE_IN
         )
         if near_empty or overflow:
             why = []
@@ -1609,7 +1617,7 @@ def _check_base_region_drift(spec: FigureSpec, res: RenderResult) -> list[Issue]
                 why.append(f"环带墨迹溢出比 {spill:.0%}≥{_DRIFT_SPILL_FRAC:.0%}")
             issues.append(Issue(
                 "W", "base-region-drift",
-                f"模块 '{el.id}' 与底稿内容疑似漂移（{'; '.join(why)}）；"
+                f"模块 '{el_id}' 与底稿内容疑似漂移（{'; '.join(why)}）；"
                 f"建议重抽/换卡或核对骨架对齐",
             ))
     return issues

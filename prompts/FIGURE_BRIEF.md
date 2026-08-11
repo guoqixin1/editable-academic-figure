@@ -138,7 +138,11 @@ For each panel / major region:
 - **底稿场景描述**（**仅 base 模式需要**；纯矢量写 `N/A`）:
   - 构图 / 阅读方向（左→右模块落点）
   - 每模块的具象物件（设备、场景、材质——不要写屏幕上的字）
-  - 风格：扁平插画、**浅色/pastel 模块填充**
+  - **风格锚（`base.style`）三选一**：
+    - `journal-schematic`：Nature/Cell methods 风，医学/生物管线首选
+    - `technical-lineart`：工程制图细线块图，系统/RL/架构首选
+    - `sci-flat-pro`：去卡通化专业扁平，通用兜底
+  - 风格：浅色模块填充、技术性示意（**禁用** `flat vector illustration` / `friendly rounded` 等污染词）
   - 净空：模块间留缝；标签区浅色平整；**禁止文字字母数字**；**不要画箭头/连接线**
 
 ## 4. Assets — 素材清单

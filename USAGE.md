@@ -341,7 +341,7 @@ elements:
 
 ### 7.1 风格包（同一画师）
 
-同图所有 AI 素材共享：**色板 hex**（来自 `theme`/`palette`）+ **插画语言** + 抽象层级 / ~2px 描边 / 三分之四视角硬约束。顶层可覆盖：
+同图所有 AI 素材共享：**色板 hex**（来自 `theme`/`palette`）+ **插画语言** + 抽象层级 / hairline ~1px 描边 / 正交或器材目录式三分之四视角硬约束。顶层可覆盖：
 
 ```yaml
 figure: {width: 80, height: 40, dpi: 600, assets_dir: assets}
@@ -377,7 +377,8 @@ python -m paperfig.cli assets fig.yaml --only microscope --force   # 改 prompt 
 ```yaml
 base:
   mode: skeleton          # 或 freeform
-  prompt: "flat pastel …" # 场景描述；禁字禁箭；浅色模块+净空
+  prompt: "catalog-style CT scanner …"  # 场景描述；禁字禁箭；浅色模块+净空
+  style: journal-schematic  # 可选；医学→journal-schematic，RL/架构→technical-lineart，通用→sci-flat-pro
   image: base/base.png
   candidates: 3
 ```

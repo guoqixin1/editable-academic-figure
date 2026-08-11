@@ -83,6 +83,8 @@ assets:               # 声明要 AI 生成的物件（抽卡对象）
 base:                 # 可选：AI 整图底稿混合模式
   mode: skeleton      # skeleton | freeform
   prompt: "…"         # 底稿场景描述
+  style: sci-flat-pro # 可选；journal-schematic|technical-lineart|sci-flat-pro；缺省按 theme 映射
+  accent: [policy]    # 可选；skeleton 关键路径 id（lineart 钢蓝强调；缺省 []=全灰阶）
   image: base/base.png
   candidates: 3
   regions: {enc: [12, 20, 40, 36]}   # freeform；skeleton 通常靠 layout 对齐
@@ -92,7 +94,7 @@ base:                 # 可选：AI 整图底稿混合模式
 - `theme.palette`：8-role 覆盖，如 `{primary: "#00897B", secondary: "#FFB300", section_bg: "#ECEFF1"}`。
 - `variant`（box/panel/tokens）：`primary secondary tertiary accent highlight plain dark muted`。语义：primary=核心贡献，secondary=次要，muted/plain=常规。
 - `assets_style`：顶层英文插画语言，抽卡时与 theme 色板一并注入（跨素材风格锁）。
-- **`base:`**：有则进入混合模式——`base.image` 全画布打底；文字/箭头仍矢量。主题可调 `plate_fill` / `plate_opacity` / `plate_pad` / `plate_radius`。**禁止**对底稿做板下漂白等破坏性后处理；对比度不足优先提高 `plate_opacity` / 加大保留带，再不行重抽。
+- **`base:`**：有则进入混合模式——`base.image` 全画布打底；文字/箭头仍矢量。`base.style` 三选一（医学/生物管线→`journal-schematic`，系统/RL/架构→`technical-lineart`，通用→`sci-flat-pro`）；缺省按 theme 映射（neurips/topconf/sci→sci-flat-pro，editorial→journal-schematic，isosystem→technical-lineart）。`base.accent: [id…]` 指定 skeleton 关键路径（lineart 下钢蓝 `#3D5A80`，其余模块灰阶；缺省空=全灰阶）。骨架幽灵块配色随 style 分派（lineart 灰阶 / journal 浅中性 L≥0.8 / flat 主题饱和色）。主题可调 `plate_fill` / `plate_opacity` / `plate_pad` / `plate_radius`。**禁止**对底稿做板下漂白等破坏性后处理；对比度不足优先提高 `plate_opacity` / 加大保留带，再不行重抽。
 
 ### elements（`type` 区分）
 

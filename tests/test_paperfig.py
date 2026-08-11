@@ -1211,11 +1211,12 @@ def test_style_pack_sci_contains_palette_and_sections():
     assert "#3B6EA5" in pack
     assert "restricted color palette" in pack.lower() or "Restricted color palette" in pack
     assert "one illustrator" in pack
-    assert "icon-level abstraction" in pack
+    assert "iconographic laboratory glyphs" in pack or "abstract labeled blocks" in pack
     assert "Outline lock:" in pack
     assert "Viewing angle (required):" in pack
-    assert "three-quarter view" in pack
-    assert "three-quarter or side view" not in pack  # 软建议已改为硬要求
+    assert "equipment-catalog three-quarter" in pack
+    assert "flat vector" not in pack.lower()
+    assert "friendly rounded" not in pack.lower()
 
     full = build_full_prompt("一台简洁的光学显微镜，侧面视角", theme_cfg="sci")
     assert full.startswith("一台简洁的光学显微镜")
@@ -1223,8 +1224,9 @@ def test_style_pack_sci_contains_palette_and_sections():
     assert "HARD CONSTRAINTS:" in full
     assert "#FFFFFF" in full
     assert "no PCB-level" in full
-    assert "uniform outline weight (~2px)" in full
+    assert "hairline uniform stroke weight (~1px)" in full
     assert "Viewing angle required:" in full
+    assert "mascot faces" in full
     assert resolve_asset_palette("sci") == ["#3B6EA5", "#5B8266", "#C77D2E", "#B5B5B5"]
 
 
@@ -1266,7 +1268,7 @@ def test_assets_style_override_and_yaml_load(tmp_path):
     custom = "isometric cute robot icons, thick 3px navy outline, candy colors"
     pack = build_style_pack("sci", assets_style=custom)
     assert custom in pack
-    assert "flat vector-style scientific illustration" not in pack  # 默认风格被覆盖
+    assert "technical schematic scientific illustration" not in pack  # 默认风格被覆盖
 
     yaml_text = """
 figure: {width: 100, height: 60, assets_dir: assets}
