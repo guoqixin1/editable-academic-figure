@@ -5,16 +5,17 @@
 
 - **Controllable layout**：`layout:` 树（row/col/grid）或显式 mm 坐标；`resolve` 物化后可手改，100% 可复现。
 - **AI 只画物件**：自动抠成透明 PNG；文字/连线/公式全部代码渲染。
+- **混合模式（base）**：AI 整图底稿拉观感上限，文字/箭头仍矢量精确可编辑（改文案秒级重渲）。
 - **顶会级信息密度**：`neurips` Soft Pastel / `topconf` / `editorial` / `isosystem`、`sketch`、inline `legend`、箭头语义。
-- **生成即体检**：几何 + 视觉丰度 lint（含 `R-empty-box` / 箭头对齐）；本地 **studio** 拖拽微调。
+- **生成即体检**：几何 + 视觉丰度 lint（含 `R-empty-box` / 箭头对齐 / base 对比度）；本地 **studio** 拖拽微调。
 
 |  | 纯代码作图 (draw.io/TikZ) | 纯 AI 生图 | **paperfig** |
 | --- | --- | --- | --- |
 | 布局精确可控 | ✅ | ❌ | ✅ |
 | 可手工微调 / 复现 | ✅ | ❌ | ✅ |
 | 文字清晰无乱码 | ✅ | ❌ | ✅（文字走代码） |
-| 插画素材美观 | ❌ | ✅ | ✅（AI 画物件） |
-| 视觉精美度（阴影/缩略图/图例/顶会风） | 靠手工堆叠 | 不可控 | ✅（主题 + sketch + legend） |
+| 插画素材美观 | ❌ | ✅ | ✅（AI 画物件；可选整图底稿） |
+| 视觉精美度（阴影/缩略图/图例/顶会风） | 靠手工堆叠 | 不可控 | ✅（主题 + sketch + legend + 可选 base） |
 | 达到审稿人精度 | 勉强 | ❌ | ✅ |
 
 > 📖 **人读教程** → [USAGE.md](USAGE.md)  
@@ -121,6 +122,28 @@ elements:
 4. **抽卡素材**（可选）：`python -m paperfig.cli assets fig.yaml` → 目检 contact sheet → `select` 换卡。
 5. **定稿**：`python -m paperfig.cli render fig.yaml -o fig.png --svg fig.svg`（清零 E 级，尽量清零 `R-*`）。
 
+**混合模式（base）简例**（形象化场景 / 英雄图；严肃投稿主文图仍用纯矢量）：
+
+```bash
+python -m paperfig.cli base gen fig.yaml -k "$PAPERFIG_API_KEY"   # skeleton：骨架→图生图抽卡
+python -m paperfig.cli base pick fig.yaml 2                      # 目检 contact sheet 后选卡
+python -m paperfig.cli base grid fig.yaml                        # freeform：叠 mm 网格标 regions
+```
+
+流程与 prompt 要点见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)「混合模式（base）」与 [USAGE §8](USAGE.md#8-混合模式-base)。样例在 [`examples/hybrid/`](examples/hybrid/)。
+
+**医学影像 CAD · 混合版**（学术混搭：顶行形象模块交 AI 底稿，中底排统计/I/O 面板保持矢量）：
+
+![Hybrid Medical CAD](docs/images/showcase-hybrid-medical.png)
+
+→ [`examples/hybrid/medical_cad/figure.yaml`](examples/hybrid/medical_cad/figure.yaml)
+
+**LLM Agent RL · 混合版**（英雄图形态：整图底稿拉观感，文字/箭头/公式仍矢量可编辑）：
+
+![Hybrid Agent RL](docs/images/showcase-hybrid-agentrl.png)
+
+→ [`examples/hybrid/agent_rl/figure.yaml`](examples/hybrid/agent_rl/figure.yaml)
+
 ## spec 速览
 
 ```yaml
@@ -168,6 +191,9 @@ elements:
 | `studio spec [--port 8323]` | 交互式调图 |
 | `assets spec [--api-key KEY] [--only ids] [--force]` | 抽卡生成素材 |
 | `select spec ASSET_ID INDEX` | 换卡（零 API 成本） |
+| `base gen spec [-k KEY] [--model …] [--candidates N] [--force]` | AI 整图底稿抽卡 |
+| `base pick spec INDEX` | 选中底稿候选 |
+| `base grid spec` | 底稿叠 mm 网格（freeform 标区） |
 | `cutout in.png out.png` | 单独抠白底图 |
 
-**Keywords / 关键词**: academic figure · paper figure · editable · controllable layout · reproducible · architecture diagram · framework diagram · YAML spec · SVG · 论文配图 · 学术作图 · 论文架构图 · 顶会风格图 · CVPR/NeurIPS style
+**Keywords / 关键词**: academic figure · paper figure · editable · controllable layout · reproducible · hybrid AI base · illustrated figure · architecture diagram · framework diagram · YAML spec · SVG · 论文配图 · 学术作图 · 论文架构图 · 顶会风格图 · CVPR/NeurIPS style · 混合制图
