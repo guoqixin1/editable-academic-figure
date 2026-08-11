@@ -1,8 +1,12 @@
-# B1 — LLM Agent RL Training Loop · neurips Soft Pastel · 混合模式试点
-# AI 整图底稿 + 矢量标注层；layout/文字/箭头/图例语义与纯矢量版对齐
+# B1 — LLM Agent RL Training Loop · neurips Soft Pastel · 混合模式试点 v4
+# 修 v3：禁漂白重抽；新保留带同源同色提亮；恢复副题；压 token 红；legend 铺满
 figure: {width: 184, dpi: 600, background: "#FFFFFF"}
 theme:
   preset: neurips
+  # 略加大 pad：盖住模型保留带头带羽化露边（双层板重影）
+  plate_pad: 2.0
+  plate_opacity: 0.92
+  plate_radius: 0.0
 
 base:
   mode: skeleton
@@ -10,81 +14,112 @@ base:
   image: base/base.png
   prompt: >
     Flat vector scientific illustration of an LLM agent reinforcement-learning
-    training loop as a hero diagram. Soft NeurIPS pastel fills ONLY — every
-    module must be light pastel (mint, peach, lavender, sky, cream, soft blue).
+    training loop as a hero diagram. VERY LIGHT PASTEL ONLY — high-lightness,
+    muted, desaturated washes (mint mist, peach mist, lavender mist, sky mist,
+    cream). Think watercolor wash at 15% opacity, NOT vivid poster color.
     Unified thin dark stroke, white/near-white background, generous gaps.
 
-    CRITICAL COLOR DISCIPLINE: NO dark fills, NO black/charcoal/navy panels,
-    NO deep brown parchment, NO saturated hot-pink slabs. The parchment-scroll
-    rollout module MUST stay light cream / soft peach pastel — never ink-black
-    or dark brown. All icons use pale washes with thin strokes only.
+    CRITICAL COLOR DISCIPLINE: NO saturated blues/purples/pinks; NO dark fills;
+    NO black/charcoal/navy panels; NO deep brown parchment; NO hot-pink slabs.
+    LEFT cool panel = very pale sky mist. UPPER-RIGHT = very pale lavender mist.
+    SIDE PATH = near-white warm gray mist. Parchment scroll = light cream only.
 
-    CRITICAL: draw ZERO text of any kind — no panel titles, no captions, no
-    words under icons, no letters, no digits, no Greek letters, no code glyphs
-    like angle-brackets or curly braces, no JSON tags. Icons only. Do not echo
-    any words from this prompt onto the canvas.
+    CRITICAL — ZERO TEXT: draw ZERO text of any kind — no panel titles, no
+    captions, no words under icons, no letters, no digits, no Greek letters,
+    no code glyphs like angle-brackets or curly braces, no JSON tags. Icons
+    only. Do not echo any words from this prompt onto the canvas.
 
-    FOOTPRINT LOCK: every illustration prop must stay strictly inside its
-    colored skeleton block; do not spill ink into neighboring gaps or panels.
-    Keep a thin light margin inside each block edge.
+    CRITICAL — NO ARROWS / NO CONNECTORS: do NOT draw arrows, arrowheads,
+    chevrons, directional triangles, flow ribbons with tips, connecting lines,
+    leader lines, or any directional symbols between or inside modules.
+    Vector layer will add all connectors later. Scroll trajectories must be
+    soft undirected ribbons WITHOUT arrow tips. Hourglass has NO down-arrow.
+
+    FOOTPRINT LOCK (STRICT): every illustration prop must stay strictly inside
+    its colored skeleton block; do not spill ink into neighboring gaps, gutters,
+    or panels. Keep ≥3mm empty margin inside each block edge. Shrink icons so
+    they fit with clear breathing room — especially the parchment scroll,
+    balance scale pans/beams, database cylinder, and ice-crystal robot. No ink
+    outside the colored footprint.
+
+    RESERVED HEADBANDS (CRITICAL): Each saturated module block has a lighter
+    same-hue headband strip at the top (a tinted wash of that block's color,
+    NOT gray, NOT a separate object). These headbands are reserved for later
+    vector text — keep them plain flat tinted wash only. Do NOT paint icons,
+    texture, dials, gears, or decorations on the headband. Place each module's
+    object ONLY in the richer-colored portion BELOW the light headband.
+
+    ICON PLACEMENT (CRITICAL): Put the full icon inside the colored portion
+    under the headband so the whole prop is visible (dial faces, gear teeth,
+    scroll body, scale pans, robot head, crystal — complete, not cropped).
+    Leave ≥2mm margin from block edges. Do not let props invade the headband
+    or spill outside the footprint.
 
     Module props must match each colored skeleton block (one prop family per
-    block; do not merge blocks). Describe by POSITION/COLOR only. Pale-gray
-    reserved blocks stay plain empty — do not illustrate them.
+    block; do not merge blocks). Describe by POSITION/COLOR only.
 
-    LEFT cool-blue wash panel:
+    LEFT very-pale sky panel:
     - Top parallelogram block: control-tower clipboard with branching ticket
-      cards and a tiny schema-tree glyph (icon strokes only).
+      cards and a tiny schema-tree glyph — icon fully in the colored area
+      under the light headband.
     - Large center block: friendly chip-brain robot head with a glowing neural
-      chip faceplate (warm soft-orange accent on pale fill).
-    - Bottom row of three small blocks left-to-right:
+      chip faceplate (warm soft-orange accent on pale fill) — below headband.
+    - Bottom row of three small blocks left-to-right (tiny icons under headband):
       magnifying glass over a tiny web globe;
       terminal-window icon with abstract code-line bars (NO letter glyphs);
       filing drawer / stacked memory chips.
 
-    UPPER-MIDDLE warm-peach wash panel:
-    - Left colored block: LIGHT pastel parchment scroll (cream/peach only,
-      never dark) with 3–4 soft forking trajectory ribbons in soft blue/coral.
+    UPPER-MIDDLE warm peach-mist panel:
+    - Left colored block: LIGHT pastel parchment scroll (cream/peach only)
+      with 3–4 soft parallel wavy stroke marks in soft blue/coral on the
+      parchment face — like gentle scribble paths ONLY. STRICTLY FORBIDDEN on
+      or beside the scroll: arrowheads, chevrons, pointed tips, red/blue
+      directional arrows, flow tips of any kind.
     - Right of that block: calm empty light strip (do NOT draw tiles, cubes,
       grids, or letter blocks there — leave blank for later vector tokens).
 
-    UPPER-RIGHT lavender wash panel:
-    - Top block: comparison dial / pastel rising bars (no numerals on dial).
-    - Bottom block: interlocking gears with a soft triangular energy pulse
-      (geometric triangle only, not a letter).
+    UPPER-RIGHT very-pale lavender panel:
+    - Top block: COMPLETE comparison dial / pastel rising bars (no numerals) —
+      full dial face and bars visible under the headband (not cropped).
+    - Bottom block: COMPLETE interlocking gears with a soft triangular energy
+      pulse (geometric triangle only, not a letter; NOT an arrow) — full gear
+      teeth visible under the headband.
 
-    LOWER-MIDDLE mint wash panel:
-    - Left tall block: balance scale or trophy scoreboard with soft bars.
-    - Two small top blocks: green check medallion; hourglass / shrinking meter.
+    LOWER-MIDDLE mint-mist panel:
+    - Left tall block: balance scale or trophy scoreboard with soft bars —
+      scale stays fully inside the colored footprint under the headband;
+      do not let pans/beams spill outside the block.
+    - Two small top blocks: green check medallion; pastel shrinking-battery /
+      step-meter bars ONLY (do NOT draw an hourglass; do NOT draw any
+      down-arrow, chevron, or red arrow anywhere in this block).
     - Bottom wide small block (Format Check): tiny checklist clipboard ONLY —
-      scale the icon down so it fits entirely inside the block with clear
-      inner padding; blank tick boxes only (no letter tags); do not overflow.
+      scale the icon down so it fits entirely inside the colored area under
+      the headband; blank tick boxes only (no letter tags).
 
-    LOWER-RIGHT neutral-gray wash panel:
-    - Top block: database cylinder barrel with stacked disks (pastel).
+    LOWER-RIGHT near-white gray panel:
+    - Top block: database cylinder barrel with stacked disks (pastel) — below headband.
     - Bottom block: icy crystal replica of the policy robot — frosted pale
       blue glass with snowflake accents (frozen copy, distinct from the warm
-      trainable robot).
+      trainable robot) — below headband.
 
     BOTTOM strip:
-    - Left wide pale-gray reserved block: leave completely blank / plain
-      light-gray (vector equation card will cover it) — no pink plaque,
-      no chalkboard, no waveform.
+    - Left wide pale reserved block: leave completely blank / plain light wash
+      (vector equation card will cover it) — no pink plaque, no chalkboard,
+      no waveform.
     - Far right outside that block: keep blank (legend space).
 
-    Style: flat pastel scientific hero illustration, soft fills, consistent
-    2px stroke, no photorealism, no neon, no dark modules. No arrows or
-    connecting lines between modules; clear gaps; label landing zones stay
-    light and plain.
+    Style: flat pastel scientific hero illustration, soft high-lightness fills,
+    consistent 2px stroke, no photorealism, no neon, no dark modules.
+    No arrows, no connectors, no directional symbols. Clear gaps.
+    Light same-hue headbands stay plain; icons live fully below them.
 
 layout:
   kind: col
   gap: 1.6
-  pad: [4.5, 3.2, 1.6, 3.2]
+  pad: [3.2, 3.2, 1.6, 3.2]
   align: stretch
   children:
     - kind: row
-      # 加宽 panel 缝：给 act / r(τ) 标签走廊
       gap: 4.0
       align: stretch
       children:
@@ -96,7 +131,7 @@ layout:
           align: stretch
           title: "Environment & Agent"
           header_style: smallcaps
-          fill: "#E8F4FD"
+          fill: "#F3F8FC"
           title_size: 6.4
           header_h: 5.0
           w: 46
@@ -105,8 +140,7 @@ layout:
             - {ref: policy, h: 18}
             - kind: row
               gap: 1.2
-              # 与右栏 Reward/Side 顶缘对齐（消 row-misaligned 0.6mm）
-              pad: [4.6, 0, 0, 0]
+              pad: [3.1, 0, 0, 0]
               children:
                 - {ref: tool_s, h: 13, flex: 1}
                 - {ref: tool_c, h: 13, flex: 1}
@@ -129,12 +163,13 @@ layout:
                   align: center
                   title: "Trajectory Sampling"
                   header_style: smallcaps
-                  fill: "#FFF3E0"
+                  fill: "#FFF8F0"
                   title_size: 6.4
                   header_h: 5.0
                   flex: 1.2
                   children:
-                    - {ref: roll, w: 22, h: 18}
+                    # 加宽加高：包住底稿卷轴墨迹，消 roll drift（不改底稿像素）
+                    - {ref: roll, w: 34, h: 22}
                     - kind: col
                       gap: 0.7
                       flex: 1
@@ -147,19 +182,18 @@ layout:
                 - id: p_upd
                   type: panel
                   kind: col
-                  # Ahat 标签走廊：adv↔upd ≥5mm
-                  gap: 5.0
+                  gap: 4.0
                   pad: [5.6, 2.2, 1.6, 2.2]
                   align: stretch
                   title: "Advantage & Update"
                   header_style: smallcaps
-                  fill: "#F3E5F5"
+                  fill: "#F7F0FA"
                   title_size: 6.4
                   header_h: 5.0
                   w: 48
                   children:
-                    - {ref: adv, h: 11.5}
-                    - {ref: upd, h: 10.5}
+                    - {ref: adv, h: 12.5}
+                    - {ref: upd, h: 11.5}
 
             - kind: row
               gap: 4.0
@@ -173,7 +207,7 @@ layout:
                   align: center
                   title: "Reward Model"
                   header_style: smallcaps
-                  fill: "#E6F5F0"
+                  fill: "#F0F8F4"
                   title_size: 6.4
                   header_h: 5.0
                   flex: 1.2
@@ -193,35 +227,44 @@ layout:
                 - id: p_aux
                   type: panel
                   kind: col
-                  gap: 1.6
-                  pad: [8.0, 2.2, 1.6, 2.2]
+                  gap: 0.4
+                  pad: [5.6, 2.0, 1.6, 2.0]
                   align: stretch
                   title: "Side Path"
                   header_style: smallcaps
-                  fill: "#F7F7F5"
+                  fill: "#FAFAF8"
                   title_size: 6.4
                   header_h: 5.0
                   w: 48
                   children:
-                    - {ref: buf, h: 10.5}
-                    - {ref: ref, h: 9.5}
+                    # 单盒覆盖圆柱+冰晶双插画区，消 buf/ref 互环带 drift
+                    - {ref: side, h: 19}
 
-    # 底栏充实左下：目标卡 + legend
+    # 底栏：objective + legend；legend 加宽 + 右端注记
     - kind: row
-      gap: 2.2
+      gap: 2.0
       align: stretch
       children:
-        - {ref: loss_box, flex: 1.15, h: 12}
+        - {ref: loss_box, flex: 1.0, h: 12}
         - {ref: lg, flex: 1.0, h: 12}
+        - {ref: note_box, w: 48, h: 12}
 
 elements:
-  # 具象模块 → 幽灵盒，形象由底稿承担；保留 title/body 给矢量叠字
+  # 大盒：恢复完整副题
   - {type: box, id: env, title: "Task Dispatcher",
      body: "prompt · schema · tools", variant: secondary, shape: parallelogram,
      valign: top, title_size: 6.0, body_size: 5.6}
   - {type: box, id: policy, title: "Agent Policy π_θ",
      body: "LLM decoder + tool API", variant: trainable, accent: left,
      valign: top, title_size: 6.2, body_size: 5.6}
+  - {type: box, id: roll, title: "G Rollouts",
+     body: "multi-turn tools", variant: primary, accent: left,
+     valign: top, title_size: 6.0, body_size: 5.6}
+  - {type: box, id: rm, title: "Reward Model",
+     body: "r(τ) composite", variant: secondary, accent: left,
+     valign: top, title_size: 6.0, body_size: 5.6}
+
+  # 小工具盒：空间紧，保持短副题
   - {type: box, id: tool_s, title: "Search",
      body: "web/RAG", variant: sky, valign: top,
      title_size: 5.6, body_size: 5.6}
@@ -232,21 +275,17 @@ elements:
      body: "KV R/W", variant: tertiary, valign: top,
      title_size: 5.6, body_size: 5.6}
 
-  - {type: box, id: roll, title: "G Rollouts",
-     body: "multi-turn tools", variant: primary, accent: left,
-     valign: top, title_size: 6.0, body_size: 5.6}
-  # token 网格为纯符号 → 保留矢量实体绘制
-  - {type: tokens, id: tok_traj, n: 7, direction: h, variant: primary, gap: 0.4}
+  # token：浅红高亮再压一档
+  - {type: tokens, id: tok_traj, n: 7, direction: h, variant: primary, gap: 0.4,
+     colors: ["#D6EAF8", "#AED6F1", "#D6EAF8", "#85C1E9", "#D6EAF8", "#AED6F1", "#D6EAF8"]}
   - {type: tokens, id: tok_tool, n: 6, direction: h, variant: secondary, gap: 0.45,
-     colors: ["#FCE8E6", "#FCE8E6", "#F0F0F0", "#FCE8E6", "#F0F0F0", "#FCE8E6"]}
+     colors: ["#F7EDEA", "#EEDDD8", "#F0F0F0", "#E6D0CA", "#F0F0F0", "#F7EDEA"]}
   - {type: text, id: t_tok, text: "tau · tool-call tokens", size: 5.6,
      color: "#0072B2", anchor: start}
   - {type: text, id: t_g, text: "G∥ · T steps", size: 5.6,
      color: "#0072B2", anchor: start}
 
-  - {type: box, id: rm, title: "Reward Model",
-     body: "r(τ) composite", variant: secondary, accent: left,
-     valign: top, title_size: 6.0, body_size: 5.6}
+  # 奖励小盒：短副题
   - {type: box, id: r_succ, title: "Success",
      body: "task hit", variant: tertiary, valign: top,
      title_size: 5.6, body_size: 5.6}
@@ -264,23 +303,26 @@ elements:
      body: "policy gradient Δθ", variant: trainable, accent: left,
      valign: top, title_size: 6.0, body_size: 5.6}
 
-  - {type: box, id: buf, title: "Replay Buffer",
-     body: "store τ · batch", variant: accent, shape: cylinder,
-     title_size: 5.8, body_size: 5.6}
-  - {type: box, id: ref, title: "π_ref (frozen)",
-     body: "β·KL region", variant: frozen, valign: top,
-     title_size: 5.6, body_size: 5.6}
+  # Side Path：单盒覆盖圆柱+冰晶，矢量叠双行信息
+  - {type: box, id: side, title: "Replay Buffer · π_ref",
+     body: "store τ · batch · β·KL region (frozen)", variant: accent,
+     valign: top, title_size: 5.8, body_size: 5.6}
 
-  # 实体矢量盒：避免幽灵底栏被生图模型画成饱和粉色平板
   - {type: box, id: loss_box, title: "Training objective",
-     body: "L = −Ahat log π_θ − β KL(π_θ ‖ π_ref)", variant: sky,
-     ghost: false, valign: top, title_size: 5.8, body_size: 5.6}
-  # 幽灵插画下色块图例失真；只保留仍成立的线型语义
-  - {type: legend, id: lg, columns: 2, size: 5.6, style: inline,
+     body: "L = −Ahat log π_θ − β KL(π_θ ‖ π_ref)\n↑ expected return · stay inside β·KL trust region",
+     variant: sky, ghost: false, valign: middle, align: left,
+     title_size: 5.8, body_size: 5.6}
+  - {type: legend, id: lg, columns: 3, size: 5.6, style: inline,
      items: [
        {swatch: dashed, color: "#0072B2", label: "Δθ feedback"},
-       {swatch: dashed, color: "#999999", label: "KL / replay (optional)"},
+       {swatch: dashed, color: "#999999", label: "KL / replay"},
+       {swatch: line, color: "#333333", label: "main loop"},
      ]}
+  # 右端低噪注记卡：铺满底栏空段
+  - {type: box, id: note_box, title: "Line styles",
+     body: "solid = data/control\ndashed = aux path",
+     variant: muted, ghost: false, valign: middle, align: left,
+     title_size: 5.6, body_size: 5.6}
 
   - {type: badge, id: b1, at: [7.0, 11.5], text: "1", size: 3.0, color: "#D55E00"}
   - {type: badge, id: b2, at: [7.0, 26.0], text: "2", size: 3.0, color: "#E07A3D"}
@@ -293,31 +335,28 @@ elements:
 
   - {type: arrow, from: env.bottom@1.0, to: policy.top@1.0, label: "task",
      weight: heavy, semantic: data, route: avoid, label_pos: auto}
-  # 工具↑政策：左右边衬出口；中卡走向右边衬，避免集体左绕
-  - {type: arrow, from: tool_s.top@0.5, to: policy.bottom@0.0,
-     weight: thin, semantic: control, label: "api", route: avoid, label_pos: auto}
+  - {type: arrow, from: tool_s.top@0.72, to: policy.bottom@0.22,
+     weight: thin, semantic: control, label: "api", route: avoid, label_pos: auto,
+     label_offset: 2.2}
   - {type: arrow, from: tool_c.top@0.5, to: policy.bottom@1.0,
      weight: thin, semantic: control, route: avoid}
   - {type: arrow, from: tool_m.top@0.5, to: policy.bottom@0.97,
      weight: thin, semantic: control, route: avoid}
-  # act/store 语义已清，省略标签；短词给窄缝
   - {type: arrow, from: policy.right@0.15, to: roll.left@0.18,
      weight: heavy, semantic: data, route: avoid}
-  # τ 标签缝被 token/文案占满，语义由面板标题承担
-  - {type: arrow, from: roll.bottom@1.0, to: rm.top@1.0,
+  - {type: arrow, from: roll.bottom@0.18, to: rm.top@0.18,
      weight: heavy, semantic: data, route: avoid}
   - {type: arrow, from: r_step.right@0.28, to: adv.left@0.28, label: "r",
      weight: heavy, semantic: data, route: avoid, label_pos: auto}
   - {type: arrow, from: adv.bottom@0.0, to: upd.top@0.0, label: "Â",
      weight: heavy, semantic: data, route: avoid, label_pos: auto}
 
-  # Δθ：略下移锚点，减轻 base 模式障碍集下的 awkward 绕行
   - {type: arrow, from: upd.left@0.45, to: policy.right@0.45, label: "Δθ",
      weight: heavy, semantic: feedback, route: avoid, label_pos: auto}
 
-  - {type: arrow, from: tok_tool.right@0.5, to: buf.left@0.2,
+  - {type: arrow, from: tok_tool.right@0.5, to: side.left@0.25,
      weight: thin, semantic: optional, route: avoid}
-  - {type: arrow, from: buf.top@0.12, to: upd.bottom@0.0, label: "batch",
+  - {type: arrow, from: side.top@0.15, to: upd.bottom@0.0, label: "batch",
      weight: thin, semantic: optional, route: avoid, label_pos: auto}
-  - {type: arrow, from: ref.left@0.25, to: upd.left@0.85, label: "KL",
-     weight: thin, semantic: optional, route: avoid, label_pos: auto}
+  - {type: arrow, from: side.left@0.75, to: upd.left@0.85,
+     weight: thin, semantic: optional, route: avoid}

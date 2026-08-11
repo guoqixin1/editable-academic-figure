@@ -1,5 +1,7 @@
-# C2 — Medical imaging CAD pipeline · hybrid v2（混搭：顶行幽灵插画 + 中底排实体矢量）
-# 顶行管线模块 ghost（底稿插画）；中排三面板 / 底排 I/O / 图例区为实体 neurips 面板（sketch 恢复）
+# C2 — Medical imaging CAD pipeline · hybrid v4
+# 相对 v3：panel pad.top +2mm（标题板让开 Acquisition 圆角）；
+# 骨架保留带同色提亮零外扩（工具已修）→ 必须重抽底稿消灰边重影；
+# feedback 终点复核：若尖端仍落浅带则调 clf.bottom@t
 figure: {width: 236, dpi: 600}
 theme:
   preset: neurips
@@ -10,20 +12,31 @@ base:
   image: base/base.png
   prompt: |
     Restyle ONLY the saturated colored blocks in the reference skeleton into a medical
-    imaging CAD pipeline illustration. Pale gray blocks are reserved — keep them plain
-    flat very-light-gray (#EEEEEE), do NOT illustrate, decorate, or recolor them.
+    imaging CAD pipeline illustration. Inside each module, the lighter same-hue header
+    band is a text-plate reserve — keep it plain flat seamless same-hue fill (no icons,
+    no decoration, no separate white/gray rectangle, no outline, no second plate). Do
+    not redraw the header band as a distinct card. Pale gray (#EEEEEE) blocks elsewhere
+    are reserved areas — keep them plain flat very-light-gray, do NOT illustrate,
+    decorate, or recolor them.
 
     Upper row ONLY — seven saturated-color footprint plates left to right. Each plate must
-    become a soft rounded PASTEL plate that fully fills that footprint; draw icons INSIDE
-    the plate, never outside. Keep positions fixed. Leave the TOP third of each plate
-    nearly empty (title landing); put the icon in the lower two-thirds:
+    become a soft rounded PASTEL plate that fully fills that footprint; draw icons STRICTLY
+    INSIDE the plate footprint, never outside, never overlapping neighboring gutters.
+    Keep positions fixed. Leave the TOP third of each plate nearly empty (title landing;
+    match the light tinted header band already in the skeleton). Leave a clear EMPTY margin
+    along the BOTTOM edge of each plate (~18–22% of plate height, at least as tall as the
+    plate's top reserved title strip) so connectors can attach to the plate edge without
+    piercing icons. Especially for the rightmost PACS monitor plate: keep the monitor stand
+    well above the plate bottom — do not let the stand touch or near-touch the bottom border.
+    Put the main icon in the middle band only:
     - microscope + compact slide scanner on a tiny bench (pale blue-grey plate)
     - small display with smooth dual waveform curves only (pale grey-lavender plate)
     - abstract U-Net as layered translucent tiles + soft organ-mask silhouette (pale coral plate)
     - morphometric shapes + embedding-dot cloud (pale amber plate)
     - desk monitor with abstract medical-scan silhouette filling the screen (pale coral plate)
     - clipboard with blank structured form: ruled lines and empty checkboxes only (pale mint plate)
-    - wide PACS monitor with abstract torso cross-section (pale teal plate)
+    - wide PACS monitor with abstract torso cross-section; keep stand clear of the plate
+      bottom margin (pale teal plate)
 
     Do NOT draw anything in the middle row, lower I/O row, or bottom legend band — those
     pale-gray reserved blocks stay empty flat gray.
@@ -34,7 +47,7 @@ base:
     inside their own footprint; white gutters between plates untouched.
 
     NeurIPS soft pastel, flat vector, uniform dark outline, three-quarter view, same illustrator.
-    No arrows/connectors between plates.
+    No arrows/connectors between plates. No arrowheads, no flow lines, no chevrons.
     Absolutely no text: no letters, digits, words, captions, watermarks, logos, or placeholder phrases.
     Pure pictures. White / near-white canvas; no outer page frame.
 
@@ -59,7 +72,7 @@ elements:
   - {type: box, id: doctor, title: "PACS review",
      variant: sky, valign: top, title_size: 5.8}
 
-  # 临床栏 / I/O：实体矢量面板（neurips pastel + sketch）；不参与底稿插画
+  # 临床栏 / I/O：实体矢量面板
   - {type: box, id: findings, title: "Findings",
      body: "ROI descriptors", variant: tertiary, sketch: bars, valign: top,
      title_size: 5.8, body_size: 5.6, ghost: false}
@@ -70,67 +83,72 @@ elements:
      body: "Dice · AUC · ECE", variant: sky, sketch: distribution, valign: top,
      title_size: 5.8, body_size: 5.6, ghost: false}
 
-  - {type: box, id: io_acq, title: "In/Out · Acq",
-     body: "raw FOV → H×W×C", variant: muted, sketch: spectrum,
-     valign: top, title_size: 5.6, body_size: 5.6, ghost: false}
-  - {type: box, id: io_seg, title: "In/Out · Seg",
-     body: "tensor → mask+ROI", variant: primary, sketch: heatmap,
-     valign: top, title_size: 5.6, body_size: 5.6, ghost: false}
-  - {type: box, id: io_feat, title: "In/Out · Feat",
-     body: "ROI → R^d", variant: secondary, sketch: scatter,
-     valign: top, title_size: 5.6, body_size: 5.6, ghost: false}
-  - {type: box, id: io_dx, title: "In/Out · Dx",
-     body: "emb → logits/ICD", variant: trainable, sketch: bars,
-     valign: top, title_size: 5.6, body_size: 5.6, ghost: false}
+  - {type: box, id: io_acq, title: "In/Out · Acq  ·  raw→H×W×C",
+     variant: muted, sketch: spectrum,
+     valign: top, title_size: 5.6, ghost: false}
+  - {type: box, id: io_seg, title: "In/Out · Seg  ·  tensor→mask+ROI",
+     variant: primary, sketch: heatmap,
+     valign: top, title_size: 5.6, ghost: false}
+  - {type: box, id: io_feat, title: "In/Out · Feat  ·  ROI→R^d",
+     variant: secondary, sketch: scatter,
+     valign: top, title_size: 5.6, ghost: false}
+  - {type: box, id: io_dx, title: "In/Out · Dx  ·  emb→logits/ICD",
+     variant: trainable, sketch: bars,
+     valign: top, title_size: 5.6, ghost: false}
 
-  # 图例：色块仅对应仍可见的实体 I/O 变体描边；顶行幽灵无色壳故不映射插画色
+  # 底栏：legend 横排 + 右侧闭环说明卡（消右半空置）
   - {type: legend, id: lg, columns: 4, size: 5.6, style: inline, items: [
       {swatch: box, color: "#E07A3D", label: "neural / trainable"},
       {swatch: box, color: "#E69F00", label: "feature stage"},
       {swatch: box, color: "#DDDDDD", label: "preprocess"},
       {swatch: dashed, color: "#0072B2", label: "clinician feedback"},
     ]}
+  - {type: box, id: loop_note, title: "Closed loop · PACS → QA · Dx feedback",
+     variant: sky, ghost: false, valign: middle,
+     title_size: 5.6}
 
-  - {type: badge, id: bd1, at: [6.4, 9.0], text: "1", size: 2.8, color: "#0072B2"}
-  - {type: badge, id: bd2, at: [38.4, 9.0], text: "2", size: 2.8, color: "#666666"}
-  - {type: badge, id: bd3, at: [72.9, 9.0], text: "3", size: 2.8, color: "#E07A3D"}
-  - {type: badge, id: bd4, at: [110.2, 9.0], text: "4", size: 2.8, color: "#E69F00"}
-  - {type: badge, id: bd5, at: [144.7, 9.0], text: "5", size: 2.8, color: "#E07A3D"}
-  - {type: badge, id: bd6, at: [179.3, 9.0], text: "6", size: 2.6, color: "#009E73"}
-  - {type: marker, id: m_fire_seg, at: [99.2, 9.2], icon: fire, size: 2.6}
-  - {type: marker, id: m_fire_clf, at: [168.3, 9.2], icon: fire, size: 2.6}
+  # badges / fire：随 pad.top +2mm 整体下移（贴各盒左上 / 右上内侧）
+  - {type: badge, id: bd1, at: [6.4, 13.6], text: "1", size: 2.8, color: "#0072B2"}
+  - {type: badge, id: bd2, at: [38.4, 13.6], text: "2", size: 2.8, color: "#666666"}
+  - {type: badge, id: bd3, at: [72.9, 13.6], text: "3", size: 2.8, color: "#E07A3D"}
+  - {type: badge, id: bd4, at: [110.2, 13.6], text: "4", size: 2.8, color: "#E69F00"}
+  - {type: badge, id: bd5, at: [144.7, 13.6], text: "5", size: 2.8, color: "#E07A3D"}
+  - {type: badge, id: bd6, at: [179.3, 13.6], text: "6", size: 2.6, color: "#009E73"}
+  - {type: marker, id: m_fire_seg, at: [94.5, 16.2], icon: fire, size: 2.6}
+  - {type: marker, id: m_fire_clf, at: [164.2, 16.2], icon: fire, size: 2.6}
 
-  - {type: arrow, from: mic.right@0.20, to: prep.left@0.20, label: "FOV",
-     weight: heavy, semantic: data, route: avoid, label_pos: auto}
-  - {type: arrow, from: prep.right@0.20, to: seg.left@0.20,
-     weight: heavy, semantic: data, route: avoid}
-  - {type: arrow, from: seg.right@0.20, to: feat.left@0.20,
-     weight: heavy, semantic: data, route: avoid}
-  - {type: arrow, from: feat.right@0.20, to: clf.left@0.20, label: "R^d",
-     weight: heavy, semantic: data, route: avoid, label_pos: auto}
-  - {type: arrow, from: clf.right@0.20, to: report.left@0.35, label: "logits",
-     weight: heavy, semantic: data, route: avoid, label_pos: auto}
-  - {type: arrow, from: report.right@0.45, to: doctor.left@0.45,
-     weight: normal, semantic: data, route: avoid}
+  # 顶行：统一 t=0.48 → 水平直线；标签落缝隙
+  - {type: arrow, from: mic.right@0.48, to: prep.left@0.48, label: "FOV",
+     weight: heavy, semantic: data, route: straight, label_pos: auto}
+  - {type: arrow, from: prep.right@0.48, to: seg.left@0.48,
+     weight: heavy, semantic: data, route: straight}
+  - {type: arrow, from: seg.right@0.48, to: feat.left@0.48,
+     weight: heavy, semantic: data, route: straight}
+  - {type: arrow, from: feat.right@0.48, to: clf.left@0.48, label: "R^d",
+     weight: heavy, semantic: data, route: straight, label_pos: auto}
+  - {type: arrow, from: clf.right@0.48, to: report.left@0.48, label: "logits",
+     weight: heavy, semantic: data, route: straight, label_pos: auto}
+  - {type: arrow, from: report.right@0.48, to: doctor.left@0.48,
+     weight: normal, semantic: data, route: straight}
 
-  - {type: arrow, from: doctor.bottom@0.55, to: metrics.top@0.75,
-     weight: thin, semantic: data, route: avoid}
-  - {type: arrow, from: findings.right@0.35, to: out_note.left@0.35,
-     weight: normal, semantic: data, route: avoid}
-  - {type: arrow, from: out_note.top@0.90, to: clf.bottom@0.96,
+  - {type: arrow, from: doctor.bottom@0.23, to: metrics.top@0.75,
+     weight: thin, semantic: data, route: straight}
+  - {type: arrow, from: findings.right@0.40, to: out_note.left@0.40,
+     weight: normal, semantic: data, route: straight}
+  - {type: arrow, from: out_note.top@0.88, to: clf.bottom@0.78,
      weight: thin, semantic: feedback, route: avoid}
 
 layout:
   kind: col
   gap: 0
-  pad: [3.0, 2.0, 1.5, 2.0]
+  pad: [1.5, 2.0, 0.6, 2.0]
   align: stretch
   children:
     - id: p_pipe
       type: panel
       kind: col
-      gap: 2.2
-      pad: [5.4, 2.4, 1.8, 2.4]
+      gap: 7.0
+      pad: [11.5, 2.4, 1.0, 2.4]
       align: stretch
       title: "Medical Imaging CAD Pipeline"
       header_style: smallcaps
@@ -140,15 +158,15 @@ layout:
       children:
         - kind: row
           gap: 7.0
-          align: start
+          align: stretch
           children:
             - {ref: mic, flex: 0.95, h: 22}
             - {ref: prep, flex: 1.05, h: 22}
             - {ref: seg, flex: 1.15, h: 22}
             - {ref: feat, flex: 1.05, h: 22}
             - {ref: clf, flex: 1.05, h: 22}
-            - {ref: report, flex: 0.9, h: 19}
-            - {ref: doctor, flex: 0.9, h: 19}
+            - {ref: report, flex: 0.9, h: 22}
+            - {ref: doctor, flex: 0.9, h: 22}
 
         - kind: row
           gap: 5.0
@@ -167,4 +185,9 @@ layout:
             - {ref: io_feat, flex: 1, h: 12}
             - {ref: io_dx, flex: 1, h: 12}
 
-        - {ref: lg, h: 7}
+        - kind: row
+          gap: 3.0
+          align: stretch
+          children:
+            - {ref: lg, flex: 1.35, h: 7.5}
+            - {ref: loop_note, flex: 1.0, h: 7.5}
