@@ -1,55 +1,78 @@
-# C2 — Medical imaging CAD pipeline · hybrid v4
-# 相对 v3：panel pad.top +2mm（标题板让开 Acquisition 圆角）；
-# 骨架保留带同色提亮零外扩（工具已修）→ 必须重抽底稿消灰边重影；
-# feedback 终点复核：若尖端仍落浅带则调 clf.bottom@t
+# C2 — Medical imaging CAD pipeline · hybrid v5 (journal-schematic)
+# v5：base.style=journal-schematic；场景按 style-anchors REPORT §4.1 去科普插画感
+# 保留 v4 几何：pad.top 11.5 / feedback clf.bottom@0.78 / 同色头带零外扩
 figure: {width: 236, dpi: 600}
 theme:
   preset: neurips
 
 base:
+  image: base/base.png
+  image: base/base.png
+  image: base/base.png
+  image: base/base.png
+  image: base/base.png
+  image: base/base.png
+  image: base/base.png
+  image: base/base.png
+  image: base/base.png
   mode: skeleton
+  style: journal-schematic
   candidates: 3
   image: base/base.png
   prompt: |
-    Restyle ONLY the saturated colored blocks in the reference skeleton into a medical
-    imaging CAD pipeline illustration. Inside each module, the lighter same-hue header
-    band is a text-plate reserve — keep it plain flat seamless same-hue fill (no icons,
-    no decoration, no separate white/gray rectangle, no outline, no second plate). Do
-    not redraw the header band as a distinct card. Pale gray (#EEEEEE) blocks elsewhere
-    are reserved areas — keep them plain flat very-light-gray, do NOT illustrate,
-    decorate, or recolor them.
+    Restyle ONLY the saturated colored blocks in the reference skeleton into a
+    publication-ready medical imaging CAD pipeline schematic (Nature Methods methods-figure
+    austerity). Orthographic grid layout overall; instruments may use a restrained
+    equipment-catalog three-quarter view — never a toy isometric town.
 
-    Upper row ONLY — seven saturated-color footprint plates left to right. Each plate must
-    become a soft rounded PASTEL plate that fully fills that footprint; draw icons STRICTLY
-    INSIDE the plate footprint, never outside, never overlapping neighboring gutters.
-    Keep positions fixed. Leave the TOP third of each plate nearly empty (title landing;
-    match the light tinted header band already in the skeleton). Leave a clear EMPTY margin
-    along the BOTTOM edge of each plate (~18–22% of plate height, at least as tall as the
-    plate's top reserved title strip) so connectors can attach to the plate edge without
-    piercing icons. Especially for the rightmost PACS monitor plate: keep the monitor stand
-    well above the plate bottom — do not let the stand touch or near-touch the bottom border.
-    Put the main icon in the middle band only:
-    - microscope + compact slide scanner on a tiny bench (pale blue-grey plate)
-    - small display with smooth dual waveform curves only (pale grey-lavender plate)
-    - abstract U-Net as layered translucent tiles + soft organ-mask silhouette (pale coral plate)
-    - morphometric shapes + embedding-dot cloud (pale amber plate)
-    - desk monitor with abstract medical-scan silhouette filling the screen (pale coral plate)
-    - clipboard with blank structured form: ruled lines and empty checkboxes only (pale mint plate)
-    - wide PACS monitor with abstract torso cross-section; keep stand clear of the plate
-      bottom margin (pale teal plate)
+    Inside each module, the lighter same-hue header band is a text-plate reserve — keep it
+    plain flat seamless same-hue fill (no icons, no decoration, no separate white/gray
+    rectangle, no outline, no second plate). Do not redraw the header band as a distinct
+    card. Pale gray (#EEEEEE) blocks elsewhere are reserved areas — keep them plain flat
+    very-light-gray, do NOT illustrate, decorate, or recolor them.
+
+    Upper row ONLY — seven footprint plates left to right. Each plate becomes a LIGHT
+    NEUTRAL panel (near-white / cool grey / warm beige, luma > 210) with at most a thin
+    categorical accent strip or corner tick (left edge or top hairline, ≤8% of plate width);
+    DO NOT flood the whole card with macaron pastel. Sharp or barely-rounded rectangles;
+    hairline dark strokes. Draw icons STRICTLY INSIDE the plate footprint, never outside,
+    never overlapping neighboring gutters. Keep positions fixed. Leave the TOP third of
+    each plate nearly empty (title landing; match the light tinted header band). Leave a
+    clear EMPTY margin along the BOTTOM edge (~18–22% of plate height) so connectors attach
+    without piercing icons. Especially for the rightmost PACS monitor: keep the stand well
+    above the plate bottom.
+
+    Middle-band icons only (technical glyphs, not cute props); keep EVERY glyph inset
+    ≥12% from left/right plate edges and ≥10% from bottom empty margin (prevents ink
+    spilling into white gutters — critical for preprocess / diagnosis / PACS monitors):
+    - Acquisition: catalog-style laboratory microscope + compact slide scanner on a bench
+      (accurate silhouettes, technical-manual detail hierarchy — NOT rounded toy scopes)
+    - Preprocess: orthographic rectangular device monitor showing schematic dual waveform /
+      denoise curves only (not cute UI chrome); monitor bezel fully inside plate
+    - Segmentation: layered U-Net tile stack + low-detail technical anatomical organ schematic
+      as contour/section line drawing (NOT soft candy/gummy organ blob, NOT 3D soft organ)
+    - Feature extract: small-multiples morphometric contour glyphs + embedding/feature grid
+      of dots (NOT yellow soft blobs, NOT sticker cells, NOT kidney candy shapes)
+    - Diagnosis: orthographic desk monitor with schematic medical-scan marks on screen
+      (abstract scan silhouette / intensity map — not playful UI); fully inside plate
+    - Report: structured report panel / form grid (ruled rows, empty checkbox squares as
+      geometric glyphs ONLY) — NO clipboard, NO pen, NO cute office props
+    - PACS review: wide orthographic monitor with schematic torso cross-section scan;
+      stand clear of bottom margin; fully inside plate
 
     Do NOT draw anything in the middle row, lower I/O row, or bottom legend band — those
     pale-gray reserved blocks stay empty flat gray.
 
-    STRICT color discipline for illustrated modules: high-luma pastel fills only
-    (luma > 200). Forbidden: deep/saturated large color fields, solid coral/red slabs,
-    dark navy washes, neon accents. Soft two-tone shading max. Icons stay strictly
-    inside their own footprint; white gutters between plates untouched.
+    Color discipline: muted editorial accents only as thin taxonomy cues; large fields stay
+    neutral. Forbidden: macaron full-card fills, candy colors, thick comic outlines, sticker
+    drop shadows, glossy bevels. Catalog shading on instruments only (subtle). Same
+    illustrator across plates. White gutters between plates untouched.
 
-    NeurIPS soft pastel, flat vector, uniform dark outline, three-quarter view, same illustrator.
     No arrows/connectors between plates. No arrowheads, no flow lines, no chevrons.
-    Absolutely no text: no letters, digits, words, captions, watermarks, logos, or placeholder phrases.
-    Pure pictures. White / near-white canvas; no outer page frame.
+    Absolutely no text: no letters, digits, words, captions, watermarks, logos, or
+    placeholder phrases. Do NOT label stages under icons (no "Acquisition"/"Report"/
+    "U-Net"/glyph names). No math symbols as readable characters. Pure pictures only.
+    White / near-white canvas; no outer page frame.
 
 elements:
   # 主管线：幽灵 → 底稿插画；矢量只叠标题/箭头

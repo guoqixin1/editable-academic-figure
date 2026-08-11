@@ -1,117 +1,112 @@
-# B1 — LLM Agent RL Training Loop · neurips Soft Pastel · 混合模式试点 v4
-# 修 v3：禁漂白重抽；新保留带同源同色提亮；恢复副题；压 token 红；legend 铺满
+# B1 — LLM Agent RL Training Loop · technical-lineart · 混合模式 v5.1（灰阶纪律）
+# 风格：REPORT §4.2 + base.style technical-lineart；骨架灰阶+钢蓝关键路径；小盒 ghost:false
 figure: {width: 184, dpi: 600, background: "#FFFFFF"}
 theme:
   preset: neurips
-  # 略加大 pad：盖住模型保留带头带羽化露边（双层板重影）
   plate_pad: 2.0
   plate_opacity: 0.92
   plate_radius: 0.0
 
 base:
+  image: base/base.png
   mode: skeleton
+  style: technical-lineart
+  accent: [policy, upd]
   candidates: 3
   image: base/base.png
   prompt: >
-    Flat vector scientific illustration of an LLM agent reinforcement-learning
-    training loop as a hero diagram. VERY LIGHT PASTEL ONLY — high-lightness,
-    muted, desaturated washes (mint mist, peach mist, lavender mist, sky mist,
-    cream). Think watercolor wash at 15% opacity, NOT vivid poster color.
-    Unified thin dark stroke, white/near-white background, generous gaps.
+    Orthographic technical-lineart schematic of an LLM agent RL training loop
+    as a conference systems/ML architecture figure (OSDI/SOSP + ResNet/Transformer
+    block-diagram austerity). GREYSCALE structure with sparse light hatching /
+    nested module fills. Skeleton reference uses cool greys for all modules
+    EXCEPT the steel-blue-tinted critical-path blocks (Agent Policy + GRPO/PPO
+    update) — those TWO blocks alone may keep a muted steel-blue wash; every
+    other module must stay near-greyscale (no orange, no teal, no categorical
+    poster colors). Sharp or barely-rounded rectangles (near right angles).
+    Hairline dark strokes. White ground. High information density.
+    NO mascots, NO smiley robots, NO sticker outlines, NO macaron pastel panels,
+    NO parchment scrolls, NO balance scales, NO trophy medals, NO snowflake emoji.
 
-    CRITICAL COLOR DISCIPLINE: NO saturated blues/purples/pinks; NO dark fills;
-    NO black/charcoal/navy panels; NO deep brown parchment; NO hot-pink slabs.
-    LEFT cool panel = very pale sky mist. UPPER-RIGHT = very pale lavender mist.
-    SIDE PATH = near-white warm gray mist. Parchment scroll = light cream only.
+    CRITICAL — ZERO TEXT: draw ZERO text of any kind — no panel titles, captions,
+    words, letters, digits, Greek letters, code glyphs, JSON tags. Geometry and
+    hatching only. Do not echo prompt words onto the canvas.
 
-    CRITICAL — ZERO TEXT: draw ZERO text of any kind — no panel titles, no
-    captions, no words under icons, no letters, no digits, no Greek letters,
-    no code glyphs like angle-brackets or curly braces, no JSON tags. Icons
-    only. Do not echo any words from this prompt onto the canvas.
+    CRITICAL — NO ARROWS / NO CONNECTORS: do NOT draw arrows, arrowheads, chevrons,
+    directional triangles, flow ribbons, connecting lines, leader lines, or any
+    directional symbols between or inside modules. Vector layer adds connectors.
 
-    CRITICAL — NO ARROWS / NO CONNECTORS: do NOT draw arrows, arrowheads,
-    chevrons, directional triangles, flow ribbons with tips, connecting lines,
-    leader lines, or any directional symbols between or inside modules.
-    Vector layer will add all connectors later. Scroll trajectories must be
-    soft undirected ribbons WITHOUT arrow tips. Hourglass has NO down-arrow.
+    FOOTPRINT LOCK (STRICT): every illustrated prop stays strictly inside its
+    skeleton block; no spill into gutters. Keep ≥3mm empty margin inside
+    each block edge. Shrink nested stacks to fit with clear breathing room.
 
-    FOOTPRINT LOCK (STRICT): every illustration prop must stay strictly inside
-    its colored skeleton block; do not spill ink into neighboring gaps, gutters,
-    or panels. Keep ≥3mm empty margin inside each block edge. Shrink icons so
-    they fit with clear breathing room — especially the parchment scroll,
-    balance scale pans/beams, database cylinder, and ice-crystal robot. No ink
-    outside the colored footprint.
+    RESERVED HEADBANDS (CRITICAL): Each module block has a lighter same-family
+    headband strip at the top (greyscale blocks → lighter grey wash; steel-blue
+    critical-path blocks → lighter blue-grey wash). Headbands are reserved for
+    later vector text — keep them plain flat wash only. Do NOT paint icons,
+    hatching stacks, dials, or decorations on the headband. Place each module's
+    engineering content ONLY in the denser portion BELOW the light headband.
 
-    RESERVED HEADBANDS (CRITICAL): Each saturated module block has a lighter
-    same-hue headband strip at the top (a tinted wash of that block's color,
-    NOT gray, NOT a separate object). These headbands are reserved for later
-    vector text — keep them plain flat tinted wash only. Do NOT paint icons,
-    texture, dials, gears, or decorations on the headband. Place each module's
-    object ONLY in the richer-colored portion BELOW the light headband.
+    ICON PLACEMENT (CRITICAL): Put the full nested structure inside the denser
+    portion under the headband so stacks/slots/cylinders are complete, not
+    cropped. Leave ≥2mm margin from block edges. Do not invade the headband.
 
-    ICON PLACEMENT (CRITICAL): Put the full icon inside the colored portion
-    under the headband so the whole prop is visible (dial faces, gear teeth,
-    scroll body, scale pans, robot head, crystal — complete, not cropped).
-    Leave ≥2mm margin from block edges. Do not let props invade the headband
-    or spill outside the footprint.
+    Pale-gray reserved blocks (skeleton #EEEEEE) stay plain — do not illustrate
+    them (vector solids will cover). Describe modules by POSITION only.
 
-    Module props must match each colored skeleton block (one prop family per
-    block; do not merge blocks). Describe by POSITION/COLOR only.
+    LEFT cool pale panel (Environment & Agent) — illustrate ONLY these blocks:
+    - Top parallelogram block: nested task-dispatcher stack — thin orthogonal
+      rectangles like a schema / control plane (ticket cards as flat rect slots,
+      tiny tree as geometric lines). GREYSCALE only. NO clipboard cute props.
+    - Large center block (STEEL-BLUE critical path): Agent Policy as an ABSTRACT
+      neural block stack — stacked Transformer/ResNet-like rectangles with light
+      hatching and one nested inner block (decoder stack metaphor). May use the
+      muted steel-blue wash from the skeleton; NOT orange, NOT a face.
+      FORBIDDEN: robot head, smiley, eyes, cheeks, anthropomorphic chip-brain
+      mascot. Absolutely no captions, callouts, or annotation strings anywhere.
+    - Bottom row of three small blocks are pale-gray reserved — leave plain
+      (Search / Code / Memory are vector solids). Do NOT draw filing cabinets,
+      drawers, or cute office props anywhere.
 
-    LEFT very-pale sky panel:
-    - Top parallelogram block: control-tower clipboard with branching ticket
-      cards and a tiny schema-tree glyph — icon fully in the colored area
-      under the light headband.
-    - Large center block: friendly chip-brain robot head with a glowing neural
-      chip faceplate (warm soft-orange accent on pale fill) — below headband.
-    - Bottom row of three small blocks left-to-right (tiny icons under headband):
-      magnifying glass over a tiny web globe;
-      terminal-window icon with abstract code-line bars (NO letter glyphs);
-      filing drawer / stacked memory chips.
+    UPPER-MIDDLE warm-neutral panel (Trajectory Sampling):
+    - Left greyscale block: rollout ARRAY — a tight grid / row of step cells or
+      parallel undirected trajectory strips (token-step matrix), greyscale only
+      (vary value/hatching, not hue). FORBIDDEN: parchment scroll, paper roll,
+      ribbon tips, arrowheads, saturated cell colors.
+    - Right of that block: calm empty light strip for later vector tokens —
+      leave blank (no tiles/cubes/letter blocks).
 
-    UPPER-MIDDLE warm peach-mist panel:
-    - Left colored block: LIGHT pastel parchment scroll (cream/peach only)
-      with 3–4 soft parallel wavy stroke marks in soft blue/coral on the
-      parchment face — like gentle scribble paths ONLY. STRICTLY FORBIDDEN on
-      or beside the scroll: arrowheads, chevrons, pointed tips, red/blue
-      directional arrows, flow tips of any kind.
-    - Right of that block: calm empty light strip (do NOT draw tiles, cubes,
-      grids, or letter blocks there — leave blank for later vector tokens).
+    UPPER-RIGHT pale panel (Advantage & Update):
+    - Top greyscale block: group-relative advantage as comparison BAR MODULE /
+      meter bars (no numerals) — full bars visible under headband. Technical
+      chart glyph, not a toy dial sticker. Greyscale only.
+    - Bottom block (STEEL-BLUE critical path): policy-update / GRPO module as
+      nested residual-style block stack with light hatching (optional tiny
+      geometric triangle pulse — not a letter, NOT an arrow). May keep muted
+      steel-blue wash. Prefer stacked gradient-update blocks over cartoon gears;
+      if gears appear they must be flat patent-drawing gears, not sticker toys.
 
-    UPPER-RIGHT very-pale lavender panel:
-    - Top block: COMPLETE comparison dial / pastel rising bars (no numerals) —
-      full dial face and bars visible under the headband (not cropped).
-    - Bottom block: COMPLETE interlocking gears with a soft triangular energy
-      pulse (geometric triangle only, not a letter; NOT an arrow) — full gear
-      teeth visible under the headband.
+    LOWER-MIDDLE mint-neutral panel (Reward Model):
+    - Left tall greyscale block: reward SCORING HEAD — scalar score module with
+      simple vertical/horizontal bars or a compact bar panel. GREYSCALE only —
+      no orange/amber fill. FORBIDDEN: balance scale, trophy, award ribbon, medal.
+    - Three small pale-gray reserved blocks (Success / −λT / Format) — leave
+      plain; vector solids will cover. Do NOT draw medallions, batteries,
+      hourglasses, clipboards, or check stickers there.
 
-    LOWER-MIDDLE mint-mist panel:
-    - Left tall block: balance scale or trophy scoreboard with soft bars —
-      scale stays fully inside the colored footprint under the headband;
-      do not let pans/beams spill outside the block.
-    - Two small top blocks: green check medallion; pastel shrinking-battery /
-      step-meter bars ONLY (do NOT draw an hourglass; do NOT draw any
-      down-arrow, chevron, or red arrow anywhere in this block).
-    - Bottom wide small block (Format Check): tiny checklist clipboard ONLY —
-      scale the icon down so it fits entirely inside the colored area under
-      the headband; blank tick boxes only (no letter tags).
-
-    LOWER-RIGHT near-white gray panel:
-    - Top block: database cylinder barrel with stacked disks (pastel) — below headband.
-    - Bottom block: icy crystal replica of the policy robot — frosted pale
-      blue glass with snowflake accents (frozen copy, distinct from the warm
-      trainable robot) — below headband.
+    LOWER-RIGHT near-white panel (Side Path):
+    - Single tall greyscale block: upper half = minimal engineering database
+      cylinder (stacked disks) OR pure stacked buffer rectangles; lower half =
+      frozen reference policy as a hatched nested block stack in cool pale grey
+      (distinct hatching from the steel-blue trainable policy stack) — NO ice
+      crystal, NO snowflake emoji, NO mascot replica face, NO second accent hue.
 
     BOTTOM strip:
     - Left wide pale reserved block: leave completely blank / plain light wash
-      (vector equation card will cover it) — no pink plaque, no chalkboard,
-      no waveform.
-    - Far right outside that block: keep blank (legend space).
+      (vector equation card). Far right: blank (legend / note space).
 
-    Style: flat pastel scientific hero illustration, soft high-lightness fills,
-    consistent 2px stroke, no photorealism, no neon, no dark modules.
-    No arrows, no connectors, no directional symbols. Clear gaps.
-    Light same-hue headbands stay plain; icons live fully below them.
+    Style reminder: greyscale everywhere except the two steel-blue critical-path
+    modules (Policy + GRPO/PPO); hairline strokes; near-right-angle corners;
+    nested stacks and light hatching; plain headbands; no arrows; no text.
 
 layout:
   kind: col
@@ -131,7 +126,7 @@ layout:
           align: stretch
           title: "Environment & Agent"
           header_style: smallcaps
-          fill: "#F3F8FC"
+          fill: "#F4F6F8"
           title_size: 6.4
           header_h: 5.0
           w: 46
@@ -142,9 +137,10 @@ layout:
               gap: 1.2
               pad: [3.1, 0, 0, 0]
               children:
-                - {ref: tool_s, h: 13, flex: 1}
-                - {ref: tool_c, h: 13, flex: 1}
-                - {ref: tool_m, h: 13, flex: 1}
+                # h=19 与 rm/side 对齐，并盖住底稿外溢 KV 槽（不改底稿像素）
+                - {ref: tool_s, h: 19, flex: 1}
+                - {ref: tool_c, h: 19, flex: 1}
+                - {ref: tool_m, h: 19, flex: 1}
 
         - kind: col
           gap: 2.4
@@ -163,12 +159,11 @@ layout:
                   align: center
                   title: "Trajectory Sampling"
                   header_style: smallcaps
-                  fill: "#FFF8F0"
+                  fill: "#F7F7F5"
                   title_size: 6.4
                   header_h: 5.0
                   flex: 1.2
                   children:
-                    # 加宽加高：包住底稿卷轴墨迹，消 roll drift（不改底稿像素）
                     - {ref: roll, w: 34, h: 22}
                     - kind: col
                       gap: 0.7
@@ -187,7 +182,7 @@ layout:
                   align: stretch
                   title: "Advantage & Update"
                   header_style: smallcaps
-                  fill: "#F7F0FA"
+                  fill: "#F5F5F7"
                   title_size: 6.4
                   header_h: 5.0
                   w: 48
@@ -207,7 +202,7 @@ layout:
                   align: center
                   title: "Reward Model"
                   header_style: smallcaps
-                  fill: "#F0F8F4"
+                  fill: "#F4F7F5"
                   title_size: 6.4
                   header_h: 5.0
                   flex: 1.2
@@ -232,15 +227,13 @@ layout:
                   align: stretch
                   title: "Side Path"
                   header_style: smallcaps
-                  fill: "#FAFAF8"
+                  fill: "#F6F6F5"
                   title_size: 6.4
                   header_h: 5.0
                   w: 48
                   children:
-                    # 单盒覆盖圆柱+冰晶双插画区，消 buf/ref 互环带 drift
                     - {ref: side, h: 19}
 
-    # 底栏：objective + legend；legend 加宽 + 右端注记
     - kind: row
       gap: 2.0
       align: stretch
@@ -250,7 +243,7 @@ layout:
         - {ref: note_box, w: 48, h: 12}
 
 elements:
-  # 大盒：恢复完整副题
+  # 底稿工程物件：policy / roll / side / rm / adv / upd / env / tool_m（幽灵）
   - {type: box, id: env, title: "Task Dispatcher",
      body: "prompt · schema · tools", variant: secondary, shape: parallelogram,
      valign: top, title_size: 6.0, body_size: 5.6}
@@ -264,18 +257,18 @@ elements:
      body: "r(τ) composite", variant: secondary, accent: left,
      valign: top, title_size: 6.0, body_size: 5.6}
 
-  # 小工具盒：空间紧，保持短副题
+  # Search/Code：纯灰阶小图标易与矢量盒无异 → 实体矢量
   - {type: box, id: tool_s, title: "Search",
-     body: "web/RAG", variant: sky, valign: top,
+     body: "web/RAG", variant: sky, valign: top, ghost: false,
      title_size: 5.6, body_size: 5.6}
   - {type: box, id: tool_c, title: "Code",
-     body: "sandbox", variant: purple, valign: top,
+     body: "sandbox", variant: purple, valign: top, ghost: false,
      title_size: 5.6, body_size: 5.6}
+  # Memory：本卡 KV 槽溢出难包住 → 与 Search/Code 同走实体矢量
   - {type: box, id: tool_m, title: "Memory",
-     body: "KV R/W", variant: tertiary, valign: top,
+     body: "KV R/W", variant: tertiary, valign: top, ghost: false,
      title_size: 5.6, body_size: 5.6}
 
-  # token：浅红高亮再压一档
   - {type: tokens, id: tok_traj, n: 7, direction: h, variant: primary, gap: 0.4,
      colors: ["#D6EAF8", "#AED6F1", "#D6EAF8", "#85C1E9", "#D6EAF8", "#AED6F1", "#D6EAF8"]}
   - {type: tokens, id: tok_tool, n: 6, direction: h, variant: secondary, gap: 0.45,
@@ -285,15 +278,15 @@ elements:
   - {type: text, id: t_g, text: "G∥ · T steps", size: 5.6,
      color: "#0072B2", anchor: start}
 
-  # 奖励小盒：短副题
+  # 奖励小盒：底稿易退化成空灰块 → 实体矢量
   - {type: box, id: r_succ, title: "Success",
-     body: "task hit", variant: tertiary, valign: top,
+     body: "task hit", variant: tertiary, valign: top, ghost: false,
      title_size: 5.6, body_size: 5.6}
   - {type: box, id: r_step, title: "−λT",
-     body: "steps", variant: muted, valign: top,
+     body: "steps", variant: muted, valign: top, ghost: false,
      title_size: 5.6, body_size: 5.6}
   - {type: box, id: r_fmt, title: "Format Check",
-     body: "schema / JSON", variant: accent, valign: top,
+     body: "schema / JSON", variant: accent, valign: top, ghost: false,
      title_size: 5.6, body_size: 5.6}
 
   - {type: box, id: adv, title: "Advantage Ahat",
@@ -303,7 +296,6 @@ elements:
      body: "policy gradient Δθ", variant: trainable, accent: left,
      valign: top, title_size: 6.0, body_size: 5.6}
 
-  # Side Path：单盒覆盖圆柱+冰晶，矢量叠双行信息
   - {type: box, id: side, title: "Replay Buffer · π_ref",
      body: "store τ · batch · β·KL region (frozen)", variant: accent,
      valign: top, title_size: 5.8, body_size: 5.6}
@@ -318,7 +310,6 @@ elements:
        {swatch: dashed, color: "#999999", label: "KL / replay"},
        {swatch: line, color: "#333333", label: "main loop"},
      ]}
-  # 右端低噪注记卡：铺满底栏空段
   - {type: box, id: note_box, title: "Line styles",
      body: "solid = data/control\ndashed = aux path",
      variant: muted, ghost: false, valign: middle, align: left,
