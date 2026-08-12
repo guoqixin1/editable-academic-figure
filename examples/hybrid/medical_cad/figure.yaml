@@ -1,165 +1,160 @@
-# C2 — Medical imaging CAD pipeline · hybrid v5 (journal-schematic)
-# v5：base.style=journal-schematic；场景按 style-anchors REPORT §4.1 去科普插画感
-# 保留 v4 几何：pad.top 11.5 / feedback clf.bottom@0.78 / 同色头带零外扩
+# Medical imaging CAD pipeline · hybrid v6 (lineart + journal-schematic)
+# v6：theme=lineart；强化模块顶带净空；底部条带填实短 token；箭头落点靠边框
+# 主管线幽灵盒仅标题（无 body），避免贴片下探压住底稿插画
 figure: {width: 236, dpi: 600}
 theme:
-  preset: neurips
+  preset: lineart
 
 base:
   image: base/base.png
-  image: base/base.png
-  image: base/base.png
-  image: base/base.png
-  image: base/base.png
-  image: base/base.png
-  image: base/base.png
-  image: base/base.png
-  image: base/base.png
   mode: skeleton
   style: journal-schematic
-  candidates: 3
-  image: base/base.png
+  candidates: 4
+  accent: [seg, clf]
   prompt: |
     Restyle ONLY the saturated colored blocks in the reference skeleton into a
-    publication-ready medical imaging CAD pipeline schematic (Nature Methods methods-figure
-    austerity). Orthographic grid layout overall; instruments may use a restrained
-    equipment-catalog three-quarter view — never a toy isometric town.
+    publication-ready medical imaging CAD pipeline schematic (Nature Methods /
+    journal-schematic austerity). Orthographic grid layout overall; instruments
+    may use a restrained equipment-catalog three-quarter view — never a toy
+    isometric town.
 
-    Inside each module, the lighter same-hue header band is a text-plate reserve — keep it
-    plain flat seamless same-hue fill (no icons, no decoration, no separate white/gray
-    rectangle, no outline, no second plate). Do not redraw the header band as a distinct
-    card. Pale gray (#EEEEEE) blocks elsewhere are reserved areas — keep them plain flat
-    very-light-gray, do NOT illustrate, decorate, or recolor them.
+    CRITICAL TITLE RESERVE (must obey for every upper-row module):
+    - The TOP 30% of each module plate is a TEXT LANDING ZONE: plain flat seamless
+      near-white / very-light-gray fill (luma ≥ 220), ZERO icons, ZERO glyphs,
+      ZERO decoration, ZERO outlines, ZERO second plates. Illustration ink MUST
+      occupy ONLY the lower ~70% of each plate.
+    - Leave a clear EMPTY margin along EVERY plate edge: bottom ~20–24% of plate
+      height (connector attach zone — no stands, no bezels, no glyphs), left/right
+      ≥14% inset so side connectors land on empty margin only.
+    - Keep ALL ink STRICTLY INSIDE each colored skeleton footprint — do not spill
+      into white gutters between plates (prevents region drift).
+    - Especially PACS (rightmost): monitor stand and bezel stay well above the
+      bottom empty margin; screen content inset from left/right edges ≥14%.
+    - Diagnosis / Preprocess monitors: keep bezels inset; never let screen corners
+      enter the top 30% title band; bottom 22% empty of stand.
+    - Report form: keep top-left corner of the plate empty light fill for title;
+      left edge ≥14% empty for logits connector.
+    - Pale gray (#EEEEEE) blocks in middle/lower rows are reserved — keep them
+      plain flat very-light-gray, do NOT illustrate.
 
-    Upper row ONLY — seven footprint plates left to right. Each plate becomes a LIGHT
-    NEUTRAL panel (near-white / cool grey / warm beige, luma > 210) with at most a thin
-    categorical accent strip or corner tick (left edge or top hairline, ≤8% of plate width);
-    DO NOT flood the whole card with macaron pastel. Sharp or barely-rounded rectangles;
-    hairline dark strokes. Draw icons STRICTLY INSIDE the plate footprint, never outside,
-    never overlapping neighboring gutters. Keep positions fixed. Leave the TOP third of
-    each plate nearly empty (title landing; match the light tinted header band). Leave a
-    clear EMPTY margin along the BOTTOM edge (~18–22% of plate height) so connectors attach
-    without piercing icons. Especially for the rightmost PACS monitor: keep the stand well
-    above the plate bottom.
+    Upper row ONLY — seven footprint plates left to right. Each plate = LIGHT
+    NEUTRAL panel (near-white / cool grey, luma > 210) with at most a thin
+    categorical accent strip (left edge hairline, ≤6% of plate width). Sharp or
+    barely-rounded rectangles; hairline dark strokes. Icons STRICTLY INSIDE the
+    lower 70% footprint, never outside, never into gutters or title band.
 
-    Middle-band icons only (technical glyphs, not cute props); keep EVERY glyph inset
-    ≥12% from left/right plate edges and ≥10% from bottom empty margin (prevents ink
-    spilling into white gutters — critical for preprocess / diagnosis / PACS monitors):
-    - Acquisition: catalog-style laboratory microscope + compact slide scanner on a bench
-      (accurate silhouettes, technical-manual detail hierarchy — NOT rounded toy scopes)
-    - Preprocess: orthographic rectangular device monitor showing schematic dual waveform /
-      denoise curves only (not cute UI chrome); monitor bezel fully inside plate
-    - Segmentation: layered U-Net tile stack + low-detail technical anatomical organ schematic
-      as contour/section line drawing (NOT soft candy/gummy organ blob, NOT 3D soft organ)
-    - Feature extract: small-multiples morphometric contour glyphs + embedding/feature grid
-      of dots (NOT yellow soft blobs, NOT sticker cells, NOT kidney candy shapes)
-    - Diagnosis: orthographic desk monitor with schematic medical-scan marks on screen
-      (abstract scan silhouette / intensity map — not playful UI); fully inside plate
-    - Report: structured report panel / form grid (ruled rows, empty checkbox squares as
-      geometric glyphs ONLY) — NO clipboard, NO pen, NO cute office props
-    - PACS review: wide orthographic monitor with schematic torso cross-section scan;
-      stand clear of bottom margin; fully inside plate
+    Middle-band icons only (technical glyphs, not cute props), fully inset:
+    - Acquisition: catalog-style laboratory microscope + compact slide scanner
+      (accurate silhouettes — NOT rounded toy scopes); keep scanner body clear
+      of left/right edges so FOV connector lands on empty margin
+    - Preprocess: orthographic device monitor with dual waveform / denoise curves
+      only; bezel fully inside plate; top 30% empty
+    - Segmentation: layered U-Net tile stack + contour anatomical section
+      (NOT soft candy organ); stack sits in lower 70%, top clear for title
+    - Feature extract: small-multiples morphometric contour glyphs + embedding
+      grid of dots (NOT yellow blobs / sticker cells); glyphs in lower 70%
+    - Diagnosis: orthographic desk monitor with abstract scan marks; fully inside
+      plate; top 30% empty; bottom margin clear of stand
+    - Report: structured report / form grid (ruled rows, empty checkbox squares as
+      geometric glyphs ONLY) — NO clipboard, NO pen; top-left corner of plate
+      stays empty light fill for title
+    - PACS review: wide orthographic monitor with schematic torso cross-section;
+      stand clear of bottom margin; top 30% empty light fill
 
-    Do NOT draw anything in the middle row, lower I/O row, or bottom legend band — those
-    pale-gray reserved blocks stay empty flat gray.
+    Do NOT draw anything in the middle row, lower I/O row, or bottom legend band.
 
-    Color discipline: muted editorial accents only as thin taxonomy cues; large fields stay
-    neutral. Forbidden: macaron full-card fills, candy colors, thick comic outlines, sticker
-    drop shadows, glossy bevels. Catalog shading on instruments only (subtle). Same
-    illustrator across plates. White gutters between plates untouched.
+    Color discipline: muted editorial accents only as thin taxonomy cues; large
+    fields stay neutral gray/white. Forbidden: macaron full-card fills, candy
+    colors, thick comic outlines, sticker drop shadows, glossy bevels.
 
     No arrows/connectors between plates. No arrowheads, no flow lines, no chevrons.
-    Absolutely no text: no letters, digits, words, captions, watermarks, logos, or
-    placeholder phrases. Do NOT label stages under icons (no "Acquisition"/"Report"/
-    "U-Net"/glyph names). No math symbols as readable characters. Pure pictures only.
+    Absolutely no text: no letters, digits, words, captions, watermarks, logos.
     White / near-white canvas; no outer page frame.
 
 elements:
-  # 主管线：幽灵 → 底稿插画；矢量只叠标题/箭头
+  # 主管线：幽灵 → 底稿插画；仅标题（body 下探会压画）
   - {type: box, id: mic, title: "Acquisition",
      variant: muted, valign: top, title_size: 6.0}
   - {type: box, id: prep, title: "Preprocess",
-     body: "denoise + norm", variant: muted,
-     valign: top, title_size: 6.0, body_size: 5.6}
+     variant: muted, valign: top, title_size: 6.0}
   - {type: box, id: seg, title: "Segmentation",
-     body: "U-Net / SAM", variant: trainable, accent: left,
-     valign: top, title_size: 6.0, body_size: 5.6}
+     variant: primary, accent: left, valign: top, title_size: 6.0}
   - {type: box, id: feat, title: "Feature Extract",
-     body: "morph + CNN emb", variant: secondary, accent: left,
-     valign: top, title_size: 5.8, body_size: 5.6}
+     variant: secondary, accent: left, valign: top, title_size: 5.8}
   - {type: box, id: clf, title: "Diagnosis",
-     body: "multi-label head", variant: trainable, accent: left,
-     valign: top, title_size: 6.0, body_size: 5.6}
-  - {type: box, id: report, title: "report",
-     variant: tertiary, valign: top, title_size: 6.0}
+     variant: primary, accent: left, valign: top, title_size: 6.0}
+  - {type: box, id: report, title: "Report",
+     variant: muted, valign: top, title_size: 6.0}
   - {type: box, id: doctor, title: "PACS review",
-     variant: sky, valign: top, title_size: 5.8}
+     variant: secondary, valign: top, title_size: 5.8}
 
-  # 临床栏 / I/O：实体矢量面板
+  # 临床栏 / I/O：实体矢量面板 — 短 token 填实，禁止空芯片 sketch
   - {type: box, id: findings, title: "Findings",
-     body: "ROI descriptors", variant: tertiary, sketch: bars, valign: top,
-     title_size: 5.8, body_size: 5.6, ghost: false}
+     body: "mass · edema · WMH · atrophy · calcif",
+     variant: muted, valign: top, title_size: 5.8, body_size: 5.5, ghost: false}
   - {type: box, id: out_note, title: "Structured Output",
-     body: "ICD + confidence", variant: tertiary, sketch: matrix, valign: top,
-     title_size: 5.8, body_size: 5.6, ghost: false}
+     body: "C71.9 · G93.1 · I63.9 · confidence",
+     variant: muted, valign: top, title_size: 5.8, body_size: 5.5, ghost: false}
   - {type: box, id: metrics, title: "QA Metrics",
-     body: "Dice · AUC · ECE", variant: sky, sketch: distribution, valign: top,
-     title_size: 5.8, body_size: 5.6, ghost: false}
+     body: "Dice · AUC · ECE · calib.",
+     variant: primary, valign: top, title_size: 5.8, body_size: 5.5, ghost: false}
 
-  - {type: box, id: io_acq, title: "In/Out · Acq  ·  raw→H×W×C",
-     variant: muted, sketch: spectrum,
-     valign: top, title_size: 5.6, ghost: false}
-  - {type: box, id: io_seg, title: "In/Out · Seg  ·  tensor→mask+ROI",
-     variant: primary, sketch: heatmap,
-     valign: top, title_size: 5.6, ghost: false}
-  - {type: box, id: io_feat, title: "In/Out · Feat  ·  ROI→R^d",
-     variant: secondary, sketch: scatter,
-     valign: top, title_size: 5.6, ghost: false}
-  - {type: box, id: io_dx, title: "In/Out · Dx  ·  emb→logits/ICD",
-     variant: trainable, sketch: bars,
-     valign: top, title_size: 5.6, ghost: false}
+  - {type: box, id: io_acq, title: "In/Out · Acq",
+     body: "DICOM · FOV · H×W×C · meta",
+     variant: muted, valign: top, title_size: 5.5, body_size: 5.5, ghost: false}
+  - {type: box, id: io_seg, title: "In/Out · Seg",
+     body: "N4 · resample · z-norm · crop",
+     variant: secondary, valign: top, title_size: 5.5, body_size: 5.5, ghost: false}
+  - {type: box, id: io_feat, title: "In/Out · Feat",
+     body: "morph · texture · CNN emb",
+     variant: secondary, valign: top, title_size: 5.5, body_size: 5.5, ghost: false}
+  - {type: box, id: io_dx, title: "In/Out · Dx",
+     body: "C71.9 · G93.1 · I63.9 · logits",
+     variant: primary, valign: top, title_size: 5.5, body_size: 5.5, ghost: false}
 
-  # 底栏：legend 横排 + 右侧闭环说明卡（消右半空置）
-  - {type: legend, id: lg, columns: 4, size: 5.6, style: inline, items: [
-      {swatch: box, color: "#E07A3D", label: "neural / trainable"},
-      {swatch: box, color: "#E69F00", label: "feature stage"},
-      {swatch: box, color: "#DDDDDD", label: "preprocess"},
-      {swatch: dashed, color: "#0072B2", label: "clinician feedback"},
+  # 底栏：灰阶+钢蓝图例；trainable 靠火焰角标传达
+  - {type: legend, id: lg, columns: 3, size: 5.6, style: inline, items: [
+      {swatch: box, color: "#3D6B99", label: "trainable stage"},
+      {swatch: box, color: "#4A5568", label: "pipeline / I/O"},
+      {swatch: dashed, color: "#3D6B99", label: "clinician feedback"},
     ]}
   - {type: box, id: loop_note, title: "Closed loop · PACS → QA · Dx feedback",
-     variant: sky, ghost: false, valign: middle,
+     variant: muted, ghost: false, valign: middle,
      title_size: 5.6}
 
-  # badges / fire：随 pad.top +2mm 整体下移（贴各盒左上 / 右上内侧）
-  - {type: badge, id: bd1, at: [6.4, 13.6], text: "1", size: 2.8, color: "#0072B2"}
-  - {type: badge, id: bd2, at: [38.4, 13.6], text: "2", size: 2.8, color: "#666666"}
-  - {type: badge, id: bd3, at: [72.9, 13.6], text: "3", size: 2.8, color: "#E07A3D"}
-  - {type: badge, id: bd4, at: [110.2, 13.6], text: "4", size: 2.8, color: "#E69F00"}
-  - {type: badge, id: bd5, at: [144.7, 13.6], text: "5", size: 2.8, color: "#E07A3D"}
-  - {type: badge, id: bd6, at: [179.3, 13.6], text: "6", size: 2.6, color: "#009E73"}
-  - {type: marker, id: m_fire_seg, at: [94.5, 16.2], icon: fire, size: 2.6}
-  - {type: marker, id: m_fire_clf, at: [164.2, 16.2], icon: fire, size: 2.6}
+  # badges：灰阶编号；trainable 步骤用钢蓝
+  - {type: badge, id: bd1, at: [6.4, 13.6], text: "1", size: 2.8, color: "#4A5568"}
+  - {type: badge, id: bd2, at: [38.4, 13.6], text: "2", size: 2.8, color: "#4A5568"}
+  - {type: badge, id: bd3, at: [72.9, 13.6], text: "3", size: 2.8, color: "#3D6B99"}
+  - {type: badge, id: bd4, at: [110.2, 13.6], text: "4", size: 2.8, color: "#4A5568"}
+  - {type: badge, id: bd5, at: [144.7, 13.6], text: "5", size: 2.8, color: "#3D6B99"}
+  - {type: badge, id: bd6, at: [179.3, 13.6], text: "6", size: 2.6, color: "#4A5568"}
+  - {type: marker, id: m_fire_seg, at: [94.5, 16.2], icon: fire, size: 2.6, color: "#3D6B99"}
+  - {type: marker, id: m_fire_clf, at: [164.2, 16.2], icon: fire, size: 2.6, color: "#3D6B99"}
 
-  # 顶行：统一 t=0.48 → 水平直线；标签落缝隙
-  - {type: arrow, from: mic.right@0.48, to: prep.left@0.48, label: "FOV",
-     weight: heavy, semantic: data, route: straight, label_pos: auto}
-  - {type: arrow, from: prep.right@0.48, to: seg.left@0.48,
+  # 顶行箭头：y 上移到 27.80（躲开 Diagnosis 溢墨最重的 y≈30 带）；终点停在浅缝
+  - {type: arrow, from: [29.96, 27.80], to: [35.56, 27.80], label: "FOV",
+     weight: heavy, semantic: data, route: straight, label_offset: 3.0}
+  - {type: arrow, from: [64.54, 27.80], to: [70.14, 27.80],
      weight: heavy, semantic: data, route: straight}
-  - {type: arrow, from: seg.right@0.48, to: feat.left@0.48,
+  - {type: arrow, from: [101.75, 27.80], to: [107.35, 27.80],
      weight: heavy, semantic: data, route: straight}
-  - {type: arrow, from: feat.right@0.48, to: clf.left@0.48, label: "R^d",
-     weight: heavy, semantic: data, route: straight, label_pos: auto}
-  - {type: arrow, from: clf.right@0.48, to: report.left@0.48, label: "logits",
-     weight: heavy, semantic: data, route: straight, label_pos: auto}
-  - {type: arrow, from: report.right@0.48, to: doctor.left@0.48,
+  - {type: arrow, from: [136.33, 27.80], to: [139.40, 27.80], label: "R^d",
+     weight: heavy, semantic: data, route: straight, label_offset: 3.0}
+  - {type: arrow, from: [170.91, 27.80], to: [175.50, 27.80], label: "logits",
+     weight: heavy, semantic: data, route: straight, label_offset: 3.0}
+  - {type: arrow, from: [201.55, 27.80], to: [205.50, 27.80],
      weight: normal, semantic: data, route: straight}
 
-  - {type: arrow, from: doctor.bottom@0.23, to: metrics.top@0.75,
-     weight: thin, semantic: data, route: straight}
-  - {type: arrow, from: findings.right@0.40, to: out_note.left@0.40,
+  # PACS→QA：从模块下边框最左角出发（躲开支架插画）
+  - {type: arrow, from: [208.46, 37.0], to: metrics.top@0.90,
+     weight: thin, semantic: data, route: vh}
+  # Findings→ICD（随 findings 行 gap 收紧后重测）
+  - {type: arrow, from: [80.15, 53.50], to: [82.10, 53.50],
      weight: normal, semantic: data, route: straight}
-  - {type: arrow, from: out_note.top@0.88, to: clf.bottom@0.78,
-     weight: thin, semantic: feedback, route: avoid}
+  # clinician feedback：起点 out_note 顶边；终点 Diagnosis 左下外侧浅底
+  - {type: arrow, from: out_note.top@0.40, to: [140.30, 37.50],
+     weight: thin, semantic: feedback, route: vh}
 
 layout:
   kind: col
@@ -170,12 +165,12 @@ layout:
     - id: p_pipe
       type: panel
       kind: col
-      gap: 7.0
+      gap: 11.0
       pad: [11.5, 2.4, 1.0, 2.4]
       align: stretch
       title: "Medical Imaging CAD Pipeline"
       header_style: smallcaps
-      fill: "#F0F4F8"
+      fill: "#F7F8FA"
       title_size: 6.6
       header_h: 5.0
       children:
@@ -183,34 +178,41 @@ layout:
           gap: 7.0
           align: stretch
           children:
-            - {ref: mic, flex: 0.95, h: 22}
-            - {ref: prep, flex: 1.05, h: 22}
-            - {ref: seg, flex: 1.15, h: 22}
-            - {ref: feat, flex: 1.05, h: 22}
-            - {ref: clf, flex: 1.05, h: 22}
-            - {ref: report, flex: 0.9, h: 22}
-            - {ref: doctor, flex: 0.9, h: 22}
+            - {ref: mic, flex: 0.95, h: 24}
+            - {ref: prep, flex: 1.05, h: 24}
+            - {ref: seg, flex: 1.15, h: 24}
+            - {ref: feat, flex: 1.05, h: 24}
+            - {ref: clf, flex: 1.05, h: 24}
+            - {ref: report, flex: 0.9, h: 24}
+            - {ref: doctor, flex: 0.9, h: 24}
 
-        - kind: row
-          gap: 5.0
+        # 左缩进 2.5mm 清模块圆角叠角；In/Out 压缩高度，图例上移
+        - kind: col
+          gap: 2.8
+          pad: [0, 0, 0, 2.5]
           align: stretch
           children:
-            - {ref: findings, flex: 1, h: 14}
-            - {ref: out_note, flex: 1, h: 14}
-            - {ref: metrics, flex: 1, h: 14}
+            # gap 6→3：消除 Structured Output / QA 之间像空壳卡的宽白缝（无第四张矢量卡）
+            - kind: row
+              gap: 3.0
+              align: stretch
+              children:
+                - {ref: findings, flex: 1, h: 10}
+                - {ref: out_note, flex: 1, h: 10}
+                - {ref: metrics, flex: 1, h: 10}
 
-        - kind: row
-          gap: 2.0
-          align: stretch
-          children:
-            - {ref: io_acq, flex: 1, h: 12}
-            - {ref: io_seg, flex: 1, h: 12}
-            - {ref: io_feat, flex: 1, h: 12}
-            - {ref: io_dx, flex: 1, h: 12}
+            - kind: row
+              gap: 2.5
+              align: stretch
+              children:
+                - {ref: io_acq, flex: 1, h: 9}
+                - {ref: io_seg, flex: 1, h: 9}
+                - {ref: io_feat, flex: 1, h: 9}
+                - {ref: io_dx, flex: 1, h: 9}
 
-        - kind: row
-          gap: 3.0
-          align: stretch
-          children:
-            - {ref: lg, flex: 1.35, h: 7.5}
-            - {ref: loop_note, flex: 1.0, h: 7.5}
+            - kind: row
+              gap: 3.0
+              align: stretch
+              children:
+                - {ref: lg, flex: 1.35, h: 6.0}
+                - {ref: loop_note, flex: 1.0, h: 6.0}

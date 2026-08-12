@@ -345,9 +345,9 @@ elements:
 
 ## 混合模式（base）：AI 底稿 + 矢量标注
 
-顶层 `base:` 打开混合管线。底稿全画布打底；`box`/`asset`/`panel` 默认**幽灵**（不画壳，几何仍供锚点/路由/lint；`ghost: false` 恢复实体）；文字自动垫半透明白底板（`plate: false` 可关；主题 `plate_fill` / `plate_opacity` / `plate_pad` / `plate_radius` 调样式）。
+顶层 `base:` 打开混合管线。底稿全画布打底；`box`/`asset`/`panel` 默认**幽灵**（不画壳，几何仍供锚点/路由/lint；`ghost: false` 恢复实体）；文字默认半透明白底板，落在干净浅色净空时**自动免贴片**（`plate: true` 强制保留，`plate: false` 强制关闭；主题 `plate_fill` / `plate_opacity` / `plate_pad` / `plate_radius` 调样式）。
 
-**禁止**对底稿做板下漂白等破坏性后处理（会洗掉仪表盘/齿轮等插画）。对比度不足优先提高 `plate_opacity` / 加大保留带；仍不够再改 prompt 后 `--force` 重抽。
+**三原则**：① **标题裸文字优先**——落在底图题字带；对比度不足才显式 `plate: true`，贴片总数宜 ≤3–4；② **贴片限量**——实心矢量卡只放底图预留空槽，严禁盖插画；③ **禁漂白**——禁止对底稿做板下漂白等破坏性后处理（会洗掉仪表盘/齿轮等插画）。对比度不足优先提高 `plate_opacity` / 加大保留带；仍不够再改 prompt 后 `--force` 重抽。
 
 ```yaml
 base:
@@ -376,15 +376,16 @@ base:
 
 ### skeleton（首选）：布局对齐图生图
 
-1. **写 layout + 矢量标注**：与纯矢量相同写 `layout:` / `elements`（箭头 `route: avoid`、文字/legend 照常）。加 `base: {mode: skeleton, prompt: …}`。
+1. **写 layout + 矢量标注**：与纯矢量相同写 `layout:` / `elements`（箭头 `route: avoid`、文字/legend 照常）。加 `base: {mode: skeleton, prompt: …}`；技术线稿底稿配 `theme: lineart`。
 2. **抽底稿**：`python -m paperfig.cli base gen fig.yaml [-k KEY] [--model nano-banana-fast|nano-banana-2|nano-banana-pro] [--candidates N] [--force]`  
    → 自动渲无文字色块骨架 `base/skeleton.png` → 作参考图（API `urls`）喂 nano-banana 强编辑图生图 → 候选在 `base/candidates/`，contact sheet 在 `base/`。几何与 spec 对齐（实测质心偏移常 <3px）。
 3. **目检 contact sheet 筛卡（必经）**：淘汰烤字（字母/数字）、**烤箭头/烤连接线**、模块大漂移、深色花纹占满标签区、擅自画了箭头/连线的卡。骨架同色系浅色头带与浅灰块为文字板保留区——选卡时核对模型是否保持净空（未在保留区插画）。
 4. **选卡**：`python -m paperfig.cli base pick fig.yaml <n>`（回写 `base.image`）。
-5. **合成渲染**：`python -m paperfig.cli render fig.yaml -o fig.png --svg fig.svg`（矢量层按原坐标叠字/箭）。
-6. **lint**：清零 `base-text-contrast`（E）；留意 `base-region-drift` / `plate-overlap` / `canvas-edge-gap`（W）。base 模式停用 `R-empty-box` / `R-no-section` / `R-no-legend` / `arrow-exit-over-content` / sketch 碰撞等不适用项，其余照常。
-7. **只改文字**：改 YAML 文案后直接 `render`——**秒级重渲，不必重抽底稿**。
-8. **切片循环复核（交付前强制）**：见 Phase 4。
+5. **先量后画（像素→mm）**：用 PIL 实测底图各色块 / 题字带 / 空槽的像素矩形，按画布 mm 换算写入 `rect`/`at`/`regions`；矢量 ghost 盒与底图像素对齐（误差 ≤0.8mm）。箭头端点落色块边缘外 0.5–1mm、全正交；标签放走廊净空。
+6. **合成渲染**：`python -m paperfig.cli render fig.yaml -o fig.png --svg fig.svg`（矢量层按实测坐标叠字/箭）。
+7. **lint**：清零 `base-text-contrast` / `glyph-missing`（E）；留意 `plate-over-art` / `base-region-drift` / `plate-overlap` / `canvas-edge-gap`（W）。base 模式停用 `R-empty-box` / `R-no-section` / `R-no-legend` / `arrow-exit-over-content` / sketch 碰撞等不适用项，其余照常。
+8. **只改文字**：改 YAML 文案后直接 `render`——**秒级重渲，不必重抽底稿**。
+9. **切片循环复核（交付前强制）**：见 Phase 4。
 
 ### freeform：纯文生图 + 人工标区
 
@@ -491,14 +492,15 @@ python -m paperfig.cli tiles {project}/figure.yaml -o {project}/tiles --dpi 300
 
 对 `tiles/tile_r*c*.png` **逐格目检**，按 checklist 记缺陷清单（有一条就记一条）：
 
-1. **字压图**：矢量文字/plate 压在插画主体或花纹上
+1. **字压图 / 贴片盖插画**：矢量文字或 plate 压在插画主体或花纹上（对照 `plate-over-art`）
 2. **烤字 / 烤箭头 / 烤连接线**：底稿残留字母数字或模型自绘箭头
-3. **箭头端点**：悬空、插进插画、未贴模块边
-4. **台阶折线**：不必要的直角折、绕行别扭
-5. **标签压折角或压内容**：箭头标签压折点 / 压模块 / 压其他字
-6. **空白带与密度失衡**：边缘空带、局部过挤或过空（对照 `canvas-edge-gap` 等机检）
-7. **图例语义与画面一致**：色键/虚线样式与图中对应
-8. **plate 互叠**：文字底板互相重叠遮挡
+3. **悬空箭头尖**：端点悬空、插进插画、未贴模块边（宜落色块边缘外 0.5–1mm）
+4. **空壳卡片**：只有标题的空心盒 / 幽灵壳无内容且未落在预留空槽
+5. **台阶折线**：不必要的直角折、绕行别扭
+6. **标签压折角或压内容**：箭头标签压折点 / 压模块 / 压其他字
+7. **空白带与密度失衡**：边缘空带、局部过挤或过空（对照 `canvas-edge-gap` 等机检）
+8. **图例语义与画面一致**：色键/虚线样式与图中对应
+9. **plate 互叠**：文字底板互相重叠遮挡
 
 然后：**修 spec 或重抽底稿 → 重渲 → 再 tiles → 再逐片目检**。
 
@@ -506,7 +508,7 @@ python -m paperfig.cli tiles {project}/figure.yaml -o {project}/tiles --dpi 300
 
 机检同步要求（`prompts/visual_rubric.md`）：
 
-1. E 清零；纯矢量尽量清零 `R-empty-box` / `R-no-section` / `R-no-legend`；base 重点清零 `base-text-contrast`，并处理 `base-region-drift` / `plate-overlap` / `canvas-edge-gap`。
+1. E 清零；纯矢量尽量清零 `R-empty-box` / `R-no-section` / `R-no-legend`；base 重点清零 `base-text-contrast` / `glyph-missing`，并处理 `plate-over-art` / `base-region-drift` / `plate-overlap` / `canvas-edge-gap`。
 2. 目检以上 checklist + 对齐、留白、箭头语义、视觉丰度、配色、上下标。
 
 ## Phase 5：交付

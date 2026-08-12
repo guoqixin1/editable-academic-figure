@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import cairosvg
+import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 from .fonts import (FAMILY_SVG, PT_TO_MM, LINE_HEIGHT, SCRIPT_SCALE, SUB_SHIFT,
@@ -140,6 +141,10 @@ class RenderResult:
         self.base_mode: bool = False
         # 文字底板几何（owner_id, plate_rect），供后续 lint
         self.text_plates: list[tuple[str, Rect]] = []
+        # 自动判定免贴片（owner_id, probe_rect）；显式 plate:false 不记入
+        self.text_plate_skipped: list[tuple[str, Rect]] = []
+        # 底稿灰度缓存：(gray_u8, edges_u8, sx, sy) | None | False(未加载)
+        self._base_gray_cache = False
 
 
 def _is_ghost(el, base_mode: bool) -> bool:
@@ -150,12 +155,127 @@ def _is_ghost(el, base_mode: bool) -> bool:
     return True if g is None else bool(g)
 
 
+# ── 底稿区域纹理（贴片按需 / plate-over-art 共用）──────────────
+# 标定（refs/base-pilot medical + agentrl 底稿实测，灰度 0–255 + FIND_EDGES）：
+#   必报 art：Segmentation edge≈20.3/std≈42.6；Diagnosis 16.8/75.1；
+#            Advantage Ahat 30.1/42.1；Replay Buffer 57.3/62.3；G Rollouts 48.5/57.6
+#   不报净空：PACS review edge≈1.6/std≈0.7；panel 标题带 / 底部浅带 edge<3/std<5
+#   干净浅底（可免贴片）：mean≳220 且 std≲10 且 edge≲5（PACS / 纯白净空带）
+# → 插画：edge≥12 或 std≥28；干净：mean≥220 且 std≤10 且 edge≤5
+_ART_EDGE_MEAN = 12.0
+_ART_LUMA_STD = 28.0
+_CLEAN_LUMA_MEAN = 220.0
+_CLEAN_LUMA_STD = 10.0
+_CLEAN_EDGE_MEAN = 5.0
+
+
+def _load_base_gray(spec: FigureSpec, res: RenderResult | None = None):
+    """加载底稿灰度 + FIND_EDGES；返回 (gray, edges, sx, sy) 或 None。
+
+    结果可缓存在 ``res._base_gray_cache``（同一次 render / lint）。
+    """
+    if res is not None and res._base_gray_cache is not False:
+        return res._base_gray_cache  # may be None
+    path = spec.resolve_base_image()
+    out = None
+    if path is not None and path.is_file():
+        try:
+            with Image.open(path) as im:
+                gray_im = im.convert("L")
+                gray = np.asarray(gray_im, dtype=np.float32)
+                edges = np.asarray(
+                    gray_im.filter(ImageFilter.FIND_EDGES), dtype=np.float32,
+                )
+            if gray.size and gray.shape[0] >= 2 and gray.shape[1] >= 2:
+                sx = gray.shape[1] / max(spec.width, 1e-6)
+                sy = gray.shape[0] / max(spec.height, 1e-6)
+                out = (gray, edges, sx, sy)
+        except OSError:
+            out = None
+    if res is not None:
+        res._base_gray_cache = out
+    return out
+
+
+def region_art_metrics(
+    spec: FigureSpec, rect: Rect, res: RenderResult | None = None,
+) -> tuple[float, float, float] | None:
+    """采样底稿矩形 → (edge_mean, luma_std, luma_mean)；无底稿则 None。"""
+    loaded = _load_base_gray(spec, res)
+    if loaded is None:
+        return None
+    gray, edges, sx, sy = loaded
+    h, w = gray.shape[:2]
+    x0 = int(math.floor(rect.x * sx))
+    y0 = int(math.floor(rect.y * sy))
+    x1 = int(math.ceil(rect.right * sx))
+    y1 = int(math.ceil(rect.bottom * sy))
+    x0 = max(0, min(w - 1, x0))
+    y0 = max(0, min(h - 1, y0))
+    x1 = max(x0 + 1, min(w, x1))
+    y1 = max(y0 + 1, min(h, y1))
+    patch = gray[y0:y1, x0:x1]
+    ep = edges[y0:y1, x0:x1]
+    if patch.size == 0:
+        return None
+    return float(ep.mean()), float(patch.std()), float(patch.mean())
+
+
+def base_region_has_art(
+    spec: FigureSpec, rect: Rect, res: RenderResult | None = None,
+) -> bool:
+    """区域是否有明显插画内容（边缘密度或亮度标准差超阈值）。"""
+    m = region_art_metrics(spec, rect, res)
+    if m is None:
+        return False
+    edge, std, _mean = m
+    return edge >= _ART_EDGE_MEAN or std >= _ART_LUMA_STD
+
+
+def base_region_is_clean(
+    spec: FigureSpec, rect: Rect, res: RenderResult | None = None,
+) -> bool:
+    """干净浅色净空：高亮度 + 低方差 + 低边缘 → 可免贴片。"""
+    m = region_art_metrics(spec, rect, res)
+    if m is None:
+        return False
+    edge, std, mean = m
+    return (
+        mean >= _CLEAN_LUMA_MEAN
+        and std <= _CLEAN_LUMA_STD
+        and edge <= _CLEAN_EDGE_MEAN
+    )
+
+
 def _use_plate(el, base_mode: bool) -> bool:
-    """base 模式下默认开文字底板；元素 plate: false 关闭。"""
+    """兼容旧调用：仅看显式 plate 字段（忽略自动净空判定）。
+
+    自动按需贴片请用 ``_decide_plate``。
+    """
     if not base_mode:
         return False
     p = getattr(el, "plate", None)
     return True if p is None else bool(p)
+
+
+def _decide_plate(
+    el, plate_rect: Rect | None, spec: FigureSpec, res: RenderResult,
+) -> bool:
+    """base 模式贴片决策：plate:true 强制开、false 强制关；未指定则净空免贴片。"""
+    if not res.base_mode:
+        return False
+    p = getattr(el, "plate", None)
+    if p is False:
+        return False
+    if p is True:
+        return True
+    if plate_rect is None:
+        return False
+    # 无底稿可采样时保持旧行为（默认加贴片）
+    if base_region_is_clean(spec, plate_rect, res):
+        res.text_plate_skipped.append((el.id, plate_rect))
+        return False
+    return True
 
 
 def _plate_svg(r: Rect, th: Theme) -> str:
@@ -358,7 +478,7 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
              if isinstance(e, (TextEl, PanelLabelEl, MarkerEl, BadgeEl, LegendEl))]
 
     for p in panels:
-        body.append(_wrap_el(p.id, _render_panel(p, theme, fs, res)))
+        body.append(_wrap_el(p.id, _render_panel(p, theme, fs, res, spec)))
     for g in groups:
         body.append(_wrap_el(g.id, _render_group(g, spec, theme, fs, res)))
     for n in nodes:
@@ -389,7 +509,7 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
         ))
     for t in texts:
         if isinstance(t, TextEl):
-            s = _render_text(t, theme, fs, res)
+            s = _render_text(t, theme, fs, res, spec)
         elif isinstance(t, MarkerEl):
             s = _render_marker(t)
         elif isinstance(t, BadgeEl):
@@ -710,10 +830,10 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
             text_out.append(span.to_svg())
             y += lh
 
-    # 幽灵盒文字底板：title+body 合并一块板
-    if ghost and _use_plate(el, res.base_mode) and text_spans_here:
+    # 幽灵盒文字底板：title+body 合并一块板；净空浅底自动免贴片
+    if ghost and text_spans_here:
         plate = _union_span_plate(text_spans_here, th)
-        if plate is not None:
+        if plate is not None and _decide_plate(el, plate, spec, res):
             res.text_plates.append((el.id, plate))
             out.append(_plate_svg(plate, th))
     out.extend(text_out)
@@ -1806,7 +1926,8 @@ def _render_group(el: GroupEl, spec: FigureSpec, th: Theme, fs: float, res: Rend
     return "".join(out)
 
 
-def _render_text(el: TextEl, th: Theme, fs: float, res: RenderResult) -> str:
+def _render_text(el: TextEl, th: Theme, fs: float, res: RenderResult,
+                 spec: FigureSpec | None = None) -> str:
     pt = el.size * fs
     color = el.color or th.ink
     x, y = el.at
@@ -1842,11 +1963,17 @@ def _render_text(el: TextEl, th: Theme, fs: float, res: RenderResult) -> str:
         text_spans_here.append(span)
         text_out.append(span.to_svg())
         cy += lh
-    if _use_plate(el, res.base_mode) and text_spans_here:
+    if text_spans_here:
         plate = _union_span_plate(text_spans_here, th)
+        # spec 在 render() 主路径传入；缺省时回退旧逻辑（仅看 plate 字段）
         if plate is not None:
-            res.text_plates.append((el.id, plate))
-            out.append(_plate_svg(plate, th))
+            use = (
+                _decide_plate(el, plate, spec, res) if spec is not None
+                else _use_plate(el, res.base_mode)
+            )
+            if use:
+                res.text_plates.append((el.id, plate))
+                out.append(_plate_svg(plate, th))
     out.extend(text_out)
     return "".join(out)
 
@@ -1896,7 +2023,8 @@ def _panel_title_band_rect(el: PanelEl, th: Theme, fs: float) -> Rect | None:
     return Rect(r.x, r.y, r.w, hh)
 
 
-def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult) -> str:
+def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult,
+                  spec: FigureSpec | None = None) -> str:
     v = th.variants.get(el.variant)
     if v is None:
         raise ValueError(f"panel '{el.id}': 未知 variant '{el.variant}'（可选 {list(th.variants)}）")
@@ -1936,9 +2064,13 @@ def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult) -> str:
                 span = _TextSpan(x=r.cx - w / 2, baseline=baseline, text=el.title,
                                  pt=pt, bold=True, color=th.ink)
             res.text_spans.append(span)
-            if _use_plate(el, res.base_mode):
-                plate = _union_span_plate([span], th)
-                if plate is not None:
+            plate = _union_span_plate([span], th)
+            if plate is not None:
+                use = (
+                    _decide_plate(el, plate, spec, res) if spec is not None
+                    else _use_plate(el, res.base_mode)
+                )
+                if use:
                     res.text_plates.append((el.id, plate))
                     out.append(_plate_svg(plate, th))
             out.append(span.to_svg())

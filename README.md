@@ -60,6 +60,7 @@
 | `airy` | 演示 / 博客 | 柔彩分区，偏展示与科普 |
 | `editorial` | 编辑隐喻 | 杂志/叙事配图气质；样例 [`examples/themes/editorial_concept.yaml`](examples/themes/editorial_concept.yaml) |
 | `isosystem` | 系统图 | 等距/系统架构示意；样例 [`examples/themes/isosystem_stack.yaml`](examples/themes/isosystem_stack.yaml) |
+| `lineart` | 混合底稿线稿 | 近直角、灰阶细边 + 钢蓝强调；专配 `technical-lineart` / `journal-schematic` |
 
 另有 `topconf`（经典顶会密度）等历史预设，可按稿件风格选用。
 
@@ -130,7 +131,7 @@ python -m paperfig.cli base pick fig.yaml 2                      # 目检 contac
 python -m paperfig.cli base grid fig.yaml                        # freeform：叠 mm 网格标 regions
 ```
 
-流程与 prompt 要点见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)「混合模式（base）」与 [USAGE §8](USAGE.md#8-混合模式-base)。底稿风格用 `base.style`（`journal-schematic` / `technical-lineart` / `sci-flat-pro`）。样例在 [`examples/hybrid/`](examples/hybrid/)。
+流程与 prompt 要点见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)「混合模式（base）」与 [USAGE §8](USAGE.md#8-混合模式-base)。底稿风格用 `base.style`（`journal-schematic` / `technical-lineart` / `sci-flat-pro`）；矢量层与底图像素实测对齐，标题优先裸文字落在题字带。样例在 [`examples/hybrid/`](examples/hybrid/)。
 
 **医学影像 CAD · 混合版**（学术混搭：顶行形象模块交 AI 底稿，中底排统计/I/O 面板保持矢量）：
 
@@ -149,7 +150,7 @@ python -m paperfig.cli base grid fig.yaml                        # freeform：�
 ```yaml
 figure: {width: 180, height: 80, dpi: 600}
 theme:
-  preset: neurips          # neurips | topconf | airy | editorial | isosystem
+  preset: neurips          # neurips | topconf | airy | editorial | isosystem | lineart
   # palette: {primary: "#00897B", secondary: "#FFB300"}   # 可选覆盖
 
 elements:

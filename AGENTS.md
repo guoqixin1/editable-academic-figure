@@ -76,7 +76,7 @@ elements:
 
 ```yaml
 figure: {width, height, dpi: 600, background: "#FFFFFF", font_scale: 1.0, assets_dir: assets}
-theme: topconf        # 简写；或 {preset: topconf|airy|sci|warm|mono, palette: {...}, ink, ...}
+theme: topconf        # 简写；或 {preset: topconf|airy|sci|warm|mono|neurips|editorial|isosystem|lineart, palette: {...}, ink, ...}
 assets_style: "clean isometric scientific icons, uniform 2px charcoal outline"  # 可选，图级素材风格包
 assets:               # 声明要 AI 生成的物件（抽卡对象）
   - {id, prompt, aspect: "1:1", candidates: 3, shadow: keep|remove}
@@ -90,7 +90,7 @@ base:                 # 可选：AI 整图底稿混合模式
   regions: {enc: [12, 20, 40, 36]}   # freeform；skeleton 通常靠 layout 对齐
 ```
 
-- **新图默认** `theme.preset: topconf`（白底+色边框）；现代 ML/RL 示意用 `airy`。旧稿可继续 `sci`/`warm`/`mono`。
+- **新图默认** `theme.preset: topconf`（白底+色边框）；现代 ML/RL 示意用 `airy`；混合模式搭配 technical-lineart / journal-schematic 底稿用 `lineart`（灰阶细边+钢蓝强调）。旧稿可继续 `sci`/`warm`/`mono`。
 - `theme.palette`：8-role 覆盖，如 `{primary: "#00897B", secondary: "#FFB300", section_bg: "#ECEFF1"}`。
 - `variant`（box/panel/tokens）：`primary secondary tertiary accent highlight plain dark muted`。语义：primary=核心贡献，secondary=次要，muted/plain=常规。
 - `assets_style`：顶层英文插画语言，抽卡时与 theme 色板一并注入（跨素材风格锁）。
@@ -130,7 +130,7 @@ base:                 # 可选：AI 整图底稿混合模式
 - **文字记号**：`_{...}` / `^{...}`（值须加引号）。
 - **`region`**：锚定 `base.regions[id]`，代替手写 `rect`/`at`（需有 `base:`）。
 - **`ghost`**：`box`/`asset`/`panel`；base 下默认幽灵（不画壳）；`ghost: false` 恢复实体。
-- **`plate`**：base 下文字默认半透明白底板；`plate: false` 关闭。
+- **`plate`**：base 下文字默认半透明白底板；落在干净浅色净空（mean≥220 且 std≤10 且 edge≤5）时**自动免贴片**、裸文字直接落底图；`plate: true` 强制保留，`plate: false` 强制关闭。
 
 ---
 
@@ -214,9 +214,11 @@ python -m paperfig.cli render {proj}/figure.yaml -o {proj}/figure.png --svg {pro
 | `R-empty-box` | W | 给 box 加 `body`/`sketch`/`icon`，或把子元素放进容器卡（**base 模式停用**） |
 | `R-no-section` | W | 加 `panel`（smallcaps）或带 `fill` 的 `group`（**base 停用**） |
 | `R-no-legend` | W | 加 `legend`，或把次要色改回 `muted`/`plain`（**base 停用**） |
-| `base-text-contrast` | E | 文字相对有效背景对比 <3.0，或无 plate 压在繁忙花纹上 → 挪字 / 开 plate / 重抽浅色底稿 |
+| `base-text-contrast` | E | **无贴片**文字相对有效背景对比 <3.0，或压在繁忙花纹上 → 挪字 / 开 plate / 重抽浅色底稿 |
+| `glyph-missing` | E | 文本含 Liberation Sans 缺字形（如 ‖ U+2016 → 建议 ∥ U+2225；Ẑ/组合抑扬符等）→ 换建议字符，否则出豆腐块 |
 | `base-region-drift` | W | skeleton：骨架色块与底稿墨迹质心偏移过大 → 重抽或改 prompt 强调对齐 |
 | `plate-overlap` | W | 文字底板互叠 >30% → 错开文字或关次要 `plate` |
+| `plate-over-art` | W | **有贴片**压住底稿插画（edge≥12 或 luma_std≥28）→ 挪到净空、关 plate、或重抽保留带 |
 
 `render --strict`：有 E 级时返回非零（`asset-placeholder` 与 `R-*` 不触发），可接 CI。
 base 模式另停用 `arrow-exit-over-content` 与 sketch 碰撞类检查（幽灵盒无 sketch）。

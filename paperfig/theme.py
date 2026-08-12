@@ -117,6 +117,20 @@ _ISOSYSTEM_PALETTE = {
     "canvas": "#F4F7FA",
 }
 
+# 工程线稿风：灰阶结构 + 单一钢蓝强调（搭配 technical-lineart / journal-schematic 底稿）
+_LINEART_PALETTE = {
+    "primary": "#3D6B99",      # steel blue：accent / 徽章 / 关键路径
+    "secondary": "#4A5568",    # 中灰结构边
+    "tertiary": "#4A5568",
+    "text": "#333333",
+    "title": "#1A202C",
+    "fill": "#F7F8FA",
+    "section_bg": "#F7F8FA",
+    "border": "#4A5568",
+    "arrow": "#444444",
+    "canvas": "#FFFFFF",
+}
+
 # mainstream §1.2 Soft Pastel 基准填色（stroke → fill）
 _KNOWN_PASTEL_FILLS = {
     "#0072B2": "#E8F4FD",
@@ -282,17 +296,38 @@ def _variants_isosystem(pal: dict[str, str]) -> dict[str, Variant]:
     }
 
 
+def _variants_lineart(pal: dict[str, str]) -> dict[str, Variant]:
+    """工程线稿：极浅灰/白填 + 中灰细边；仅 accent/primary 用钢蓝。"""
+    text = pal.get("text", "#333333")
+    fill = pal.get("fill", "#F7F8FA")
+    white = "#FFFFFF"
+    steel = pal.get("primary", "#3D6B99")
+    gray = pal.get("border", "#4A5568")
+    return {
+        "primary": Variant(fill=white, stroke=steel, text=text, lw=0.35),
+        "secondary": Variant(fill=fill, stroke=gray, text=text, lw=0.35),
+        "tertiary": Variant(fill=fill, stroke=gray, text=text, lw=0.35),
+        "accent": Variant(fill=white, stroke=steel, text=text, lw=0.35),
+        "highlight": Variant(fill=white, stroke=steel, text=text, lw=0.35),
+        "plain": Variant(fill=white, stroke=gray, text=text, lw=0.35),
+        "muted": Variant(fill=fill, stroke=gray, text=text, lw=0.30),
+        "dark": Variant(fill="#1A202C", stroke="#1A202C", text="#FFFFFF", lw=0.30),
+    }
+
+
 _TOPCONF_VARIANTS = _variants_border_style(_TOPCONF_PALETTE)
 _AIRY_VARIANTS = _variants_airy(_AIRY_PALETTE)
 _NEURIPS_VARIANTS = _variants_pastel(_NEURIPS_PALETTE)
 _EDITORIAL_VARIANTS = _variants_editorial(_EDITORIAL_PALETTE)
 _ISOSYSTEM_VARIANTS = _variants_isosystem(_ISOSYSTEM_PALETTE)
+_LINEART_VARIANTS = _variants_lineart(_LINEART_PALETTE)
 
 # 变体语言：决定 palette 覆盖时如何重建 variants
 _PASTEL_PRESETS = frozenset({"neurips"})
 _AIRY_PRESETS = frozenset({"airy"})
 _EDITORIAL_PRESETS = frozenset({"editorial"})
 _ISOSYSTEM_PRESETS = frozenset({"isosystem"})
+_LINEART_PRESETS = frozenset({"lineart"})
 
 
 @dataclass
@@ -359,6 +394,7 @@ _PRESETS = {
     "neurips": _NEURIPS_VARIANTS,
     "editorial": _EDITORIAL_VARIANTS,
     "isosystem": _ISOSYSTEM_VARIANTS,
+    "lineart": _LINEART_VARIANTS,
 }
 
 _PRESET_PALETTES = {
@@ -367,6 +403,7 @@ _PRESET_PALETTES = {
     "neurips": _NEURIPS_PALETTE,
     "editorial": _EDITORIAL_PALETTE,
     "isosystem": _ISOSYSTEM_PALETTE,
+    "lineart": _LINEART_PALETTE,
 }
 
 _PRESET_DEFAULTS: dict[str, dict] = {
@@ -499,6 +536,44 @@ _PRESET_DEFAULTS: dict[str, dict] = {
             "error": {"style": "dashed", "color": "#EE6C4D", "width": 0.28},
         },
     },
+    "lineart": {
+        # 克制工程线稿：近直角、灰阶细边、单一钢蓝强调；无糖果色/无强制 smallcaps
+        "ink": "#1A202C",
+        "muted": "#4A5568",
+        "arrow": "#444444",
+        "group_stroke": "#4A5568",
+        "group_fill": "#F7F8FA",
+        "size_panel_label": 8.5,
+        "size_title": 7.2,
+        "size_body": 6.3,
+        "size_caption": 5.8,
+        "size_arrow_label": 5.8,
+        "size_group_label": 6.8,
+        "lw_box": 0.35,
+        "lw_arrow": 0.40,
+        "lw_group": 0.22,
+        "corner_radius": 0.8,   # box/panel/legend 近直角
+        "box_pad_x": 2.0,
+        "box_pad_y": 1.4,
+        "arrow_head_len": 1.7,
+        "arrow_head_w": 1.3,
+        "default_shadow": False,  # 需要时极浅（全局 blur 已 ≤0.3mm y / 低透明）
+        "arrow_styles": {
+            "data": {"style": "solid", "color": "#444444", "width": 0.40},
+            "control": {"style": "solid", "color": "#888888", "width": 0.28},
+            "feedback": {"style": "dashed", "color": "#3D6B99", "width": 0.32},
+            "optional": {"style": "dotted", "color": "#888888", "width": 0.22},
+            "error": {"style": "dashed", "color": "#4A5568", "width": 0.32},
+        },
+        "panel_case": "ml",
+        "default_legend_style": "inline",
+        "canvas": "#FFFFFF",
+        "lint_min_font": 5.5,  # 与 neurips 同
+        "plate_fill": "#FFFFFF",
+        "plate_opacity": 0.92,
+        "plate_pad": 1.2,
+        "plate_radius": 0.6,
+    },
 }
 
 
@@ -511,6 +586,8 @@ def _rebuild_variants(name: str, pal: dict[str, str]) -> dict[str, Variant]:
         return _variants_editorial(pal)
     if name in _ISOSYSTEM_PRESETS:
         return _variants_isosystem(pal)
+    if name in _LINEART_PRESETS:
+        return _variants_lineart(pal)
     return _variants_border_style(pal)
 
 
@@ -528,6 +605,10 @@ def _apply_palette(th: Theme, pal: dict[str, str]) -> None:
             th.muted = "#666666"
         elif th.name == "editorial":
             th.muted = "#6A6A6A"
+        elif th.name == "lineart":
+            th.muted = "#4A5568"
+    if th.name == "lineart" and "title" in pal:
+        th.ink = pal["title"]
     if "canvas" in pal:
         th.canvas = pal["canvas"]
     if "grid" in pal:
@@ -541,7 +622,7 @@ def load_theme(cfg: dict | str | None) -> Theme:
     也可写成字符串简写（`theme: warm`）。
 
     新能力：
-      - preset: topconf | airy | neurips | editorial | isosystem（保留 sci/warm/mono）
+      - preset: topconf | airy | neurips | editorial | isosystem | lineart（保留 sci/warm/mono）
       - palette: {primary, secondary, ...} 语义色板覆盖
       - arrow_styles / panel_case / default_legend_style / canvas / grid_bg
     """

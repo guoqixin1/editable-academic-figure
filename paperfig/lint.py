@@ -14,7 +14,7 @@
     - 箭头标签深入节点 inner（arrow-label-in-node；显式 label_offset 不豁免）
     - 箭头标签压到 panel 标题带（arrow-label-on-title）
     - base 底稿文字对比度（base-text-contrast：有效背景对比 <3.0 或无 plate 花纹繁忙；
-      ghost:false 实体盒用填充色作有效背景）
+      ghost:false 实体盒用填充色作有效背景；**仅对最终无贴片的文字**；有贴片改查 plate-over-art）
   W 级（警告，建议修）
     - 字号低于下限（印刷缩放后 <6pt）
     - 节点重叠
@@ -31,6 +31,9 @@
     - 近距候选全硬拒已折中放置（arrow-label-crowded，由 render soft_issues 注入）
     - base 区域漂移（base-region-drift，skeleton）：骨架矩形与底稿墨迹对拍
     - 文字底板互叠（plate-overlap，交 >30%）
+    - 贴片压住底稿插画（plate-over-art：边缘密度/亮度标准差超阈值；仅 base）
+  E 级另：
+    - Liberation Sans 缺字形（glyph-missing：‖ / 组合抑扬符 / Ẑẑ 等 → 豆腐块）
 """
 
 from __future__ import annotations
@@ -43,12 +46,15 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .render import RenderResult, _is_ghost, visual_rect_for
+from .render import (
+    RenderResult, _is_ghost, base_region_has_art, region_art_metrics,
+    visual_rect_for,
+)
 from .routing import LABEL_DIST_FAR_LINT_MM, cap_path_distance
 from .spec import (
     ArrowEl, AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl, LegendEl,
-    MarkerEl, NetworkEl, PanelEl, Rect, ScatterEl, SketchEl, TextEl, TokensEl,
-    parse_anchor,
+    MarkerEl, NetworkEl, PanelEl, PanelLabelEl, Rect, ScatterEl, SketchEl,
+    TextEl, TokensEl, parse_anchor,
 )
 from .theme import load_theme
 
@@ -88,6 +94,17 @@ _DRIFT_DENSE_IN = 0.50          # 内密度≥此则视作实心板，抑制环�
 _DRIFT_SPILL_FRAC = 0.40          # 环带墨迹占（内+环）比例；宽松，3px 偏移约 0.07
 _DRIFT_SPILL_MIN_INK = 60         # 环带至少这么多非白像素才谈溢出
 _INK_WHITE_LUMA = 0.92            # 高于此亮度视作"白/近白"底
+
+# Liberation Sans 缺字形黑名单（实测会成豆腐块）→ glyph-missing E
+# 建议替换写在值里；未引入 fontTools 依赖，用静态表。
+_GLYPH_MISSING: dict[str, str] = {
+    "\u2016": "∥ (U+2225)",   # ‖ DOUBLE VERTICAL LINE
+    "\u0302": "预组字符如 â/ẑ，避免组合抑扬符",  # COMBINING CIRCUMFLEX
+    "\u1e90": "Ẑ 或 Z∥ / Z_hat",  # Ẑ
+    "\u0124": "Ĥ 或 H_hat",      # Ĥ（部分环境缺；黑名单防风险）
+    "\u0125": "ĥ 或 h_hat",      # ĥ
+    "\u1e91": "ẑ 或 z_hat",      # ẑ
+}
 
 MIN_FONT_PT = 5.5   # 旧主题 font-too-small 下限（lint_min_font 未设时）
 IDEAL_MIN_FONT_PT = 6.0  # 旧主题 font-small 软下限（lint_min_font 未设时）
@@ -158,9 +175,11 @@ def lint(spec: FigureSpec, res: RenderResult) -> list[Issue]:
     issues += _check_alignment(spec, res)
     issues += _check_visual_richness(spec, res, base_mode=base_mode)
     issues += _check_figurative_overload(spec, res)
+    issues += _check_glyph_missing(spec)
     if base_mode:
         issues += _check_plate_overlap(res)
         issues += _check_base_text_contrast(spec, res)
+        issues += _check_plate_over_art(spec, res)
         issues += _check_base_region_drift(spec, res)
     return issues
 
@@ -1426,11 +1445,101 @@ def _check_plate_overlap(res: RenderResult) -> list[Issue]:
     return issues
 
 
-def _check_base_text_contrast(spec: FigureSpec, res: RenderResult) -> list[Issue]:
-    """对落在底稿上的文字采样有效背景，对比率 <3.0 或无 plate 花纹繁忙 → E。
+def _check_glyph_missing(spec: FigureSpec) -> list[Issue]:
+    """扫描 spec 全部可见文本，命中 Liberation Sans 缺字形黑名单 → E。"""
+    issues: list[Issue] = []
+    seen: set[str] = set()
 
+    def _scan(text: str, where: str) -> None:
+        if not text:
+            return
+        for ch in text:
+            if ch not in _GLYPH_MISSING:
+                continue
+            key = f"{ch}:{where}"
+            if key in seen:
+                continue
+            seen.add(key)
+            sug = _GLYPH_MISSING[ch]
+            issues.append(Issue(
+                "E", "glyph-missing",
+                f"{where} 含 Liberation Sans 缺字形 U+{ord(ch):04X} '{ch}'"
+                f"（会渲染成豆腐块）；建议替换为 {sug}",
+            ))
+
+    for el in spec.elements:
+        if isinstance(el, BoxEl):
+            _scan(el.title, f"box '{el.id}' title")
+            _scan(el.body, f"box '{el.id}' body")
+        elif isinstance(el, TextEl):
+            _scan(el.text, f"text '{el.id}'")
+        elif isinstance(el, PanelEl):
+            _scan(el.title, f"panel '{el.id}' title")
+        elif isinstance(el, PanelLabelEl):
+            _scan(el.text, f"panel_label '{el.id}'")
+        elif isinstance(el, ArrowEl):
+            _scan(el.label, f"arrow '{el.id}' label")
+        elif isinstance(el, GroupEl):
+            _scan(el.label, f"group '{el.id}' label")
+        elif isinstance(el, TokensEl):
+            _scan(el.label, f"tokens '{el.id}' label")
+        elif isinstance(el, BadgeEl):
+            _scan(el.text, f"badge '{el.id}'")
+        elif isinstance(el, SketchEl):
+            _scan(el.label, f"sketch '{el.id}' label")
+        elif isinstance(el, LegendEl):
+            for i, it in enumerate(el.items):
+                _scan(it.label, f"legend '{el.id}' items[{i}]")
+        elif isinstance(el, AssetEl):
+            _scan(el.caption, f"asset '{el.id}' caption")
+    return issues
+
+
+def _check_plate_over_art(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """贴片压在底稿插画主体上 → W plate-over-art。
+
+    阈值标定（refs/base-pilot，灰度 FIND_EDGES 均值 / 亮度 std，0–255）：
+      必报：medical Segmentation≈20.3/42.6、Diagnosis≈16.8/75.1；
+            agentrl Advantage Ahat≈30.1/42.1、Replay Buffer≈57.3/62.3、
+            G Rollouts≈48.5/57.6
+      不报：medical PACS review≈1.6/0.7；干净浅色头带 / 底部净空 edge≲5、std≲10
+      → edge≥12 或 std≥28 视为插画（与 render._ART_* 一致）
+
+    例外：文字中心落在 ghost:false 实体填充内 → 不查底稿（矢量自有底）。
+    仅检查最终实际画出的贴片（res.text_plates）；免贴片文字改走 base-text-contrast。
+    """
+    if spec.resolve_base_image() is None:
+        return []
+    th = load_theme(spec.theme_cfg)
+    issues: list[Issue] = []
+    for oid, pret in getattr(res, "text_plates", []) or []:
+        if pret.w < 0.2 or pret.h < 0.2:
+            continue
+        # 实体矢量填充上的文字不查底稿
+        if _solid_fill_under_text(pret, spec, res, th) is not None:
+            continue
+        if not base_region_has_art(spec, pret, res):
+            continue
+        m = region_art_metrics(spec, pret, res)
+        extra = ""
+        if m is not None:
+            edge, std, _mean = m
+            extra = f"；edge={edge:.1f}/std={std:.1f}"
+        issues.append(Issue(
+            "W", "plate-over-art",
+            f"贴片 '{oid}' 压住底稿插画内容"
+            f"（区域 [{pret.x:.1f},{pret.y:.1f},{pret.w:.1f},{pret.h:.1f}]mm{extra}）；"
+            f"挪到净空带、关 plate、或重抽保留带",
+        ))
+    return issues
+
+
+def _check_base_text_contrast(spec: FigureSpec, res: RenderResult) -> list[Issue]:
+    """对**最终无贴片**的文字采样有效背景，对比率 <3.0 或花纹繁忙 → E。
+
+    有贴片的文字改查 plate-over-art（本函数跳过）。
     有效背景：文字落在 ghost:false 实体元素内时用该元素填充色（不再采样底稿）；
-    否则采样底稿。有 plate（含箭头 label_bg）时按 opacity 与上述底色混合。
+    否则采样底稿。箭头 label_bg 视同贴片参与混合。
     底稿缺失时跳过（render 会在 image 路径无效时报错）。
     """
     loaded = _load_base_rgb(spec)
@@ -1495,7 +1604,7 @@ def _check_base_text_contrast(spec: FigureSpec, res: RenderResult) -> list[Issue
                 f"（亮度方差 {var:.3f}>{_BASE_BUSY_VAR}）；开 label_bg 或换净空",
             ))
 
-    # 2) 其余文字 span（box/text/panel…）
+    # 2) 其余文字 span（box/text/panel…）——仅最终无贴片者
     arrow_label_texts = {lab for _, _, lab in getattr(res, "arrow_label_boxes", []) or []}
     for s in res.text_spans:
         if not s.text.strip() or getattr(s, "diagnostic", False):
@@ -1508,6 +1617,9 @@ def _check_base_text_contrast(spec: FigureSpec, res: RenderResult) -> list[Issue
             continue
         plate_r = _plate_for_span(bbox, plates)
         has_plate = plate_r is not None
+        # 有贴片 → 改查 plate-over-art，此处跳过
+        if has_plate:
+            continue
         solid = _solid_fill_under_text(bbox, spec, res, th)
         if solid is not None:
             patch = np.full((1, 1, 3), solid, dtype=np.float32)
@@ -1518,7 +1630,7 @@ def _check_base_text_contrast(spec: FigureSpec, res: RenderResult) -> list[Issue
         tr, tg, tb = _hex_to_rgb01(s.color)
         text_l = _luma01(tr, tg, tb)
         bg_l, var = _effective_bg_luma(
-            patch, has_plate=has_plate,
+            patch, has_plate=False,
             plate_rgb=plate_rgb, plate_opacity=plate_op,
         )
         ratio = _contrast_ratio(text_l, bg_l)
@@ -1533,7 +1645,7 @@ def _check_base_text_contrast(spec: FigureSpec, res: RenderResult) -> list[Issue
                 f"文字 “{snippet}” 与底稿有效背景对比 {ratio:.2f}"
                 f"（<{_BASE_CONTRAST_MIN}）；开 plate 或换净空区",
             ))
-        elif (not has_plate) and var > _BASE_BUSY_VAR:
+        elif var > _BASE_BUSY_VAR:
             issues.append(Issue(
                 "E", "base-text-contrast",
                 f"文字 “{snippet}” 无底板且底稿花纹繁忙"

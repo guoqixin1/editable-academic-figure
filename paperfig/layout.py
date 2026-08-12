@@ -130,7 +130,7 @@ def _parse_node(raw: Any, ctx: str) -> FlexNode:
         visual["type"] = visual_type or str(raw["type"])
         for k in ("title", "label", "variant", "fill", "header_style", "header_h",
                   "title_size", "header_fill", "style", "color", "pad", "shadow",
-                  "label_pos", "label_size"):
+                  "label_pos", "label_size", "ghost", "plate"):
             if k in raw and k != "pad":
                 visual[k] = raw[k]
         # panel 的内容 pad 与布局 pad 分开：layout pad 用 pad，视觉字段已拷

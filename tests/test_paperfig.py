@@ -2028,6 +2028,148 @@ elements:
                for i in _check_arrow_label_on_title(res))
 
 
+# ── plate-over-art / 免贴片 / lineart / glyph-missing ─────
+
+def _synth_half_art_base(path: Path, w=400, h=200):
+    """左半画满线条（插画），右半纯白（净空）。"""
+    from PIL import ImageDraw
+    im = Image.new("RGB", (w, h), "#FFFFFF")
+    d = ImageDraw.Draw(im)
+    for i in range(0, w // 2, 3):
+        d.line([(i, 0), (i, h)], fill="#333333")
+    for i in range(0, h, 3):
+        d.line([(0, i), (w // 2, i)], fill="#555555")
+    im.save(path)
+    return path
+
+
+def test_plate_over_art_positive_and_negative(tmp_path):
+    """贴片压花纹 → plate-over-art；压纯白净空 → 不报。"""
+    _synth_half_art_base(tmp_path / "base.png")
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: sci
+base:
+  mode: freeform
+  prompt: "x"
+  image: base.png
+elements:
+  - {type: text, id: on_art, at: [25, 25], text: ArtZone, size: 8, plate: true}
+  - {type: text, id: on_clean, at: [75, 25], text: CleanZone, size: 8, plate: true}
+"""))
+    res = render(spec, dpi=72)
+    assert any(oid == "on_art" for oid, _ in res.text_plates)
+    assert any(oid == "on_clean" for oid, _ in res.text_plates)
+    issues = [i for i in lint(spec, res) if i.code == "plate-over-art"]
+    ids = " ".join(i.msg for i in issues)
+    assert "on_art" in ids
+    assert "on_clean" not in ids
+    assert all(i.level == "W" for i in issues)
+
+
+def test_auto_plate_skip_clean_and_force(tmp_path):
+    """干净底自动免贴片；花底保留；plate:true/false 强制。"""
+    _synth_half_art_base(tmp_path / "base.png")
+    # 1) 干净区自动免
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: sci
+base:
+  mode: freeform
+  prompt: "x"
+  image: base.png
+elements:
+  - {type: text, id: clean, at: [75, 25], text: CleanAuto, size: 8}
+  - {type: text, id: busy, at: [25, 25], text: BusyAuto, size: 8}
+"""))
+    res = render(spec, dpi=72)
+    plates = {oid for oid, _ in res.text_plates}
+    skipped = {oid for oid, _ in res.text_plate_skipped}
+    assert "clean" in skipped and "clean" not in plates
+    assert "busy" in plates and "busy" not in skipped
+
+    # 2) plate:true 强制保留（即使干净）
+    spec2 = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: sci
+base:
+  mode: freeform
+  prompt: "x"
+  image: base.png
+elements:
+  - {type: text, id: forced, at: [75, 25], text: ForceOn, size: 8, plate: true}
+"""))
+    res2 = render(spec2, dpi=72)
+    assert any(oid == "forced" for oid, _ in res2.text_plates)
+
+    # 3) plate:false 强制去掉（即使花底）
+    spec3 = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 50}
+theme: sci
+base:
+  mode: freeform
+  prompt: "x"
+  image: base.png
+elements:
+  - {type: text, id: off, at: [25, 25], text: ForceOff, size: 8, plate: false}
+"""))
+    res3 = render(spec3, dpi=72)
+    assert not any(oid == "off" for oid, _ in res3.text_plates)
+    # 无贴片 + 花底 → base-text-contrast
+    assert any(i.code == "base-text-contrast" for i in lint(spec3, res3))
+
+
+def test_lineart_theme_smoke(tmp_path):
+    """lineart 主题字段齐全，可渲染，近直角 + 钢蓝强调。"""
+    th = load_theme("lineart")
+    assert th.name == "lineart"
+    assert th.corner_radius <= 0.8
+    assert abs(th.plate_radius - 0.6) < 1e-6
+    assert th.lint_min_font == 5.5
+    assert th.variants["primary"].stroke.upper() == "#3D6B99"
+    assert th.variants["plain"].stroke.upper() == "#4A5568"
+    assert th.arrow.upper() == "#444444"
+    assert th.ink.upper() == "#1A202C"
+    assert th.default_shadow is False
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 90, height: 40}
+theme: lineart
+elements:
+  - {type: box, id: a, rect: [5, 8, 30, 22], title: Enc, variant: primary}
+  - {type: box, id: b, rect: [50, 8, 30, 22], title: Dec, variant: muted}
+  - {type: arrow, from: a, to: b, label: "z"}
+  - {type: badge, id: n1, at: [8, 10], text: "1"}
+"""))
+    res = render(spec, out_png=tmp_path / "la.png", dpi=72)
+    assert res.svg
+    assert "#3D6B99" in res.svg
+    assert "Enc" in res.svg
+
+
+def test_glyph_missing_hit_and_miss(tmp_path):
+    """黑名单字符 → glyph-missing E；普通 ASCII/希腊字母不报。"""
+    spec_bad = load_spec(_write(tmp_path, """
+figure: {width: 80, height: 30}
+theme: sci
+elements:
+  - {type: text, id: t, at: [40, 15], text: "KL(π_θ ‖ π_ref)"}
+"""))
+    res = render(spec_bad, dpi=72)
+    hits = [i for i in lint(spec_bad, res) if i.code == "glyph-missing"]
+    assert hits and hits[0].level == "E"
+    assert "2016" in hits[0].msg or "‖" in hits[0].msg
+
+    spec_ok = load_spec(_write(tmp_path, """
+figure: {width: 80, height: 30}
+theme: sci
+elements:
+  - {type: text, id: t, at: [40, 15], text: "KL(pi_theta || pi_ref)"}
+  - {type: box, id: b, rect: [5, 5, 20, 15], title: "Ahat"}
+"""))
+    res_ok = render(spec_ok, dpi=72)
+    assert not any(i.code == "glyph-missing" for i in lint(spec_ok, res_ok))
+
+
 if __name__ == "__main__":
     import tempfile
     import traceback

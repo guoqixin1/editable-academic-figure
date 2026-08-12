@@ -922,8 +922,8 @@ base:
   prompt: "x"
   image: base.png
 elements:
-  - {type: text, id: a, at: [40, 24], text: AlphaWord, size: 9}
-  - {type: text, id: b, at: [48, 24], text: BetaWordX, size: 9}
+  - {type: text, id: a, at: [40, 24], text: AlphaWord, size: 9, plate: true}
+  - {type: text, id: b, at: [48, 24], text: BetaWordX, size: 9, plate: true}
 """
     spec = load_spec(_write(tmp_path, yaml))
     res = render(spec, dpi=72)
@@ -1121,11 +1121,18 @@ elements:
     arr = np.asarray(im)
     pw, ph = im.size
     sx, sy = pw / 100.0, ph / 60.0
-    cx = int((estimated.x + estimated.w / 2) * sx)
-    cy = int((estimated.y + estimated.h / 2) * sy)
+    # 骨架保留带 = 贴片矩形向下扩 2mm；采样扩后的中心应仍为保留色
+    from paperfig.spec import Rect
+    reserve = Rect(estimated.x, estimated.y, estimated.w, estimated.h + 2.0)
+    cx = int((reserve.x + reserve.w / 2) * sx)
+    cy = int((reserve.y + reserve.h / 2) * sy)
     px = tuple(int(v) for v in arr[cy, cx])
     exp_rgb = tuple(int(expected[i : i + 2], 16) for i in (1, 3, 5))
     assert px == exp_rgb, (px, exp_rgb, expected)
+    # 贴片原矩形下方 2mm 带内也应是保留色（扩带生效）
+    cy_extra = int((estimated.bottom + 1.0) * sy)
+    px_extra = tuple(int(v) for v in arr[cy_extra, cx])
+    assert px_extra == exp_rgb, (px_extra, exp_rgb)
     # 盒底插画区仍为饱和色（非保留带）
     bx = int(30 * sx)
     by = int(40 * sy)

@@ -1,19 +1,19 @@
-# B1 — LLM Agent RL Training Loop · technical-lineart · 混合模式 v5.1（灰阶纪律）
-# 风格：REPORT §4.2 + base.style technical-lineart；骨架灰阶+钢蓝关键路径；小盒 ghost:false
-figure: {width: 184, dpi: 600, background: "#FFFFFF"}
+# B1 — LLM Agent RL Training Loop · lineart + technical-lineart · 混合模式
+# 矢量层按底图像素色块实测对齐（ghost + 裸文字；实心卡仅进空槽）
+# 换算: base 1584×672 → canvas 184×86 mm（preserveAspectRatio=none）
+figure: {width: 184, height: 86, dpi: 600, background: "#FFFFFF"}
 theme:
-  preset: neurips
-  plate_pad: 2.0
+  preset: lineart
+  plate_pad: 1.0
   plate_opacity: 0.92
-  plate_radius: 0.0
+  plate_radius: 0.5
 
 base:
   image: base/base.png
   mode: skeleton
   style: technical-lineart
   accent: [policy, upd]
-  candidates: 3
-  image: base/base.png
+  candidates: 4
   prompt: >
     Orthographic technical-lineart schematic of an LLM agent RL training loop
     as a conference systems/ML architecture figure (OSDI/SOSP + ResNet/Transformer
@@ -39,315 +39,204 @@ base:
     skeleton block; no spill into gutters. Keep ≥3mm empty margin inside
     each block edge. Shrink nested stacks to fit with clear breathing room.
 
-    RESERVED HEADBANDS (CRITICAL): Each module block has a lighter same-family
-    headband strip at the top (greyscale blocks → lighter grey wash; steel-blue
-    critical-path blocks → lighter blue-grey wash). Headbands are reserved for
-    later vector text — keep them plain flat wash only. Do NOT paint icons,
-    hatching stacks, dials, or decorations on the headband. Place each module's
-    engineering content ONLY in the denser portion BELOW the light headband.
+    RESERVED TITLE BANDS (CRITICAL — MUST OBEY):
+    Each module has a lighter same-family HEADBAND strip across the TOP ~35% of
+    the block. That entire headband MUST be seamless near-white / very-light-gray
+    flat wash (luma ≥ 220, almost no texture, no hatching, no grid lines bleeding
+    into the band). PURE BACKGROUND ONLY — zero icons, zero strokes inside the
+    band. Treat as blank paper for later vector titles. Place ALL engineering
+    illustration ONLY in the denser portion BELOW the headband. Leave ≥2mm gap
+    under the headband before art. Panel outer title bands above modules also
+    stay plain flat near-white wash. Do NOT invent extra empty rounded cards,
+    blank frames, or decorative triangles anywhere (especially not in the bottom
+    strip or module corners).
 
-    ICON PLACEMENT (CRITICAL): Put the full nested structure inside the denser
-    portion under the headband so stacks/slots/cylinders are complete, not
-    cropped. Leave ≥2mm margin from block edges. Do not invade the headband.
+    ICON PLACEMENT: Full nested structure in the denser lower zone only; stacks
+    complete and uncropped; ≥2mm from block edges and from the headband.
 
     Pale-gray reserved blocks (skeleton #EEEEEE) stay plain — do not illustrate
     them (vector solids will cover). Describe modules by POSITION only.
 
     LEFT cool pale panel (Environment & Agent) — illustrate ONLY these blocks:
-    - Top parallelogram block: nested task-dispatcher stack — thin orthogonal
-      rectangles like a schema / control plane (ticket cards as flat rect slots,
-      tiny tree as geometric lines). GREYSCALE only. NO clipboard cute props.
-    - Large center block (STEEL-BLUE critical path): Agent Policy as an ABSTRACT
+    - Top parallelogram block: MUST show nested task-dispatcher stack — thin
+      orthogonal rectangles like a schema / control plane (ticket cards as flat
+      rect slots, tiny tree as geometric lines). GREYSCALE. Art below headband.
+      This block must NOT be empty. NO clipboard cute props.
+    - Large center block (STEEL-BLUE critical path): Agent Policy as ABSTRACT
       neural block stack — stacked Transformer/ResNet-like rectangles with light
-      hatching and one nested inner block (decoder stack metaphor). May use the
-      muted steel-blue wash from the skeleton; NOT orange, NOT a face.
-      FORBIDDEN: robot head, smiley, eyes, cheeks, anthropomorphic chip-brain
-      mascot. Absolutely no captions, callouts, or annotation strings anywhere.
+      hatching and one nested inner block. Muted steel-blue wash OK. Art only
+      below headband; headband stays plain light blue-grey. FORBIDDEN: robot
+      head, smiley, eyes, cheeks, anthropomorphic chip-brain mascot.
     - Bottom row of three small blocks are pale-gray reserved — leave plain
-      (Search / Code / Memory are vector solids). Do NOT draw filing cabinets,
-      drawers, or cute office props anywhere.
+      (Search / Code / Memory are vector solids).
 
     UPPER-MIDDLE warm-neutral panel (Trajectory Sampling):
-    - Left greyscale block: rollout ARRAY — a tight grid / row of step cells or
-      parallel undirected trajectory strips (token-step matrix), greyscale only
-      (vary value/hatching, not hue). FORBIDDEN: parchment scroll, paper roll,
-      ribbon tips, arrowheads, saturated cell colors.
-    - Right of that block: calm empty light strip for later vector tokens —
-      leave blank (no tiles/cubes/letter blocks).
+    - Left greyscale block: rollout ARRAY — tight grid / step cells below the
+      headband only. FORBIDDEN: parchment scroll, ribbon tips, arrowheads,
+      saturated cell colors.
+    - Right of that block: calm empty light strip for later vector tokens.
 
     UPPER-RIGHT pale panel (Advantage & Update):
-    - Top greyscale block: group-relative advantage as comparison BAR MODULE /
-      meter bars (no numerals) — full bars visible under headband. Technical
-      chart glyph, not a toy dial sticker. Greyscale only.
-    - Bottom block (STEEL-BLUE critical path): policy-update / GRPO module as
-      nested residual-style block stack with light hatching (optional tiny
-      geometric triangle pulse — not a letter, NOT an arrow). May keep muted
-      steel-blue wash. Prefer stacked gradient-update blocks over cartoon gears;
-      if gears appear they must be flat patent-drawing gears, not sticker toys.
+    - Top greyscale block: comparison BAR MODULE — bars fully below headband,
+      never cut by the headband. Greyscale only.
+    - Bottom block (STEEL-BLUE critical path): nested residual-style update
+      stack below headband; headband plain light blue-grey. Prefer stacked
+      blocks over gears; no white triangles, no decorative corner wedges.
 
     LOWER-MIDDLE mint-neutral panel (Reward Model):
-    - Left tall greyscale block: reward SCORING HEAD — scalar score module with
-      simple vertical/horizontal bars or a compact bar panel. GREYSCALE only —
-      no orange/amber fill. FORBIDDEN: balance scale, trophy, award ribbon, medal.
-    - Three small pale-gray reserved blocks (Success / −λT / Format) — leave
-      plain; vector solids will cover. Do NOT draw medallions, batteries,
-      hourglasses, clipboards, or check stickers there.
+    - Left tall greyscale block: reward scoring head with bars below headband.
+      GREYSCALE. FORBIDDEN: balance scale, trophy, medal, baked labels.
+    - Three small pale-gray reserved blocks — leave plain.
 
     LOWER-RIGHT near-white panel (Side Path):
-    - Single tall greyscale block: upper half = minimal engineering database
-      cylinder (stacked disks) OR pure stacked buffer rectangles; lower half =
-      frozen reference policy as a hatched nested block stack in cool pale grey
-      (distinct hatching from the steel-blue trainable policy stack) — NO ice
-      crystal, NO snowflake emoji, NO mascot replica face, NO second accent hue.
+    - Single tall greyscale block: database cylinder / buffer stack + hatched
+      frozen reference stack, all below headband. NO ice crystal, NO text.
 
     BOTTOM strip:
-    - Left wide pale reserved block: leave completely blank / plain light wash
-      (vector equation card). Far right: blank (legend / note space).
+    - Completely plain light wash across the full width — NO boxes, NO rounded
+      empty cards, NO frames, NO triangles. Vector equation + legend cover this.
 
-    Style reminder: greyscale everywhere except the two steel-blue critical-path
-    modules (Policy + GRPO/PPO); hairline strokes; near-right-angle corners;
-    nested stacks and light hatching; plain headbands; no arrows; no text.
-
-layout:
-  kind: col
-  gap: 1.6
-  pad: [3.2, 3.2, 1.6, 3.2]
-  align: stretch
-  children:
-    - kind: row
-      gap: 4.0
-      align: stretch
-      children:
-        - id: p_env
-          type: panel
-          kind: col
-          gap: 2.0
-          pad: [5.6, 2.2, 1.8, 2.2]
-          align: stretch
-          title: "Environment & Agent"
-          header_style: smallcaps
-          fill: "#F4F6F8"
-          title_size: 6.4
-          header_h: 5.0
-          w: 46
-          children:
-            - {ref: env, h: 12.5}
-            - {ref: policy, h: 18}
-            - kind: row
-              gap: 1.2
-              pad: [3.1, 0, 0, 0]
-              children:
-                # h=19 与 rm/side 对齐，并盖住底稿外溢 KV 槽（不改底稿像素）
-                - {ref: tool_s, h: 19, flex: 1}
-                - {ref: tool_c, h: 19, flex: 1}
-                - {ref: tool_m, h: 19, flex: 1}
-
-        - kind: col
-          gap: 2.4
-          flex: 1
-          align: stretch
-          children:
-            - kind: row
-              gap: 4.0
-              align: stretch
-              children:
-                - id: p_roll
-                  type: panel
-                  kind: row
-                  gap: 1.6
-                  pad: [5.6, 2.0, 1.6, 2.0]
-                  align: center
-                  title: "Trajectory Sampling"
-                  header_style: smallcaps
-                  fill: "#F7F7F5"
-                  title_size: 6.4
-                  header_h: 5.0
-                  flex: 1.2
-                  children:
-                    - {ref: roll, w: 34, h: 22}
-                    - kind: col
-                      gap: 0.7
-                      flex: 1
-                      align: stretch
-                      children:
-                        - {ref: tok_traj, h: 6.8}
-                        - {ref: t_tok, h: 3.0}
-                        - {ref: tok_tool, h: 6.8}
-                        - {ref: t_g, h: 3.0}
-                - id: p_upd
-                  type: panel
-                  kind: col
-                  gap: 4.0
-                  pad: [5.6, 2.2, 1.6, 2.2]
-                  align: stretch
-                  title: "Advantage & Update"
-                  header_style: smallcaps
-                  fill: "#F5F5F7"
-                  title_size: 6.4
-                  header_h: 5.0
-                  w: 48
-                  children:
-                    - {ref: adv, h: 12.5}
-                    - {ref: upd, h: 11.5}
-
-            - kind: row
-              gap: 4.0
-              align: stretch
-              children:
-                - id: p_rew
-                  type: panel
-                  kind: row
-                  gap: 1.5
-                  pad: [5.6, 2.0, 1.6, 2.0]
-                  align: center
-                  title: "Reward Model"
-                  header_style: smallcaps
-                  fill: "#F4F7F5"
-                  title_size: 6.4
-                  header_h: 5.0
-                  flex: 1.2
-                  children:
-                    - {ref: rm, w: 20, h: 19}
-                    - kind: col
-                      gap: 1.2
-                      flex: 1
-                      align: stretch
-                      children:
-                        - kind: row
-                          gap: 1.2
-                          children:
-                            - {ref: r_succ, h: 9.0, flex: 1}
-                            - {ref: r_step, h: 9.0, flex: 1}
-                        - {ref: r_fmt, h: 9.0}
-                - id: p_aux
-                  type: panel
-                  kind: col
-                  gap: 0.4
-                  pad: [5.6, 2.0, 1.6, 2.0]
-                  align: stretch
-                  title: "Side Path"
-                  header_style: smallcaps
-                  fill: "#F6F6F5"
-                  title_size: 6.4
-                  header_h: 5.0
-                  w: 48
-                  children:
-                    - {ref: side, h: 19}
-
-    - kind: row
-      gap: 2.0
-      align: stretch
-      children:
-        - {ref: loss_box, flex: 1.0, h: 12}
-        - {ref: lg, flex: 1.0, h: 12}
-        - {ref: note_box, w: 48, h: 12}
+    Style reminder: greyscale except Policy + GRPO/PPO steel-blue; hairline
+    strokes; plain empty headbands; illustration only below headbands; no
+    arrows; no text; no empty decorative cards.
 
 elements:
-  # 底稿工程物件：policy / roll / side / rm / adv / upd / env / tool_m（幽灵）
-  - {type: box, id: env, title: "Task Dispatcher",
-     body: "prompt · schema · tools", variant: secondary, shape: parallelogram,
-     valign: top, title_size: 6.0, body_size: 5.6}
-  - {type: box, id: policy, title: "Agent Policy π_θ",
-     body: "LLM decoder + tool API", variant: trainable, accent: left,
-     valign: top, title_size: 6.2, body_size: 5.6}
-  - {type: box, id: roll, title: "G Rollouts",
-     body: "multi-turn tools", variant: primary, accent: left,
-     valign: top, title_size: 6.0, body_size: 5.6}
-  - {type: box, id: rm, title: "Reward Model",
-     body: "r(τ) composite", variant: secondary, accent: left,
-     valign: top, title_size: 6.0, body_size: 5.6}
+  # ---- 面板（ghost；题字带裸文字；rew/aux 显式 plate≤2）----
+  - {type: panel, id: p_env, rect: [3.25, 3.07, 46.00, 64.88], title: "Environment & Agent",
+     header_style: smallcaps, title_size: 6.0, ghost: true, plate: false}
+  - {type: panel, id: p_roll, rect: [53.32, 3.07, 75.51, 38.39], title: "Trajectory Sampling",
+     header_style: smallcaps, title_size: 6.0, ghost: true, plate: false}
+  - {type: panel, id: p_upd, rect: [132.89, 3.07, 47.86, 38.39], title: "Advantage & Update",
+     header_style: smallcaps, title_size: 6.0, ghost: true, plate: false}
+  - {type: panel, id: p_rew, rect: [53.32, 41.34, 75.51, 31.61], title: "",
+     header_style: smallcaps, title_size: 6.0, ghost: true, plate: false}
+  # SIDE PATH：不用 panel.title（贴片会左伸出界）；改用带内可控 text
+  - {type: panel, id: p_aux, rect: [132.77, 41.34, 47.97, 31.61], title: "",
+     header_style: smallcaps, title_size: 6.0, ghost: true, plate: false}
 
-  # Search/Code：纯灰阶小图标易与矢量盒无异 → 实体矢量
-  - {type: box, id: tool_s, title: "Search",
-     body: "web/RAG", variant: sky, valign: top, ghost: false,
-     title_size: 5.6, body_size: 5.6}
-  - {type: box, id: tool_c, title: "Code",
-     body: "sandbox", variant: purple, valign: top, ghost: false,
-     title_size: 5.6, body_size: 5.6}
-  # Memory：本卡 KV 槽溢出难包住 → 与 Search/Code 同走实体矢量
-  - {type: box, id: tool_m, title: "Memory",
-     body: "KV R/W", variant: tertiary, valign: top, ghost: false,
-     title_size: 5.6, body_size: 5.6}
+  # ---- 插画模块 ghost（空标题，仅锚点；文字用 text 落题字带）----
+  - {type: box, id: env, rect: [5.34, 9.09, 41.82, 13.82], title: "",
+     variant: plain, ghost: true, plate: false}
+  - {type: box, id: policy, rect: [5.46, 24.96, 41.70, 24.70], title: "",
+     variant: plain, ghost: true, plate: false}
+  - {type: box, id: roll, rect: [55.29, 9.09, 33.92, 27.26], title: "",
+     variant: plain, ghost: true, plate: false}
+  - {type: box, id: adv, rect: [134.98, 9.09, 43.68, 15.23], title: "",
+     variant: plain, ghost: true, plate: false}
+  - {type: box, id: upd, rect: [134.98, 27.26, 43.56, 12.41], title: "",
+     variant: plain, ghost: true, plate: false}
+  - {type: box, id: rm, rect: [55.29, 50.17, 20.10, 20.99], title: "",
+     variant: plain, ghost: true, plate: false}
+  - {type: box, id: side, rect: [134.98, 49.91, 43.68, 23.04], title: "",
+     variant: plain, ghost: true, plate: false}
 
-  - {type: tokens, id: tok_traj, n: 7, direction: h, variant: primary, gap: 0.4,
-     colors: ["#D6EAF8", "#AED6F1", "#D6EAF8", "#85C1E9", "#D6EAF8", "#AED6F1", "#D6EAF8"]}
-  - {type: tokens, id: tok_tool, n: 6, direction: h, variant: secondary, gap: 0.45,
-     colors: ["#F7EDEA", "#EEDDD8", "#F0F0F0", "#E6D0CA", "#F0F0F0", "#F7EDEA"]}
-  - {type: text, id: t_tok, text: "tau · tool-call tokens", size: 5.6,
-     color: "#0072B2", anchor: start}
-  - {type: text, id: t_g, text: "G∥ · T steps", size: 5.6,
-     color: "#0072B2", anchor: start}
+  # ---- 模块标题：钉回本模块题字带 ----
+  # 贴片预算 ≤4：t_pol / t_upd / t_rm / t_side
+  - {type: text, id: t_env, text: "Task Dispatcher · schema/tools", size: 5.2, bold: true,
+     color: "#1A202C", at: [26.3, 0.45], anchor: middle, plate: false}
+  - {type: text, id: t_pol, text: "Agent Policy π_θ · LLM+tools", size: 5.0, bold: true,
+     color: "#1A202C", at: [26.3, 26.35], anchor: middle, plate: true}
+  - {type: text, id: t_roll, text: "G Rollouts · multi-turn tools", size: 5.4, bold: true,
+     color: "#1A202C", at: [100.0, 10.15], anchor: start, plate: false}
+  - {type: text, id: t_adv, text: "Advantage Â · group-relative", size: 5.4, bold: true,
+     color: "#1A202C", at: [156.8, 10.8], anchor: middle, plate: false}
+  # GRPO：题字带内显式 plate（白裸字对比不足）；at 贴顶使贴片落在浅色带
+  - {type: text, id: t_upd, text: "GRPO / PPO · Δθ", size: 5.0, bold: true,
+     color: "#1A202C", at: [156.8, 26.90], anchor: middle, plate: true}
+  - {type: text, id: t_rm, text: "Reward Head · r(τ)", size: 5.0, bold: true,
+     color: "#1A202C", at: [65.3, 51.55], anchor: middle, plate: true}
+  # Replay：下移到 Side 模块内圆柱上方浅灰空条（花纹忙 → 第 4 块贴片）
+  - {type: text, id: t_side, text: "Replay Buffer · π_ref", size: 5.0, bold: true,
+     color: "#1A202C", at: [156.8, 51.0], anchor: middle, plate: true}
+  # 面板题：带内只留右对齐 SIDE PATH
+  - {type: text, id: t_p_rew, text: "REWARD MODEL", size: 5.6, bold: true, smallcaps: true,
+     color: "#4A5568", at: [105.7, 45.85], anchor: middle, plate: false}
+  - {type: text, id: t_p_aux, text: "SIDE PATH", size: 5.6, bold: true, smallcaps: true,
+     color: "#4A5568", at: [178.5, 46.5], anchor: end, plate: false}
 
-  # 奖励小盒：底稿易退化成空灰块 → 实体矢量
-  - {type: box, id: r_succ, title: "Success",
-     body: "task hit", variant: tertiary, valign: top, ghost: false,
-     title_size: 5.6, body_size: 5.6}
-  - {type: box, id: r_step, title: "−λT",
-     body: "steps", variant: muted, valign: top, ghost: false,
-     title_size: 5.6, body_size: 5.6}
-  - {type: box, id: r_fmt, title: "Format Check",
-     body: "schema / JSON", variant: accent, valign: top, ghost: false,
-     title_size: 5.6, body_size: 5.6}
+  # ---- 实心卡：仅进浅灰空槽 ----
+  - {type: box, id: tool_s, rect: [5.34, 52.21, 13.13, 15.74], title: "Search",
+     body: "web/RAG", variant: plain, valign: middle, ghost: false,
+     plate: false, title_size: 5.6, body_size: 5.4}
+  - {type: box, id: tool_c, rect: [19.63, 52.21, 13.13, 15.74], title: "Code",
+     body: "sandbox", variant: secondary, valign: middle, ghost: false,
+     plate: false, title_size: 5.6, body_size: 5.4}
+  - {type: box, id: tool_m, rect: [34.04, 52.21, 13.13, 15.74], title: "Memory",
+     body: "KV R/W", variant: muted, valign: middle, ghost: false,
+     plate: false, title_size: 5.6, body_size: 5.4}
 
-  - {type: box, id: adv, title: "Advantage Ahat",
-     body: "group-relative", variant: primary, accent: left,
-     valign: top, title_size: 6.0, body_size: 5.6}
-  - {type: box, id: upd, title: "GRPO / PPO",
-     body: "policy gradient Δθ", variant: trainable, accent: left,
-     valign: top, title_size: 6.0, body_size: 5.6}
+  - {type: box, id: r_succ, rect: [76.67, 50.17, 24.51, 9.98], title: "Success",
+     body: "task hit", variant: plain, valign: middle, ghost: false,
+     plate: false, title_size: 5.6, body_size: 5.4}
+  - {type: box, id: r_step, rect: [102.34, 50.17, 24.51, 9.98], title: "−λT",
+     body: "steps", variant: muted, valign: middle, ghost: false,
+     plate: false, title_size: 5.6, body_size: 5.4}
+  - {type: box, id: r_fmt, rect: [76.67, 61.30, 50.18, 9.98], title: "Format Check",
+     body: "schema / JSON", variant: secondary, valign: middle, ghost: false,
+     plate: false, title_size: 5.6, body_size: 5.4}
 
-  - {type: box, id: side, title: "Replay Buffer · π_ref",
-     body: "store τ · batch · β·KL region (frozen)", variant: accent,
-     valign: top, title_size: 5.8, body_size: 5.6}
+  # ---- Sampling 右侧空区：token 行 ----
+  - {type: tokens, id: tok_traj, rect: [91.0, 14.0, 35.5, 6.2], n: 7, direction: h,
+     variant: primary, gap: 0.4,
+     colors: ["#E8EEF4", "#C5D4E3", "#E8EEF4", "#3D6B99", "#E8EEF4", "#C5D4E3", "#E8EEF4"]}
+  - {type: text, id: t_tok, text: "tau · tool-call tokens", size: 5.4,
+     color: "#3D6B99", at: [91.0, 20.9], anchor: start, plate: false}
+  - {type: tokens, id: tok_tool, rect: [91.0, 23.5, 35.5, 6.2], n: 6, direction: h,
+     variant: secondary, gap: 0.45,
+     colors: ["#F0F0F0", "#D8D8D8", "#E8E8E8", "#B8B8B8", "#E8E8E8", "#F0F0F0"]}
+  - {type: text, id: t_g, text: "G∥ · T steps", size: 5.4,
+     color: "#4A5568", at: [91.0, 30.5], anchor: start, plate: false}
 
-  - {type: box, id: loss_box, title: "Training objective",
-     body: "L = −Ahat log π_θ − β KL(π_θ ‖ π_ref)\n↑ expected return · stay inside β·KL trust region",
-     variant: sky, ghost: false, valign: middle, align: left,
-     title_size: 5.8, body_size: 5.6}
-  - {type: legend, id: lg, columns: 3, size: 5.6, style: inline,
-     items: [
-       {swatch: dashed, color: "#0072B2", label: "Δθ feedback"},
-       {swatch: dashed, color: "#999999", label: "KL / replay"},
-       {swatch: line, color: "#333333", label: "main loop"},
+  # ---- 底部通栏：公式靠左（正文54.4mm + 左右约5mm）+ 图例靠右 ----
+  - {type: box, id: loss_box, rect: [3.14, 74.74, 61.4, 9.47], title: "Training objective",
+     body: "L = −Â log π_θ − β KL(π_θ ∥ π_ref)  ·  ↑ return · β·KL trust region",
+     variant: plain, ghost: false, plate: false, valign: middle, align: left,
+     title_size: 5.4, body_size: 5.2, fill: "#FFFFFF"}
+  - {type: legend, id: lg, at: [146.8, 75.2], columns: 2, size: 5.2, style: card,
+     fill: "#FFFFFF", frame: true, items: [
+       {swatch: line, color: "#444444", label: "main / data"},
+       {swatch: dashed, color: "#3D6B99", label: "Δθ feedback"},
+       {swatch: dashed, color: "#888888", label: "KL / replay"},
+       {swatch: box, color: "#3D6B99", label: "critical path"},
      ]}
-  - {type: box, id: note_box, title: "Line styles",
-     body: "solid = data/control\ndashed = aux path",
-     variant: muted, ghost: false, valign: middle, align: left,
-     title_size: 5.6, body_size: 5.6}
 
-  - {type: badge, id: b1, at: [7.0, 11.5], text: "1", size: 3.0, color: "#D55E00"}
-  - {type: badge, id: b2, at: [7.0, 26.0], text: "2", size: 3.0, color: "#E07A3D"}
-  - {type: badge, id: b3, at: [55.0, 15.0], text: "3", size: 3.0, color: "#0072B2"}
-  - {type: badge, id: b4, at: [55.0, 48.0], text: "4", size: 3.0, color: "#D55E00"}
-  - {type: badge, id: b5, at: [132.0, 11.5], text: "5", size: 3.0, color: "#009E73"}
-  - {type: marker, id: m_fire1, at: [44.5, 26.0], icon: fire, size: 2.6}
-  - {type: marker, id: m_fire2, at: [174.0, 28.5], icon: fire, size: 2.6}
-  - {type: marker, id: m_snow, at: [174.0, 62.0], icon: snow, size: 2.4}
+  # ---- 角标 ----
+  - {type: badge, id: b1, at: [7.0, 10.6], text: "1", size: 2.6, color: "#4A5568"}
+  - {type: badge, id: b2, at: [7.0, 27.0], text: "2", size: 2.6, color: "#3D6B99"}
+  - {type: badge, id: b3, at: [50.5, 12.0], text: "3", size: 2.6, color: "#4A5568"}
+  - {type: badge, id: b4, at: [54.0, 51.6], text: "4", size: 2.6, color: "#4A5568"}
+  - {type: badge, id: b5, at: [130.5, 10.5], text: "5", size: 2.6, color: "#3D6B99"}
+  - {type: marker, id: m_fire1, at: [45.5, 27.2], icon: fire, size: 2.4}
+  - {type: marker, id: m_fire2, at: [178.8, 30.2], icon: fire, size: 2.4}
+  - {type: marker, id: m_snow, at: [176.5, 52.6], icon: snow, size: 2.2}
 
-  - {type: arrow, from: env.bottom@1.0, to: policy.top@1.0, label: "task",
-     weight: heavy, semantic: data, route: avoid, label_pos: auto}
-  - {type: arrow, from: tool_s.top@0.72, to: policy.bottom@0.22,
-     weight: thin, semantic: control, label: "api", route: avoid, label_pos: auto,
-     label_offset: 2.2}
-  - {type: arrow, from: tool_c.top@0.5, to: policy.bottom@1.0,
-     weight: thin, semantic: control, route: avoid}
-  - {type: arrow, from: tool_m.top@0.5, to: policy.bottom@0.97,
-     weight: thin, semantic: control, route: avoid}
-  - {type: arrow, from: policy.right@0.15, to: roll.left@0.18,
-     weight: heavy, semantic: data, route: avoid}
-  - {type: arrow, from: roll.bottom@0.18, to: rm.top@0.18,
-     weight: heavy, semantic: data, route: avoid}
-  - {type: arrow, from: r_step.right@0.28, to: adv.left@0.28, label: "r",
-     weight: heavy, semantic: data, route: avoid, label_pos: auto}
-  - {type: arrow, from: adv.bottom@0.0, to: upd.top@0.0, label: "Â",
-     weight: heavy, semantic: data, route: avoid, label_pos: auto}
+  # ---- 正交箭头（走廊走线；端点在色块外缘）----
+  - {type: arrow, from: env.bottom@0.72, to: policy.top@0.72, label: "task",
+     weight: heavy, semantic: data, route: vh, label_offset: 2.2}
+  - {type: arrow, from: policy.right@0.18, to: roll.left@0.18,
+     weight: heavy, semantic: data, route: hv}
+  - {type: arrow, from: roll.bottom@0.18, to: rm.top@0.40,
+     weight: heavy, semantic: data, route: vh}
+  - {type: arrow, from: r_step.right@0.45, to: adv.left@0.72, label: "r",
+     weight: heavy, semantic: data, route: vh,
+     via: [[130.5, 54.7], [130.5, 20.0]], label_pos: auto}
+  # Â：竖直短箭；杆从 Advantage 下缘内侧起，穿过缝隙，尖停在 GRPO 顶外 0.5mm
+  - {type: arrow, from: [173.0, 23.20], to: [173.0, 26.76], label: "Â",
+     weight: normal, semantic: data, route: vh, label_offset: 3.0}
+  # Δθ：右缘→上缘走廊→Policy（保持现路由）
+  - {type: arrow, from: upd.right@0.20, to: policy.right@0.08, label: "Δθ",
+     weight: heavy, semantic: feedback, route: vh,
+     via: [[182.0, 29.8], [182.0, 1.8], [48.0, 1.8], [48.0, 26.9]],
+     label_pos: auto}
 
-  - {type: arrow, from: upd.left@0.45, to: policy.right@0.45, label: "Δθ",
-     weight: heavy, semantic: feedback, route: avoid, label_pos: auto}
+  # 工具箭：尖端落在 Policy 下缘外 ~1.3mm（policy.bottom=49.66 → 51.00）
+  - {type: arrow, from: tool_s.top@0.50, to: [11.9, 51.00],
+     weight: thin, semantic: control, route: vh}
+  - {type: arrow, from: tool_c.top@0.50, to: [26.2, 51.00],
+     weight: thin, semantic: control, route: vh}
+  - {type: arrow, from: tool_m.top@0.50, to: [40.6, 51.00],
+     weight: thin, semantic: control, route: vh}
 
-  - {type: arrow, from: tok_tool.right@0.5, to: side.left@0.25,
-     weight: thin, semantic: optional, route: avoid}
-  - {type: arrow, from: side.top@0.15, to: upd.bottom@0.0, label: "batch",
-     weight: thin, semantic: optional, route: avoid, label_pos: auto}
-  - {type: arrow, from: side.left@0.75, to: upd.left@0.85,
-     weight: thin, semantic: optional, route: avoid}
+  # batch：点线路由不变；标签在竖段右侧 ≥1mm（加大 offset 避免压线）
+  - {type: arrow, from: side.top@0.12, to: upd.bottom@0.12, label: "batch",
+     weight: thin, semantic: optional, route: vh, label_offset: 3.2}

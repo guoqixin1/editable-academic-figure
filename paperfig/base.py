@@ -25,7 +25,7 @@ from .assets import (
     GachaResult,
     _generate_one,
 )
-from .spec import AssetEl, ArrowEl, BoxEl, FigureSpec, PanelEl, load_spec
+from .spec import AssetEl, ArrowEl, BoxEl, FigureSpec, PanelEl, Rect, load_spec
 from .styles import (
     format_avoid_section,
     format_base_style_section,
@@ -295,7 +295,10 @@ def render_skeleton(
         ]
         draw.rectangle(box, fill=fill, outline=fill)
 
-    # 幽灵盒文字板保留区：与渲染板同源矩形 + 模块同色系提亮
+    # 幽灵盒文字板保留区：贴片矩形向下扩 2mm，并保证模块顶部至少 38% 为保留带
+    # （给模型更强的「标题带禁止插画」信号；渲染贴片仍用未扩矩形）
+    _RESERVE_EXTRA_DOWN_MM = 2.0
+    _RESERVE_MIN_FRAC = 0.38
     for el in spec.elements:
         if not isinstance(el, BoxEl):
             continue
@@ -305,9 +308,16 @@ def render_skeleton(
         if plate is False:
             continue
         pret = estimate_box_text_plate(el, th, spec.font_scale)  # expand_mm=0
+        base_fill = ghost_fills.get(el.id, fallback_fill)
+        tint = tint_reserve_color(base_fill)
+        # 至少顶部 38% 整宽保留带
+        band_h = max(el.rect.h * _RESERVE_MIN_FRAC, 4.0)
+        band = Rect(el.rect.x + 0.15, el.rect.y + 0.1, max(0.5, el.rect.w - 0.3), band_h)
+        _fill_rect_mm(band, tint)
         if pret is not None:
-            base_fill = ghost_fills.get(el.id, fallback_fill)
-            _fill_rect_mm(pret, tint_reserve_color(base_fill))
+            max_h = max(0.5, el.rect.bottom - pret.y - 0.3)
+            pret = Rect(pret.x, pret.y, pret.w, min(pret.h + _RESERVE_EXTRA_DOWN_MM, max_h))
+            _fill_rect_mm(pret, tint)
 
     # 箭头标签胶囊：仅静态可算（显式 offset / 非 auto）；auto/avoid 不画
     for el in spec.elements:
