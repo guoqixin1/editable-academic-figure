@@ -26,31 +26,31 @@
 
 ## 效果预览
 
-下列四张图均由对应 YAML spec **完全复现**。spec 均为结构化布局——**内容元素零手写坐标**（盒子由 `layout:` 树求解摆位，箭头由 `route: avoid` 自动绕障）；需要精调时可用 `paperfig resolve` 物化成绝对坐标后再逐值修改。个别图含隐形辅助元素带手写坐标，属正常，并非全图零坐标。图为 `neurips` 主题（Soft Pastel 学术风：浅填 + 细线 + 印刷字号，含 trainable/frozen 状态与箭头语义线型）。
+下列图均由对应 YAML spec **完全复现**。spec 均为结构化布局——**内容元素零手写坐标**（盒子由 `layout:` 树求解摆位，箭头由 `route: avoid` 自动绕障）；需要精调时可用 `paperfig resolve` 物化成绝对坐标后再逐值修改。个别图含隐形辅助元素带手写坐标，属正常，并非全图零坐标。每张图交付前都经过 lint 清零 + `tiles` 切片循环目检（连续两轮零新发现）。
 
-**RAG 推理管线框架图**（`neurips`，上下双 section + inline 图例 + 箭头语义）：
+**移动边缘计算任务卸载**（通信/网络 · `neurips`，三层结构 + DRL 决策列 + 控制环虚线 + E-T 权衡曲线）：
+
+![MEC offloading](docs/images/showcase-mec-offload.png)
+
+→ [`examples/showcase/mec_offload.yaml`](examples/showcase/mec_offload.yaml)
+
+**分布式 LLM 推理服务系统**（系统 · `lineart`，OSDI 风格克制线稿：近直角 + 灰阶细边 + 钢蓝关键路径 + Lato 字体）：
+
+![LLM serving](docs/images/showcase-llm-serving.png)
+
+→ [`examples/showcase/llm_serving.yaml`](examples/showcase/llm_serving.yaml)
+
+**无线联邦学习**（通信+ML · `neurips` + AI 素材：5 个物件由 nano-banana 生成后自动抠图，`shadow=auto` 防护自动补救白边/阴影残渣）：
+
+![Federated learning over wireless](docs/images/showcase-fed-wireless.png)
+
+→ [`examples/showcase/fed_wireless.yaml`](examples/showcase/fed_wireless.yaml)
+
+**RAG 推理管线框架图**（ML · `neurips`，上下双 section + inline 图例 + 箭头语义）：
 
 ![RAG framework](docs/images/showcase-rag-framework.png)
 
 → [`examples/showcase/rag_framework.yaml`](examples/showcase/rag_framework.yaml)
-
-**多任务视觉主干**（`neurips`，macro + micro 双面板，trainable/frozen 状态语义）：
-
-![Vision backbone](docs/images/showcase-vision-backbone.png)
-
-→ [`examples/showcase/vision_backbone.yaml`](examples/showcase/vision_backbone.yaml)
-
-**LLM Agent 强化学习闭环**（`neurips` Soft Pastel，五分区 + 底部公式）：
-
-![Agent RL loop](docs/images/showcase-agent-rl.png)
-
-→ [`examples/showcase/agent_rl.yaml`](examples/showcase/agent_rl.yaml)
-
-**医学影像 CAD 管线**（`neurips`；内嵌 AI 素材，`assets_style` 风格包保证多素材统一）：
-
-![Medical CAD](docs/images/showcase-medical-cad.png)
-
-→ [`examples/showcase/medical_cad.yaml`](examples/showcase/medical_cad.yaml)
 
 ### 主题选用
 
@@ -66,6 +66,9 @@
 
 | 示例 | 领域 | 看点 |
 | --- | --- | --- |
+| `showcase/vision_backbone` | AI | macro+micro 双面板，trainable/frozen 状态语义 |
+| `showcase/agent_rl` | AI | 五分区 RL 闭环 + 底部公式 |
+| `showcase/medical_cad` | 医学 AI | AI 素材 + `assets_style` 风格包 |
 | `rep_evdispatch/` | 论文复现 | 彩色虚线分区 + scatter + 竖排文字 + AI 素材 |
 | `rep_uavedge/` | 论文复现 | 弧线无线链路 + wifi/❌ + badge + 图例 |
 | `rep_codriving/` | 论文复现 | 多列面板 + 叠影卡片 + 双色语义箭头 |
@@ -131,7 +134,13 @@ python -m paperfig.cli base pick fig.yaml 2                      # 目检 contac
 python -m paperfig.cli base grid fig.yaml                        # freeform：叠 mm 网格标 regions
 ```
 
-流程与 prompt 要点见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)「混合模式（base）」与 [USAGE §8](USAGE.md#8-混合模式-base)。底稿风格用 `base.style`（`journal-schematic` / `technical-lineart` / `sci-flat-pro`）；矢量层与底图像素实测对齐，标题优先裸文字落在题字带。样例在 [`examples/hybrid/`](examples/hybrid/)。
+流程与 prompt 要点见 [`prompts/AGENT_WORKFLOW.md`](prompts/AGENT_WORKFLOW.md)「混合模式（base）」与 [USAGE §8](USAGE.md#8-混合模式-base)。底稿风格用 `base.style`（`journal-schematic` / `technical-lineart` / `sci-flat-pro`）；矢量层与底图像素实测对齐（先量后画），标题优先裸文字落在题字带。样例在 [`examples/hybrid/`](examples/hybrid/)。
+
+**空天地一体化网络（SAGIN）· 混合版**（通信 6G 英雄图：`technical-lineart` 底稿 18 选 1，全部链路/标注矢量层按像素实测锚定）：
+
+![Hybrid SAGIN](docs/images/showcase-hybrid-sagin.png)
+
+→ [`examples/hybrid/sagin/figure.yaml`](examples/hybrid/sagin/figure.yaml)
 
 **医学影像 CAD · 混合版**（学术混搭：顶行形象模块交 AI 底稿，中底排统计/I/O 面板保持矢量）：
 

@@ -101,7 +101,7 @@ base:                 # 可选：AI 整图底稿混合模式
 
 | type | 关键字段（默认值） | 用途 |
 | --- | --- | --- |
-| `box` | `id, rect, title, body, variant(primary), shape(rect), icon, icon_h(10), title_size, body_size, align(center), valign(middle), gradient, gradient_dir(h), fill, stroke, text_color, stack(0), shadow, accent(left\|top), header_fill(false), sketch, region, ghost, plate` | 带文字的节点 / 容器卡 |
+| `box` | `id, rect, title, body, variant(primary), shape(rect), icon, icon_h(10), title_size, body_size, align(center), valign(middle), gradient, gradient_dir(h), fill, stroke, text_color, stack(0), shadow, accent(left\|top), header_fill(false), sketch, sketch_color, region, ghost, plate` | 带文字的节点 / 容器卡 |
 | `asset` | `id, rect, src, caption, halign(center), valign(middle), frame(false), placeholder(false), region, ghost` | 独立素材图 + 图注 |
 | `panel` | `id, rect, title, variant(primary), header_fill, fill, title_size, header_h(7), header_style(banner\|smallcaps), shadow, ghost, plate` | 分区容器；顶会风用 smallcaps |
 | `sketch` | `id, rect, kind(waveform\|…), color, stroke_color, label, seed` | 单色缩略图（信息密度核心） |
@@ -117,7 +117,7 @@ base:                 # 可选：AI 整图底稿混合模式
 | `panel_label` | `id, at, text` | a/b/c 面板号（自动加粗） |
 
 - **box.shape**：`rect stadium diamond cylinder parallelogram hexagon ellipse trapezoid`。
-- **box.sketch**：内嵌缩略图 kind（`waveform bars heatmap scatter curve curve_desc grid matrix tree distribution spectrum layers nested dots_flow`）。
+- **box.sketch**：内嵌缩略图 kind（`waveform bars heatmap scatter curve curve_desc grid matrix tree distribution spectrum layers nested dots_flow`）；**box.sketch_color**：sketch 颜色覆盖（默认继承边框色——`baseline`/`muted` 等浅边 variant 里 sketch 会太淡看不清，务必显式给深色）。sketch 需要高度：留给 sketch 的净空 <6mm 时分布类（heatmap/bars）会退化成色条，优先加高卡片。
 - **box.accent**：`left`/`top` 色条；**box.header_fill**：标题区浅底；**box.shadow**：soft shadow（`null` 跟随 theme）。
 - **box.gradient**：`[c1, c2]`；**box.stack**：叠影片数；**box.valign: top**：容器卡标题贴顶。
 - **panel.header_style**：`banner`（色条）\| `smallcaps`（顶会克制：大写标签+灰线）。

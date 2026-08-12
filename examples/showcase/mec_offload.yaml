@@ -1,0 +1,182 @@
+# Task Offloading in Mobile Edge Computing — method overview (pure vector)
+# 顶层 layout 树摆版,内容元素零手写坐标;箭头全部 route: avoid + auto 落标。
+figure: {dpi: 300}
+# box_pad 2.6mm:让箭头端点到 sketch 带的法向净空 ≥2.5mm(消 arrow-exit-over-content)
+theme: {preset: neurips, box_pad_x: 2.6, box_pad_y: 2.6}
+
+layout:
+  kind: row
+  gap: 8
+  pad: [2.5, 3]
+  align: start
+  children:
+    # ── 左列:系统三层(自下而上卸载:User → Edge → Cloud)──
+    - kind: col
+      gap: 8
+      align: stretch
+      children:
+        - id: p_cloud
+          type: panel
+          kind: row
+          gap: 12
+          pad: [8, 4, 3.5, 4]
+          justify: center
+          title: Cloud
+          header_style: smallcaps
+          fill: "#F7F7F5"
+          children:
+            - {ref: gw, w: 32, h: 19}
+            - {ref: cloud, w: 50, h: 19}
+        - id: p_edge
+          type: panel
+          kind: row
+          gap: 7
+          pad: [8, 4, 3.5, 4]
+          justify: center
+          title: Edge Servers
+          header_style: smallcaps
+          fill: "#F7F7F5"
+          children:
+            - {ref: es1, w: 44, h: 26}
+            - {ref: dots2, w: 0.1, h: 4}
+            - {ref: es2, w: 44, h: 26}
+        - id: p_user
+          type: panel
+          kind: row
+          gap: 4.5
+          pad: [8, 4, 3.5, 4]
+          justify: center
+          align: center
+          title: User Devices
+          header_style: smallcaps
+          fill: "#F7F7F5"
+          children:
+            - id: g_dev1
+              type: group
+              kind: row
+              gap: 11
+              pad: [6, 3, 6, 3]   # 对称内边距:q1/cpu1 与 dev2/devN 行中心对齐;底部容纳组标签
+              label: "Mobile Device 1"
+              label_pos: inside-bottom
+              style: dashed
+              children:
+                - {ref: q1, w: 19, h: 19}
+                - {ref: cpu1, w: 19, h: 19}
+            - {ref: dev2, w: 21, h: 26}
+            - {ref: dots, w: 0.1, h: 4}
+            - {ref: devN, w: 21, h: 26}
+    # ── 右列:卸载决策(核心)+ 目标 + 图例 ──
+    - kind: col
+      gap: 4.5
+      align: stretch
+      children:
+        - id: p_dec
+          type: panel
+          kind: col
+          gap: 3
+          pad: [8, 4, 3.5, 4]
+          align: center
+          title: Offloading Decision
+          header_style: smallcaps
+          fill: "#EEF5FB"
+          children:
+            - {ref: state, w: 44, h: 17.5}
+            - id: p_agent
+              type: panel
+              kind: col
+              gap: 1.5
+              pad: [6.5, 3, 3.5, 3]
+              align: center
+              title: DRL Agent
+              header_style: smallcaps
+              variant: primary
+              children:
+                - {ref: net, w: 26, h: 11}
+                - {ref: pi_txt, w: 0.1, h: 3.5}
+            - {ref: action, w: 44, h: 15}
+        - id: p_obj
+          type: panel
+          kind: col
+          gap: 2
+          pad: [8, 4, 3.5, 4]
+          align: center
+          title: Objective
+          header_style: smallcaps
+          fill: "#F7F7F5"
+          children:
+            - {ref: tk, w: 40, h: 13}
+            - {ref: obj_txt, w: 0.1, h: 3.6}
+        - {ref: lg, h: 11}
+
+elements:
+  # ── Cloud tier ──
+  - {type: box, id: gw, title: Core Network, body: backhaul gateway,
+     variant: baseline, sketch: dots_flow, valign: top, title_size: 6.4, body_size: 5.8}
+  - {type: box, id: cloud, title: Remote Cloud, body: "elastic capacity · F_{c} ≫ F_{m}",
+     variant: tertiary, sketch: layers, valign: top, title_size: 6.4, body_size: 5.8}
+
+  # ── Edge tier ──
+  - {type: box, id: es1, title: MEC Server 1, body: "CPU F_{1} · queue Q_{1}^{e}",
+     variant: secondary, sketch: bars, valign: top, title_size: 6.4, body_size: 5.8}
+  - {type: box, id: es2, title: MEC Server M, body: "CPU F_{M} · queue Q_{M}^{e}",
+     variant: secondary, sketch: bars, valign: top, title_size: 6.4, body_size: 5.8}
+
+  # ── User tier ──
+  - {type: box, id: q1, title: Task Queue, body: "Q_{1}(t)",
+     variant: baseline, sketch: bars, valign: top, title_size: 6.0, body_size: 5.8}
+  - {type: box, id: cpu1, title: Local CPU, body: "f_{1}^{loc}",
+     variant: baseline, sketch: waveform, valign: top, title_size: 6.0, body_size: 5.8}
+  - {type: box, id: dev2, title: Device 2, body: task queue,
+     variant: baseline, sketch: bars, valign: top, title_size: 6.0, body_size: 5.8}
+  - {type: box, id: devN, title: Device N, body: task queue,
+     variant: baseline, sketch: bars, valign: top, title_size: 6.0, body_size: 5.8}
+
+  # ── Decision loop(右列)──
+  - {type: box, id: state, title: "State s_{t}",
+     body: "channel gain h_{n}(t)\nqueue length Q_{n}(t)\nenergy budget B_{n}",
+     variant: plain, title_size: 6.4, body_size: 5.8}
+  - {type: network, id: net, layers: [4, 5, 3], direction: h, variant: primary}
+  - {type: box, id: action, title: "Action a_{t}",
+     body: "offloading ratio ρ_{n}\nTX power p_{n}",
+     variant: plain, title_size: 6.4, body_size: 5.8}
+
+  # ── Objective 面板内容(轴符号 E/T 由独立 text 标注,避免内嵌 label 压曲线)──
+  - {type: sketch, id: tk, kind: curve_desc, color: "#0072B2"}
+
+  # ── 数据流(实线)──
+  - {type: arrow, id: a_local, from: q1, to: cpu1, label: local, route: avoid}
+  # Z 形出线:q1.top 直上会穿 USER DEVICES 面板标题文字;改从 q1 右上出、
+  # 经 q1/cpu1 间隙上行、走廊横穿(横段容纳宽标签)、从 es1.bottom@0.75 进
+  - {type: arrow, id: a_off1, from: q1.right@0.25, to: es1.bottom@0.75, label: "T_{tx} + T_{edge}", weight: heavy, route: avoid}
+  - {type: arrow, id: a_off2, from: devN, to: es2, label: offload, weight: heavy, route: avoid}
+  - {type: arrow, id: a_sa, from: state, to: p_agent, weight: thin, route: avoid}
+  - {type: arrow, id: a_aa, from: p_agent, to: action, weight: thin, route: avoid}
+
+  # ── 回程(dashed 灰;"backhaul" 语义由图例 + 网关盒 body 承载,竖直段旁放不下宽标签)──
+  - {type: arrow, id: a_bh1, from: es1.top, to: gw.bottom@0.56, style: dashed, route: avoid}
+  - {type: arrow, id: a_bh2, from: es2.top, to: gw.bottom@0.8, style: dashed, route: avoid}
+  - {type: arrow, id: a_gc, from: gw.right, to: cloud.left, style: dashed, route: avoid}
+
+  # ── 控制回路(dashed 蓝)──
+  - {type: arrow, id: a_obs, from: p_edge.right@0.35, to: state.left, label: "s_{t}", style: dashed, color: "#0072B2", route: avoid}
+  - {type: arrow, id: a_act, from: action.left, to: devN.right, label: "a_{t}", style: dashed, color: "#0072B2", route: avoid}
+
+  # ── 标注层 ──
+  - {type: text, id: dots, text: "⋯", size: 8, color: "#666666"}
+  - {type: text, id: dots2, text: "⋯", size: 8, color: "#666666"}
+  # tradeoff 轴符号(坐标按 resolve 后 tk=[135.6,91,40,13] 推算:E 贴 y 轴顶外侧,T 贴 x 轴末端外侧)
+  - {type: text, id: ax_e, at: [134.4, 91.4], text: "E", size: 5.8, italic: true, color: "#666666"}
+  - {type: text, id: ax_t, at: [176.8, 100.8], text: "T", size: 5.8, italic: true, color: "#666666"}
+  # 无线链路标记(贴两条 offload 箭头的竖直段,位于层间走廊 y≈83)
+  - {type: marker, id: wf1, at: [28.4, 83.2], icon: wifi, size: 3.2, color: "#4D4D4D"}
+  - {type: marker, id: wf2, at: [88.0, 83.2], icon: wifi, size: 3.2, color: "#4D4D4D"}
+  - {type: text, id: pi_txt, text: "π_{θ}(a_{t} | s_{t})", size: 6.0}
+  - {type: text, id: obj_txt, text: "min Σ_{n} (α T_{n} + β E_{n})   s.t.  C1–C3", size: 6.0}
+  - {type: legend, id: lg, columns: 2, size: 5.8, items: [
+      {swatch: arrow, color: "#4D4D4D", label: "data / offload"},
+      {swatch: dashed, color: "#4D4D4D", label: "backhaul"},
+      {swatch: dashed, color: "#0072B2", label: "control loop"},
+      {swatch: box, color: "#0072B2", label: "decision (DRL)"},
+      {swatch: box, color: "#E69F00", label: "edge tier"},
+      {swatch: box, color: "#009E73", label: "cloud tier"},
+    ]}

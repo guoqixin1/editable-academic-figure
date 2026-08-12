@@ -1260,6 +1260,19 @@ def test_cutout_preserves_hairline_strokes(tmp_path):
     assert (out[:, :, 3] > 128).sum() > 2500, "细线在输出中大面积丢失"
 
 
+def test_box_sketch_color_override(tmp_path):
+    # 浅色 variant 的 box sketch 默认继承浅边框色；sketch_color 应能显式覆盖
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 80, height: 40}
+theme: {preset: neurips}
+elements:
+  - {type: box, id: a, rect: [5, 5, 60, 30], title: Data, body: dist,
+     variant: baseline, sketch: heatmap, sketch_color: "#3D6B99", valign: top}
+"""))
+    res = render(spec, out_png=tmp_path / "a.png", dpi=80)
+    assert "#3D6B99" in res.svg, "sketch_color 未生效"
+
+
 def test_cutout_drops_shadow_debris_island(tmp_path):
     # 主体旁的独立软灰斑（阴影残片）：keep 模式下应按碎屑剔除，不误判为多物件
     from PIL import ImageDraw, ImageFilter

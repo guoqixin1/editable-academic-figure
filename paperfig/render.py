@@ -948,7 +948,8 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
         sk_rect = Rect(content_x0, y, inner_w, min(sketch_h, r.bottom - th.box_pad_y - y))
         if sk_rect.h > 2.0:
             res.sketch_rects.append((el.id, el.sketch, sk_rect))
-            out.append(_draw_sketch(el.sketch, sk_rect, stroke, stroke,
+            sk_color = el.sketch_color or stroke
+            out.append(_draw_sketch(el.sketch, sk_rect, sk_color, sk_color,
                                     _stable_seed(el.id, el.sketch, r.x, r.y), th))
 
     return "".join(out)

@@ -1,0 +1,176 @@
+# SAGIN — Space–Air–Ground Integrated Network · 英雄图
+# 混合模式：base skeleton (technical-lineart) + lineart 矢量层
+# 画布 200×112.5 = 16:9（精确匹配 API aspect，避免底稿拉伸形变）
+# 场景区 x∈[0,150]；右侧说明栏 x∈[152,198] 为底稿净空区（实心卡+图例）
+figure: {width: 200, height: 112.5, dpi: 300, background: "#FFFFFF"}
+theme:
+  preset: lineart
+  plate_pad: 0.55
+  plate_opacity: 0.92
+  plate_radius: 0.45
+
+base:
+  image: base/base.png
+  mode: skeleton
+  style: technical-lineart
+  accent: [sat1, sat2, sat3]
+  candidates: 6
+  prompt: >
+    Orthographic technical-lineart hero scene of a Space-Air-Ground
+    Integrated Network (SAGIN) for a 6G systems paper — precise engineering
+    blueprint aesthetic (aerospace concept lineart + OSDI austerity).
+    GREYSCALE hairline line-art on a pure white canvas; ONLY the three LEO
+    satellites carry a muted steel-blue wash (they replace the three
+    steel-blue reference blocks); every other object stays near-greyscale.
+    Catalog-style equipment silhouettes with fine internal detail. NO
+    mascots, NO cartoon faces, NO photorealism, NO 3D render.
+
+    ZERO TEXT (ABSOLUTE): draw no text of any kind — no words, letters,
+    digits, captions, callouts, band names, object names. Do NOT echo any
+    word from this prompt onto the canvas. Geometry and hatching only.
+
+    NO CONNECTORS (ABSOLUTE): no arrows, no beams, no dashed links, no
+    orbit arcs or curved paths between satellites, no radio waves, no wifi
+    ticks, no concentric ripples, no signal cones, no emanating curves
+    from any antenna, rotor or tower — the vector layer draws every link
+    later.
+
+    DISSOLVE THE BLOCKS (ABSOLUTE): the flat colored rectangles in the
+    reference are position anchors only. Each becomes its floating object
+    on plain white — NEVER leave a rectangular color plate, panel frame,
+    or empty grey box behind or beside any object. Tiny pale rectangles in
+    the reference are spacing hints: leave those spots pure white. The
+    finished image contains ONLY the listed objects and the ground strip —
+    nothing else.
+
+    SCENE (three altitude layers, object positions follow the reference
+    blocks): TOP — three LEO communication satellites: compact boxy bus,
+    two symmetric solar-panel wings with thin grid lines, small
+    downward-facing dish; the middle satellite floats slightly higher than
+    the outer two; muted steel-blue panels; plain white sky around each
+    satellite. MIDDLE — left: HAPS solar-powered high-altitude platform,
+    long slender high-aspect straight wing, small propellers, side view,
+    greyscale; right: compact quadcopter relay UAV with four rotors and a
+    small hanging antenna, side view, greyscale. BOTTOM — one continuous
+    very pale grey ground strip along the bottom edge; on it, left to
+    right, exactly six well-separated groups: (1) calm water with a small
+    container ship; (2) short coastal road with one passenger car; (3)
+    tight cluster of four-to-six plain rectangular city towers; (4) tall
+    gNB lattice mast with three antenna panels at the top, rising above
+    the strip; (5) low wide data-center building with visible server-rack
+    slats on its facade; (6) satellite ground station — a large parabolic
+    dish tilted up toward the sky on a small equipment cabin. Subtle pale
+    ground texture only; the very bottom of the canvas stays a plain flat
+    light wash with no detail.
+
+    RIGHT MARGIN (ABSOLUTE): the tall pale-gray column at the far right of
+    the reference is an untouchable blank margin — keep it completely
+    EMPTY: no scenery, no sky tint, no objects. The pale ground strip
+    TERMINATES with a clean straight vertical edge well BEFORE this
+    margin, leaving a clear white gap; the parabolic-dish ground station
+    is the last object and must sit fully LEFT of that edge. Keep every
+    object inside its own reference block footprint with an inner margin,
+    and keep clear white gaps between neighbouring objects.
+
+elements:
+  # ---- 右栏净空底板（骨架整栏 #EEEEEE 保留区；渲染为白色底板，卡片/图例落其上）----
+  # 实测底稿灰栏起点 x=151.2，side_band 从 151 起完全覆盖
+  - {type: box, id: side_band, rect: [151, 0, 49, 112.5], title: "",
+     variant: plain, ghost: false, plate: false, fill: "#FFFFFF", stroke: "none"}
+
+  # ---- 场景 ghost 盒（先量后画：PIL 实测墨迹 bbox + 0.6mm 外扩，裸锚点即落实画边外）----
+  # SPACE 层：三颗 LEO 卫星（实测 12.9-33.0/62.9-83.0/118.9-139.0，y 含垂下的馈源喇叭）
+  - {type: box, id: sat1, rect: [12.3, 12.1, 21.3, 18.8], title: "", ghost: true, plate: false}
+  - {type: box, id: sat2, rect: [62.3, 6.0, 21.3, 18.8], title: "", ghost: true, plate: false}
+  - {type: box, id: sat3, rect: [118.3, 12.1, 21.3, 18.8], title: "", ghost: true, plate: false}
+  # AIR 层：HAPS（含全翼展 24.1-80.4）+ UAV（含旋翼与天线波纹 104.7-132.8）
+  - {type: box, id: haps, rect: [23.5, 38.7, 57.5, 16.1], title: "", ghost: true, plate: false}
+  - {type: box, id: uav, rect: [104.1, 46.0, 29.3, 12.6], title: "", ghost: true, plate: false}
+  # GROUND 层实测：船 3.9-24.1 / 车 42.0-55.1 / 城市 58.7-82.0 / 塔 88.8-96.5 /
+  #   数据中心 99.9-127.0 / 地面站 128.9-147.7；地面基线 y=104.2，底部素带 y≥104.4
+  - {type: box, id: ship, rect: [3.3, 96.1, 21.4, 7.6], title: "", ghost: true, plate: false}
+  - {type: box, id: vehicle, rect: [41.4, 98.6, 14.3, 5.1], title: "", ghost: true, plate: false}
+  - {type: box, id: city, rect: [58.1, 69.3, 24.5, 34.4], title: "", ghost: true, plate: false}
+  - {type: box, id: gnb, rect: [88.2, 57.6, 8.9, 46.1], title: "", ghost: true, plate: false}
+  - {type: box, id: core, rect: [99.3, 91.8, 28.3, 11.9], title: "", ghost: true, plate: false}
+  - {type: box, id: dish, rect: [128.3, 80.0, 20.0, 23.7], title: "", ghost: true, plate: false}
+
+  # ---- 右栏说明卡（ghost:false 实心卡 → 骨架 #EEEEEE 保留区）----
+  - {type: box, id: card_ho, rect: [152, 22, 46, 26], title: "LEO Handover",
+     variant: plain, accent: left, valign: top, ghost: false, plate: false,
+     title_size: 6.0, body_size: 5.5, sketch: curve,
+     body: "make-before-break · predict next serving beam across orbital passes"}
+  - {type: box, id: card_cov, rect: [152, 52, 46, 26], title: "Coverage vs Latency",
+     variant: plain, accent: left, valign: top, ghost: false, plate: false,
+     title_size: 6.0, body_size: 5.5, sketch: bars,
+     body: "LEO: wide-area · 20–40 ms | gNB: dense capacity · <5 ms"}
+
+  # ---- 图例（右栏底部，卡片式纵排；线型与实际链路严格一致）----
+  - {type: legend, id: lg, at: [154, 84], columns: 1, size: 5.5, style: card,
+     fill: "#FFFFFF", items: [
+      {swatch: dashed, color: "#3D6B99", label: "Inter-satellite (ISL)"},
+      {swatch: line, color: "#2A2E35", label: "Feeder link"},
+      {swatch: line, color: "#3D6B99", label: "Access link"},
+      {swatch: dashed, color: "#5A6472", label: "Backhaul / fiber"},
+    ]}
+
+  # ---- 链路（无线=直连；标签 label_pos: auto 碰撞打分落标）----
+  # 星间：ISL ×2，dashed 钢蓝，双向
+  - {type: arrow, from: sat1.right, to: sat2.left, label: "ISL", route: straight,
+     style: dashed, color: "#3D6B99", weight: normal, bidir: true, label_pos: auto}
+  - {type: arrow, from: sat2.right, to: sat3.left, route: straight,
+     style: dashed, color: "#3D6B99", weight: normal, bidir: true}
+  # 馈电：sat3 → 地面站锅面顶缘（实测 rim 顶 x142≈80.6，尖端悬 0.7mm）
+  - {type: arrow, from: [134, 30.9], to: [142, 79.9], label: "feeder", route: straight,
+     style: solid, color: "#2A2E35", weight: heavy, bidir: true, label_pos: auto}
+  # 接入×4：星→海上用户 / 星→空中 UAV / HAPS→车辆 / gNB→城市
+  - {type: arrow, from: sat1.bottom, to: [14, 99.6], label: "access", route: straight,
+     style: solid, color: "#3D6B99", weight: normal, label_pos: auto}
+  - {type: arrow, from: sat2.bottom, to: [112.9, 46.0], route: straight,
+     style: solid, color: "#3D6B99", weight: normal}
+  - {type: arrow, from: [48.8, 54.8], to: [48.6, 98.5], route: straight,
+     style: solid, color: "#3D6B99", weight: normal}
+  - {type: arrow, from: [88.2, 62.5], to: [74, 69.0], route: straight,
+     style: solid, color: "#3D6B99", weight: normal}
+  # 回传：gNB 塔杆 → 核心网 DC 屋顶，正交肘线（实测杆缘 93.4 / 屋顶 92.4）
+  - {type: arrow, from: [94.0, 82.9], to: [109.2, 91.8], route: hv,
+     style: dashed, color: "#5A6472", weight: heavy, bidir: true}
+  - {type: text, id: t_bh, text: "backhaul", at: [103.2, 80.6], size: 5.5,
+     anchor: middle, color: "#5A6472"}
+
+  # ---- 裸文字：右栏标题 ----
+  - {type: text, id: t_title1, text: "Space–Air–Ground", at: [175, 8],
+     size: 7.5, bold: true, anchor: middle, color: "#1A202C"}
+  - {type: text, id: t_title2, text: "Integrated Network", at: [175, 12.5],
+     size: 7.5, bold: true, anchor: middle, color: "#1A202C"}
+  - {type: text, id: t_sub, text: "6G NTN + terrestrial convergence", at: [175, 16.8],
+     size: 5.5, anchor: middle, color: "#4A5568"}
+
+  # ---- 层带标签（场景左缘 smallcaps；smallcaps 有效字号缩水，需 6.2 保 ≥5.5）----
+  - {type: text, id: t_space, text: "SPACE", at: [2, 7], size: 6.2, bold: true,
+     smallcaps: true, anchor: start, color: "#4A5568"}
+  - {type: text, id: t_air, text: "AIR", at: [2, 39], size: 6.2, bold: true,
+     smallcaps: true, anchor: start, color: "#4A5568"}
+  - {type: text, id: t_ground, text: "GROUND", at: [2, 93.5], size: 6.2, bold: true,
+     smallcaps: true, anchor: start, color: "#4A5568"}
+
+  # ---- 关键节点裸文字标题（按实测物件位置钉放）----
+  - {type: text, id: t_leo, text: "LEO constellation", at: [73, 2.9],
+     size: 5.5, bold: true, anchor: middle, color: "#1A202C"}
+  - {type: text, id: t_haps, text: "HAPS", at: [40, 36.5], size: 5.5, bold: true,
+     anchor: middle, color: "#1A202C"}
+  - {type: text, id: t_uav, text: "UAV", at: [125, 43.5], size: 5.5, bold: true,
+     anchor: middle, color: "#1A202C"}
+  # 地面节点标签统一落底部素色标签带（实测素带 y≥104.4，一行对齐 y=108）
+  - {type: text, id: t_ship, text: "Maritime user", at: [14, 108], size: 5.5,
+     anchor: middle, color: "#1A202C"}
+  - {type: text, id: t_veh, text: "Vehicle", at: [48.6, 108], size: 5.5,
+     anchor: middle, color: "#1A202C"}
+  - {type: text, id: t_city, text: "Urban users", at: [70.4, 108], size: 5.5,
+     anchor: middle, color: "#1A202C"}
+  - {type: text, id: t_gnb, text: "gNB", at: [92.7, 108], size: 5.5, bold: true,
+     anchor: middle, color: "#1A202C"}
+  - {type: text, id: t_core, text: "5G core network", at: [113.5, 108], size: 5.5,
+     anchor: middle, color: "#1A202C"}
+  - {type: text, id: t_gs, text: "Ground station", at: [138.3, 108], size: 5.5,
+     anchor: middle, color: "#1A202C"}

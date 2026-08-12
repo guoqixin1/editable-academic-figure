@@ -1,0 +1,200 @@
+# Federated Learning over Wireless Networks — paperfig showcase
+# 展示点:AI 素材抽卡 + 五层抠图防护(shadow: auto)
+# 布局:layout 树(内容元素零手写坐标);无线链路 route: arc,其余 route: avoid
+figure: {width: 190, dpi: 300, assets_dir: assets}
+theme: {preset: neurips}
+
+assets_style: "equipment-catalog technical icons, orthographic slightly elevated camera, matte surfaces, consistent hairline outlines"
+
+assets:
+  - id: phone
+    prompt: 一部现代智能手机，直立微倾，屏幕空白无内容，斜俯视角
+    aspect: "1:1"
+    candidates: 3
+    shadow: auto
+  - id: sensor
+    prompt: 一个小型物联网传感器节点设备，盒状外壳，顶部一根短天线，正面微斜视角
+    aspect: "1:1"
+    candidates: 3
+    shadow: auto
+  - id: car
+    prompt: 一辆现代轿车，车顶带小型天线模块，侧前方微俯视角
+    aspect: "1:1"
+    candidates: 4
+    shadow: auto
+  - id: base_station
+    prompt: 一座单管式蜂窝通信基站塔，圆柱塔杆，顶部一圈板状天线阵列，塔杆中部另有一圈较小的板状天线，平视微俯视角
+    aspect: "2:3"
+    candidates: 4
+    shadow: auto
+  - id: server_rack
+    prompt: 一组数据中心服务器机架机柜，正面多层服务器单元，微斜视角
+    aspect: "3:4"
+    candidates: 3
+    shadow: auto
+
+layout:
+  kind: col
+  gap: 4
+  pad: [2.5, 2.5]
+  align: stretch
+  children:
+    # ── 主行:客户端面板 | 基站走廊 | 服务器面板 ──────────────
+    - kind: row
+      gap: 21
+      align: stretch
+      children:
+        - id: p_clients
+          type: panel
+          kind: col
+          gap: 3.5
+          pad: [7.5, 3, 3, 3]
+          title: "Wireless Edge Clients (Local Training)"
+          header_style: smallcaps
+          fill: "#F7F7F5"
+          title_size: 6.4
+          header_h: 5
+          children:
+            - kind: row
+              gap: 4.5
+              align: center
+              children:
+                - {ref: dev1, w: 16, h: 21}
+                - {ref: data1, w: 22, h: 21}
+                - {ref: model1, w: 26, h: 21}
+            - kind: row
+              gap: 4.5
+              align: center
+              children:
+                - {ref: dev2, w: 16, h: 21}
+                - {ref: data2, w: 22, h: 21}
+                - {ref: model2, w: 26, h: 21}
+            - kind: row
+              gap: 4.5
+              align: center
+              children:
+                - {ref: dev3, w: 16, h: 21}
+                - {ref: data3, w: 22, h: 21}
+                - {ref: model3, w: 26, h: 21}
+        - kind: col
+          justify: center
+          align: center
+          children:
+            - {ref: bs, w: 14, h: 58}
+        - id: p_server
+          type: panel
+          kind: col
+          gap: 7.1
+          pad: [7.5, 3, 3, 3]
+          align: center
+          title: "Edge / Cloud Server"
+          header_style: smallcaps
+          fill: "#F0F4F8"
+          title_size: 6.4
+          header_h: 5
+          children:
+            - kind: col
+              gap: 2.4
+              align: center
+              children:
+                - {ref: srv, w: 16.5, h: 30}
+                - {ref: agg, w: 44, h: 10}
+            - {ref: glob, w: 44, h: 20.5}
+    # ── 底部条:动态信息面板 + 图例卡 ─────────────────────────
+    - kind: row
+      gap: 6
+      align: center
+      children:
+        - id: p_info
+          type: panel
+          kind: row
+          flex: 1
+          gap: 4
+          pad: [7.5, 3, 3, 3]
+          title: "Federated Round Dynamics"
+          header_style: smallcaps
+          fill: "#F7F7F5"
+          title_size: 6.4
+          header_h: 5
+          children:
+            - {ref: noniid, flex: 1, h: 19}
+            - {ref: rounds, flex: 1, h: 19}
+        - {ref: lg, w: 44, h: 13}
+
+elements:
+  # ── 客户端:设备素材 + 本地数据 + 本地模型 ────────────────
+  - {type: asset, id: dev1, src: phone, caption: "Smartphone"}
+  - {type: box, id: data1, title: "Local Data D_{1}", body: "private, non-IID",
+     variant: baseline, sketch: bars, valign: top, title_size: 5.6, body_size: 5.6}
+  - {type: box, id: model1, title: "Local Model w_{1}", body: "local SGD on D_{1}",
+     variant: tertiary, sketch: layers, valign: top, title_size: 5.6, body_size: 5.6}
+
+  - {type: asset, id: dev2, src: sensor, caption: "IoT Sensor"}
+  - {type: box, id: data2, title: "Local Data D_{2}", body: "private, non-IID",
+     variant: baseline, sketch: bars, valign: top, title_size: 5.6, body_size: 5.6}
+  - {type: box, id: model2, title: "Local Model w_{2}", body: "local SGD on D_{2}",
+     variant: tertiary, sketch: layers, valign: top, title_size: 5.6, body_size: 5.6}
+
+  - {type: asset, id: dev3, src: car, caption: "Vehicle"}
+  - {type: box, id: data3, title: "Local Data D_{3}", body: "private, non-IID",
+     variant: baseline, sketch: bars, valign: top, title_size: 5.6, body_size: 5.6}
+  - {type: box, id: model3, title: "Local Model w_{3}", body: "local SGD on D_{3}",
+     variant: tertiary, sketch: layers, valign: top, title_size: 5.6, body_size: 5.6}
+
+  # ── 基站与服务器 ─────────────────────────────────────────
+  - {type: asset, id: bs, src: base_station, caption: "Base Station (gNB)"}
+  - {type: asset, id: srv, src: server_rack, caption: "Aggregation Server"}
+  - {type: box, id: agg, title: "Secure Aggregation",
+     body: "FedAvg:  w ← Σ (n_{k}/n) · w_{k}",
+     variant: primary, accent: left, valign: top, title_size: 6.0, body_size: 5.6}
+  - {type: box, id: glob, title: "Global Model w", body: "broadcast to all clients",
+     variant: sky, sketch: layers, valign: top, title_size: 6.0, body_size: 5.6}
+
+  # ── 底部信息条 ───────────────────────────────────────────
+  - {type: box, id: noniid, title: "Non-IID Client Data", body: "label dist. per client",
+     variant: baseline, sketch: heatmap, sketch_color: "#3D6B99", valign: top,
+     title_size: 5.8, body_size: 5.6}
+  - {type: box, id: rounds, title: "Communication Rounds", body: "t = 1, 2, …, T",
+     variant: baseline, sketch: curve, sketch_color: "#5A6472", valign: top,
+     title_size: 5.8, body_size: 5.6}
+  - {type: legend, id: lg, columns: 1, size: 5.6, style: card, items: [
+      {swatch: dashed, color: "#D55E00", label: "Uplink: model updates"},
+      {swatch: arrow, color: "#0072B2", label: "Downlink: global model"},
+      {swatch: box, color: "#009E73", label: "Local computation (SGD)"},
+    ]}
+
+  # ── 客户端内部数据流(局部计算)──────────────────────────
+  - {type: arrow, from: data1.right@0.2, to: model1.left@0.2, weight: thin, route: avoid}
+  - {type: arrow, from: data2.right@0.2, to: model2.left@0.2, weight: thin, route: avoid}
+  - {type: arrow, from: data3.right@0.2, to: model3.left@0.2, weight: thin, route: avoid}
+
+  # ── 无线上行(dashed 弧线,朱红;塔侧锚点=顶环/中环实测边)──
+  - {type: arrow, from: model1.right@0.14, to: bs.left@0.095, route: arc, bend: 0.2,
+     style: dashed, color: "#D55E00", label: "Δw_{k}", label_pos: auto}
+  - {type: arrow, from: model2.right@0.14, to: bs.left@0.175, route: arc, bend: -0.2,
+     style: dashed, color: "#D55E00"}
+  - {type: arrow, from: model3.right@0.14, to: [104.9, 44.2], route: arc, bend: -0.24,
+     style: dashed, color: "#D55E00"}
+
+  # ── 无线下行(solid 弧线,蓝)─────────────────────────────
+  - {type: arrow, from: bs.left@0.135, to: model1.right@0.32, route: arc, bend: 0.2,
+     color: "#0072B2"}
+  - {type: arrow, from: bs.left@0.215, to: model2.right@0.32, route: arc, bend: -0.25,
+     color: "#0072B2"}
+  - {type: arrow, from: [104.9, 47.3], to: model3.right@0.32, route: arc, bend: -0.25,
+     color: "#0072B2", label: "global w", label_pos: auto}
+
+  # ── 有线回程与服务器内部流 ────────────────────────────────
+  - {type: arrow, from: bs.right@0.14, to: srv.left@0.40, route: avoid, label: "backhaul",
+     label_pos: auto}
+  - {type: arrow, from: glob.left@0.12, to: [111.6, 62.0], route: avoid, color: "#0072B2"}
+  - {type: arrow, from: srv.bottom, to: agg.top, weight: thin, route: avoid}
+  - {type: arrow, from: agg.bottom, to: glob.top, label: "w_{t+1}", route: avoid,
+     label_pos: auto}
+
+  # ── 标注层(标注元素允许坐标;按 resolve 后走廊几何放置)──
+  - {type: marker, id: wifi1, at: [109.5, 11.0], icon: wifi, size: 4}
+  - {type: badge, id: b1, at: [51.2, 9.0], text: "1", size: 2.6, color: "#4D4D4D"}
+  - {type: badge, id: b2, at: [81.0, 10.3], text: "2", size: 2.6, color: "#4D4D4D"}
+  - {type: badge, id: b3, at: [139.2, 41.4], text: "3", size: 2.6, color: "#4D4D4D"}
+  - {type: badge, id: b4, at: [104.0, 51.5], text: "4", size: 2.6, color: "#4D4D4D"}

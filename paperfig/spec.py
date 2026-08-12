@@ -117,6 +117,7 @@ class BoxEl:
     accent: str | None = None    # left | top：色条（取 variant 边框色）
     header_fill: bool = False    # 标题区浅底 + 分隔线
     sketch: str | None = None    # 内嵌单色缩略图 kind（见 SketchEl）
+    sketch_color: str | None = None  # 覆盖 sketch 颜色（默认继承边框色；浅色 variant 里 sketch 会太淡）
     # base 混合模式
     region: str | None = None    # 锚定 base.regions[id]，代替手写 rect
     ghost: bool | None = None    # None=base 模式下默认幽灵；false 恢复实体
@@ -382,7 +383,7 @@ _ALLOWED_KEYS = {
     "box": {"type", "id", "rect", "title", "body", "variant", "shape", "icon", "icon_h",
             "title_size", "body_size", "align", "valign", "gradient", "gradient_dir",
             "fill", "stroke", "text_color", "stack", "shadow", "accent", "header_fill",
-            "sketch", "region", "ghost", "plate"},
+            "sketch", "sketch_color", "region", "ghost", "plate"},
     "asset": {"type", "id", "rect", "src", "caption", "halign", "valign", "frame",
               "placeholder", "region", "ghost"},
     "text": {"type", "id", "at", "text", "size", "bold", "italic", "color", "anchor",
@@ -567,7 +568,7 @@ def load_spec(path: str | os.PathLike, text: str | None = None) -> FigureSpec:
                 text_color=e.get("text_color"), stack=int(e.get("stack", 0)),
                 shadow=bool(shadow) if shadow is not None else None,
                 accent=accent, header_fill=bool(e.get("header_fill", False)),
-                sketch=sketch, region=region,
+                sketch=sketch, sketch_color=e.get("sketch_color"), region=region,
                 ghost=bool(ghost) if ghost is not None else None,
                 plate=bool(plate) if plate is not None else None,
             ))

@@ -1,0 +1,210 @@
+# Distributed LLM Serving System — OSDI/SOSP-style architecture figure
+# theme: lineart(灰阶细边 + 钢蓝关键路径,Lato);纯矢量;layout 树摆版,内容元素零手写坐标
+# 色彩约定:钢蓝 #3D6B99 = critical path / decode 阶段;浅蓝灰 #C7D1DC = prefill 阶段;其余灰阶
+figure: {dpi: 300, background: "#FFFFFF"}
+theme: {preset: lineart}
+
+layout:
+  kind: col
+  gap: 5
+  pad: [3, 3]
+  align: stretch
+  children:
+    # ---- 顶带:三列主面板(左→右 = 请求主流向) ----
+    # A-B 走廊 16mm(容纳 admitted seqs / stream out 双向箭头+标签),B-C 走廊 14mm
+    # 三列 panel 固有高度均为 72mm(显式对齐:chips 底=sched 底、w1 顶=kv 顶、
+    # kvblk/batch 同行同高、prefix/batch/kvblk 底边同为 71.5)——不依赖 stretch 分配
+    - kind: row
+      gap: 16
+      align: stretch
+      children:
+        # 左列:请求前端
+        # 列内语法与 B/C 列一致:上部卡片,底部状态条带(queue/batch/kvblk 底边对齐 71.5)
+        - id: p_front
+          type: panel
+          kind: col
+          gap: 3
+          pad: [7.5, 3, 3.5, 3]
+          title: "Request Frontend"
+          header_style: smallcaps
+          title_size: 6.0
+          fill: "#F7F8FA"
+          children:
+            - kind: col
+              gap: 3
+              children:
+                - {ref: clients, w: 36, h: 11}
+                - {ref: router, w: 36, h: 17}
+            - {ref: prefix, w: 36, h: 18}
+            # tokens 的 label 画在条带左侧 → 用 pad-left 预留标签区
+            - kind: row
+              pad: [0, 0, 0, 17]
+              children:
+                - {ref: q_wait, w: 19, h: 6}
+        # 中列 + 右列(共用 14mm 走廊)
+        - kind: row
+          gap: 14
+          align: stretch
+          children:
+            # 中列:连续批处理引擎
+            - id: p_engine
+              type: panel
+              kind: col
+              gap: 8
+              pad: [7.5, 3, 3.5, 3]
+              title: "Continuous Batching Engine"
+              header_style: smallcaps
+              title_size: 6.0
+              fill: "#F7F8FA"
+              children:
+                - {ref: sched, w: 56, h: 19}
+                # sched-kv 间隙 8mm:容纳 "alloc" 虚线箭头标签
+                - kind: col
+                  gap: 3
+                  children:
+                    - {ref: kv, w: 56, h: 25}
+                    - kind: row
+                      pad: [0, 2, 0, 18]
+                      children:
+                        - {ref: batch, w: 36, h: 6}
+            # 右列:张量并行 Worker 池
+            - id: p_workers
+              type: panel
+              kind: col
+              gap: 5.5
+              pad: [7.5, 3, 3.5, 3]
+              title: "Tensor-Parallel Workers"
+              header_style: smallcaps
+              title_size: 6.0
+              fill: "#F7F8FA"
+              children:
+                - id: w0
+                  type: panel
+                  kind: row
+                  gap: 2.5
+                  pad: [7, 2.5, 2.5, 2.5]
+                  title: "GPU 0 · TP Rank 0"
+                  header_style: smallcaps
+                  title_size: 5.9
+                  fill: "#FFFFFF"
+                  children:
+                    - {ref: p0, w: 19, h: 12}
+                    - {ref: d0, w: 19, h: 12}
+                - kind: col
+                  gap: 6.5
+                  children:
+                    - id: w1
+                      type: panel
+                      kind: row
+                      gap: 2.5
+                      pad: [7, 2.5, 2.5, 2.5]
+                      title: "GPU 1 · TP Rank 1"
+                      header_style: smallcaps
+                      title_size: 5.9
+                      fill: "#FFFFFF"
+                      children:
+                        - {ref: p1, w: 19, h: 12}
+                        - {ref: d1, w: 19, h: 12}
+                    - kind: row
+                      pad: [0, 2, 0, 2]
+                      children:
+                        - {ref: kvblk, w: 41.5, h: 6}
+    # ---- 底带:指标面板 + 图例 ----
+    - kind: row
+      gap: 14
+      align: center
+      children:
+        - id: p_metrics
+          type: panel
+          kind: row
+          gap: 3
+          pad: [7.5, 3, 3.5, 3]
+          flex: 1
+          title: "Serving Metrics"
+          header_style: smallcaps
+          title_size: 6.0
+          fill: "#F7F8FA"
+          children:
+            - {ref: m_ttft, flex: 1, h: 15}
+            - {ref: met_tpot, flex: 1, h: 15}
+            - {ref: m_tput, flex: 1, h: 15}
+            - {ref: m_qd, flex: 1, h: 15}
+        # w=28.5 使 m_tput 中心 x 与 sched/kv 中心 x(92)精确对齐
+        - {ref: lg, w: 28.5, h: 19}
+
+elements:
+  # ---- 左列内容 ----
+  - {type: box, id: clients, title: "Clients", body: "streaming API", variant: plain}
+  - {type: box, id: router, title: "Request Router / Scheduler",
+     body: "admission control · SLO priority", variant: primary}
+  - {type: tokens, id: q_wait, n: 5, direction: h, variant: secondary, gap: 0.6,
+     label: "priority queue",
+     colors: ["#4A5568", "#6B7686", "#98A2B0", "#C6CDD6", "#EDEFF2"]}
+  # sketch 用 nested(单色嵌套)而非 tree:tree 的叶节点彩点是硬编码彩色,违背 lineart 灰阶克制
+  # body 压成一行,给 nested sketch 留 ~8mm 高度
+  - {type: box, id: prefix, title: "Prefix Cache",
+     body: "shared-prefix radix tree", variant: plain,
+     sketch: nested, valign: top}
+
+  # ---- 中列内容 ----
+  - {type: box, id: sched, title: "Iteration-Level Scheduler",
+     body: "admit / evict at every decode step · chunked prefill · no head-of-line blocking · preempt on HBM pressure",
+     variant: primary, accent: left}
+  - {type: box, id: kv, title: "KV Cache Manager",
+     body: "paged KV blocks · dynamic block table · HBM 80 GB per GPU",
+     variant: plain, sketch: grid, valign: top}
+  - {type: tokens, id: batch, n: 8, direction: h, variant: secondary, gap: 0.6,
+     label: "running batch",
+     colors: ["#3D6B99", "#C7D1DC", "#3D6B99", "#3D6B99", "#C7D1DC", "#3D6B99", "#C7D1DC", "#3D6B99"]}
+
+  # ---- 右列内容:每个 Worker 内 prefill / decode 两阶段 chip ----
+  - {type: box, id: p0, title: "Prefill", body: "prompt pass · builds KV",
+     variant: secondary, title_size: 6.2, body_size: 5.6}
+  - {type: box, id: d0, title: "Decode", body: "1 tok / step · all-reduce",
+     variant: primary, title_size: 6.2, body_size: 5.6}
+  - {type: box, id: p1, title: "Prefill", body: "prompt pass · builds KV",
+     variant: secondary, title_size: 6.2, body_size: 5.6}
+  - {type: box, id: d1, title: "Decode", body: "1 tok / step · all-reduce",
+     variant: primary, title_size: 6.2, body_size: 5.6}
+  - {type: tokens, id: kvblk, n: 10, direction: h, variant: secondary, gap: 0.55,
+     colors: ["#3D6B99", "#3D6B99", "#C7D1DC", "#3D6B99", "#C7D1DC",
+              "#FFFFFF", "#3D6B99", "#FFFFFF", "#FFFFFF", "#FFFFFF"]}
+
+  # ---- 底带内容 ----
+  - {type: box, id: m_ttft, title: "TTFT", body: "p50 / p99 ms",
+     variant: plain, sketch: distribution, valign: top, title_size: 6.6, body_size: 5.6}
+  # id 带后缀仅为重掷 bars 的稳定种子(原种子相邻柱高差 <15%,视觉近似平条)
+  - {type: box, id: met_tpot, title: "TPOT", body: "ms per token",
+     variant: plain, sketch: bars, valign: top, title_size: 6.6, body_size: 5.6}
+  - {type: box, id: m_tput, title: "Throughput", body: "tok / s · goodput",
+     variant: plain, sketch: curve, valign: top, title_size: 6.6, body_size: 5.6}
+  - {type: box, id: m_qd, title: "Queue Depth", body: "waiting reqs",
+     variant: plain, sketch: bars, valign: top, title_size: 6.6, body_size: 5.6}
+  - {type: legend, id: lg, style: card, columns: 1, frame: true, items: [
+      {swatch: line, color: "#2A2E35", label: "request flow"},
+      {swatch: dashed, color: "#5A6472", label: "cache hit / control"},
+      {swatch: box, color: "#3D6B99", label: "decode · critical path"},
+      {swatch: box, color: "#C7D1DC", label: "prefill phase"},
+    ]}
+
+  # ---- 箭头(全部 route: avoid;实线=请求流,虚线=缓存命中/控制) ----
+  - {type: arrow, from: clients, to: router, route: avoid}
+  - {type: arrow, from: "router.right@0.12", to: "sched.left@0.84", label: "admitted seqs",
+     weight: heavy, route: avoid}
+  - {type: arrow, from: "sched.left@0.15", to: "clients.right@0.26", label: "stream out",
+     weight: thin, route: avoid}
+  # lookup:prefix 紧贴 router 下方,中心对中心 3mm 垂直直连。
+  # 用 solid thin:3mm 内 dashed 只能画出一节,视觉上会与实线混淆;
+  # 语义上 lookup 查询属请求流,dashed 命中路径由下方 reuse blocks 边承担
+  - {type: arrow, from: router, to: prefix, weight: thin, route: avoid}
+  - {type: arrow, from: "prefix.right@0.2", to: "kv.left@0.25", label: "reuse blocks",
+     style: dashed, weight: thin, route: avoid}
+  - {type: arrow, from: sched, to: kv, label: "alloc", style: dashed, weight: thin, route: avoid}
+  # 往返箭头分道:step batch 走 y≈16.2 上道,next tokens 走 y≈24.5 下道(均水平直线)
+  - {type: arrow, from: "sched.right@0.3", to: "w0.left@0.27", label: "step batch",
+     weight: heavy, route: avoid}
+  - {type: arrow, from: sched, to: w1, weight: heavy, route: avoid}
+  - {type: arrow, from: "w0.left@0.65", to: "sched.right@0.74", label: "next tokens",
+     weight: thin, route: avoid}
+  - {type: arrow, from: "kv.right@0.18", to: kvblk, label: "block table", style: dashed, weight: thin, route: avoid}
+  - {type: arrow, from: w0, to: w1, style: dashed, weight: thin, bidir: true, route: avoid}
