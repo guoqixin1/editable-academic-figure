@@ -5,7 +5,7 @@
   python -m paperfig.cli studio  spec.yaml [--port 8323] [--no-open]
   python -m paperfig.cli assets  spec.yaml --api-key KEY [--only id1,id2] [--force] [--no-auto-select]
   python -m paperfig.cli select  spec.yaml ASSET_ID INDEX
-  python -m paperfig.cli cutout  in.png out.png [--threshold 238] [--shadow keep|remove]
+  python -m paperfig.cli cutout  in.png out.png [--threshold 238] [--shadow auto|keep|remove]
   python -m paperfig.cli tiles   spec.yaml [-o outdir] [--grid 2x2|3x3] [--dpi 300]
   python -m paperfig.cli base gen  spec.yaml [--api-key|-k] [--model] [--force] [--candidates N]
   python -m paperfig.cli base pick spec.yaml N
@@ -261,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     pc.add_argument("input")
     pc.add_argument("output")
     pc.add_argument("--threshold", type=int, default=238)
-    pc.add_argument("--shadow", choices=["keep", "remove"], default="keep")
+    pc.add_argument("--shadow", choices=["auto", "keep", "remove"], default="auto")
     pc.set_defaults(func=cmd_cutout)
 
     pst = sub.add_parser("studio", help="交互式调图界面（本地浏览器，改动即时重渲、可拖拽微调）")

@@ -251,7 +251,17 @@ base 模式另停用 `arrow-exit-over-content` 与 sketch 碰撞类检查（幽�
 | `base pick spec INDEX` | 候选提升为 `base/base.png`（回写 `base.image`） |
 | `base grid spec` | 底稿叠 mm 网格 → `base/base_grid.png`（freeform 标区） |
 | `tiles spec [-o dir] [--grid 2x2\|3x3] [--dpi 300]` | 成图网格切片放大（循环目检；单片宽≥1200px + overview） |
-| `cutout in.png out.png [--threshold 238] [--shadow keep\|remove]` | 单张白底图抠图 |
+| `cutout in.png out.png [--threshold 238] [--shadow auto\|keep\|remove]` | 单张白底图抠图（默认 auto：检测到问题自动补救） |
+
+`cutout`/`assets` 抠图自带防护（`CutoutReport.fixes` 留痕，gacha 评分自动扣分）：
+
+| 防护 | 检测 | 自动补救 |
+| --- | --- | --- |
+| 软阴影残边 | alpha 边界中「平坦梯度×高亮度」占比 `fringe_ratio` > 6% | 并入低饱和浅灰重抠（`shadow-removed`） |
+| 洪泛泄漏（白物件描边缺口被灌入） | 收紧洪泛 vs 普通洪泛差集出现大口袋 `leak_ratio` | 口袋回填为前景（`leak-sealed`） |
+| 底色不纯（偏白/渐变底） | 边框带亮度 `bg_p5` < 245 | 自适应下调阈值（`adaptive-threshold`）；p5<225 直接拒绝 |
+| 薄线损失（腐蚀吃掉 hairline） | `thin_loss` > 5% | 无腐蚀窄羽化回退（`thin-preserved`） |
+| 阴影碎屑误判多物件 | 浅灰低饱和、边界平坦的小连通块 | 自动剔除（`debris-dropped`），`n_solid` 只计实体 |
 
 API key 也可用环境变量 `PAPERFIG_API_KEY`（兼容旧名 `SCIFIG_API_KEY`）。`base gen --model`：`nano-banana-fast`（默认）/ `nano-banana-2` / `nano-banana-pro`。
 

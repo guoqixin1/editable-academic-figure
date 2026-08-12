@@ -69,7 +69,7 @@ class AssetRequest:
     prompt: str
     aspect: str = "1:1"
     candidates: int = 3
-    shadow: str = "keep"  # keep | remove，见 cutout.py
+    shadow: str = "auto"  # auto | keep | remove，见 cutout.py
 
 
 _BASE_MODES = {"skeleton", "freeform"}

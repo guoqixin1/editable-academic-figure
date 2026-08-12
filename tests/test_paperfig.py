@@ -1187,6 +1187,96 @@ def test_cutout_real_asset_no_halo():
         assert near_white < 0.05, f"边缘白色 halo 占比过高: {near_white:.1%}"
 
 
+# ── 抠图防护：泄漏回填 / 阴影自动去除 / 底色检查 / 薄线保护 / 碎屑清理 ──
+
+def test_cutout_seals_leak_through_outline_gap(tmp_path):
+    # 白色物件（如纸张）描边留 3px 缺口：朴素洪泛会灌入内部把主体抠穿
+    arr = np.full((200, 200, 3), 255, np.uint8)
+    arr[50:53, 50:150] = 30    # 上边框
+    arr[147:150, 50:150] = 30  # 下边框
+    arr[50:150, 50:53] = 30    # 左边框
+    arr[50:150, 147:150] = 30  # 右边框
+    arr[50:53, 98:101] = 255   # 上边框开 3px 缺口
+    Image.fromarray(arr).save(tmp_path / "in.png")
+    rep = cutout_white_bg(tmp_path / "in.png", tmp_path / "out.png")
+    assert rep.ok
+    assert any(f.startswith("leak-sealed") for f in rep.fixes), rep.fixes
+    out = np.asarray(Image.open(tmp_path / "out.png").convert("RGBA"))
+    cy, cx = out.shape[0] // 2, out.shape[1] // 2
+    assert out[cy, cx, 3] > 200, "白色内部被洪泛从描边缺口抠穿"
+
+
+def test_cutout_auto_removes_baked_shadow(tmp_path):
+    # 深色方块 + 下方软阴影（高斯模糊灰椭圆）：auto 应检测白灰残边并重抠
+    from PIL import ImageDraw, ImageFilter
+    base = Image.new("L", (200, 200), 0)
+    d = ImageDraw.Draw(base)
+    d.ellipse([55, 120, 145, 145], fill=90)
+    soft = base.filter(ImageFilter.GaussianBlur(6))
+    arr = 255 - np.asarray(soft).astype(np.int32)  # 白底上的软灰阴影
+    rgb = np.stack([arr, arr, arr], axis=2).clip(0, 255).astype(np.uint8)
+    rgb[60:115, 60:140] = (40, 70, 120)  # 深色主体盖在上面
+    Image.fromarray(rgb).save(tmp_path / "in.png")
+    rep = cutout_white_bg(tmp_path / "in.png", tmp_path / "out.png")
+    assert rep.ok
+    assert any(f.startswith("shadow-removed") for f in rep.fixes), rep.fixes
+    assert rep.fringe_ratio < 0.05, f"补救后仍有白灰残边: {rep.fringe_ratio:.0%}"
+
+
+def test_cutout_rejects_grey_background(tmp_path):
+    arr = np.full((150, 150, 3), 210, np.uint8)
+    arr[50:100, 50:100] = (40, 70, 120)
+    Image.fromarray(arr).save(tmp_path / "in.png")
+    rep = cutout_white_bg(tmp_path / "in.png", tmp_path / "out.png")
+    assert rep.ok is False
+    assert "背景不是纯白" in rep.reason
+    assert rep.bg_p5 < 225
+
+
+def test_cutout_adaptive_threshold_on_offwhite(tmp_path):
+    # 偏白底（235）：固定阈值 238 会把整个背景当前景；自适应阈值应正确去底
+    arr = np.full((150, 150, 3), 235, np.uint8)
+    arr[50:100, 50:100] = (40, 70, 120)
+    Image.fromarray(arr).save(tmp_path / "in.png")
+    rep = cutout_white_bg(tmp_path / "in.png", tmp_path / "out.png")
+    assert rep.ok, rep.reason
+    assert any(f.startswith("adaptive-threshold") for f in rep.fixes), rep.fixes
+    out = np.asarray(Image.open(tmp_path / "out.png").convert("RGBA"))
+    assert out[out.shape[0] // 2, out.shape[1] // 2, 3] > 200  # 主体保留
+
+
+def test_cutout_preserves_hairline_strokes(tmp_path):
+    # 互不相交的 1px 细线（网格会围出"内部白色"不适用）：腐蚀会全部吃掉，
+    # 应触发薄线保护回退
+    arr = np.full((300, 300, 3), 255, np.uint8)
+    for v in range(30, 271, 20):
+        arr[v, 20:281] = 20
+    Image.fromarray(arr).save(tmp_path / "in.png")
+    rep = cutout_white_bg(tmp_path / "in.png", tmp_path / "out.png")
+    assert rep.ok, rep.reason
+    assert any(f.startswith("thin-preserved") for f in rep.fixes), rep.fixes
+    assert rep.thin_loss < 0.2, f"薄线保护后仍损失 {rep.thin_loss:.0%}"
+    out = np.asarray(Image.open(tmp_path / "out.png").convert("RGBA"))
+    assert (out[:, :, 3] > 128).sum() > 2500, "细线在输出中大面积丢失"
+
+
+def test_cutout_drops_shadow_debris_island(tmp_path):
+    # 主体旁的独立软灰斑（阴影残片）：keep 模式下应按碎屑剔除，不误判为多物件
+    from PIL import ImageDraw, ImageFilter
+    base = Image.new("L", (200, 200), 0)
+    d = ImageDraw.Draw(base)
+    d.ellipse([140, 140, 175, 170], fill=60)
+    soft = base.filter(ImageFilter.GaussianBlur(4))
+    arr = 255 - np.asarray(soft).astype(np.int32)
+    rgb = np.stack([arr, arr, arr], axis=2).clip(0, 255).astype(np.uint8)
+    rgb[40:110, 40:110] = (40, 70, 120)  # 实体主体
+    Image.fromarray(rgb).save(tmp_path / "in.png")
+    rep = cutout_white_bg(tmp_path / "in.png", tmp_path / "out.png", shadow="keep")
+    assert rep.ok
+    assert rep.debris_dropped >= 1, "软灰碎屑未被识别剔除"
+    assert rep.n_solid == 1, f"实体块应为 1，实际 {rep.n_solid}"
+
+
 # ── spec 校验 ────────────────────────────────────────────
 
 def test_spec_rejects_bad_ref(tmp_path):

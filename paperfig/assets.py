@@ -491,17 +491,41 @@ def _score(report: CutoutReport) -> tuple[float, str]:
     elif report.fg_ratio > 0.75:
         score -= 10
 
-    # 连通块：理想 1~2 个（主体 + 也许一个配件）
-    if report.n_components > 4:
+    # 实体连通块：理想 1~2 个（主体 + 也许一个配件）；阴影碎屑已被剔除不计
+    solid = report.n_solid or report.n_components
+    if solid > 4:
         score -= 25
         notes_warn = True
-    elif report.n_components > 2:
+    elif solid > 2:
         score -= 8
 
     # 贴边 = 主体被画布裁断，合成到图里会露出平直切口
     if report.touches_border:
         score -= 30
         notes_warn = True
+
+    # ── 防护指标（cutout 已尽力自动补救，残余风险计入扣分）──
+    # 补救后仍残留的白灰软边：深色版面上会露出脏边
+    if report.fringe_ratio > 0.15:
+        score -= 20
+        notes_warn = True
+    elif report.fringe_ratio > 0.10:
+        score -= 8
+
+    # 洪泛泄漏（已回填）：说明描边有缺口，回填区边缘可能不干净
+    if report.leak_ratio > 0.02:
+        score -= 12
+        notes_warn = True
+    elif report.leak_ratio > 0:
+        score -= 4
+
+    # 自动补救留痕：轻微扣分以便同素材多候选间优先选"天生干净"的卡
+    if report.debris_dropped:
+        score -= 4
+    if any(f.startswith("adaptive-threshold") for f in report.fixes):
+        score -= 4
+    if any(f.startswith("thin-preserved") for f in report.fixes):
+        score -= 3
 
     if score < 45:
         return max(score, 0.0), "reject"
@@ -612,9 +636,11 @@ def gacha_generate(
         result.candidates.append(Candidate(
             index=idx, raw_path=str(raw), cut_path=str(cut) if rep.ok else None,
             report=asdict(rep), score=score, verdict=verdict))
+        fixes_note = f" fixes=[{','.join(rep.fixes)}]" if rep.fixes else ""
         print(f"  #{idx}: {'✓' if rep.ok else '✗'} {score:.0f}分 {verdict}"
-              f"  fg={rep.fg_ratio:.0%} comp={rep.n_components}"
-              f"{' 贴边!' if rep.touches_border else ''}{' ' + rep.reason if rep.reason else ''}")
+              f"  fg={rep.fg_ratio:.0%} solid={rep.n_solid}"
+              f"{' 贴边!' if rep.touches_border else ''}"
+              f"{fixes_note}{' ' + rep.reason if rep.reason else ''}")
 
     sheet = assets_dir / f"contact_sheet_{req.id}.png"
     _contact_sheet(result.candidates, sheet)
