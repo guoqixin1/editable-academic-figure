@@ -95,8 +95,11 @@ _DRIFT_SPILL_FRAC = 0.40          # 环带墨迹占（内+环）比例；宽松�
 _DRIFT_SPILL_MIN_INK = 60         # 环带至少这么多非白像素才谈溢出
 _INK_WHITE_LUMA = 0.92            # 高于此亮度视作"白/近白"底
 
-# Liberation Sans 缺字形黑名单（实测会成豆腐块）→ glyph-missing E
+# Liberation Sans / 主题主字体缺字形黑名单（实测会成豆腐块）→ glyph-missing E
 # 建议替换写在值里；未引入 fontTools 依赖，用静态表。
+# 核对（2026-08）：Liberation Sans 下列字均缺；Lato 对 ‖/Ẑ/ẑ/组合符有字形，
+# 但 ∥(U+2225) 在 Lato 亦缺——靠 fonts.split_runs 归入 symbol → DejaVu。
+# 黑名单仍以 Liberation（默认 latin）为准，换字建议跨主题通用。
 _GLYPH_MISSING: dict[str, str] = {
     "\u2016": "∥ (U+2225)",   # ‖ DOUBLE VERTICAL LINE
     "\u0302": "预组字符如 â/ẑ，避免组合抑扬符",  # COMBINING CIRCUMFLEX

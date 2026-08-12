@@ -4,9 +4,9 @@
 figure: {width: 184, height: 86, dpi: 600, background: "#FFFFFF"}
 theme:
   preset: lineart
-  plate_pad: 1.0
+  plate_pad: 0.55
   plate_opacity: 0.92
-  plate_radius: 0.5
+  plate_radius: 0.45
 
 base:
   image: base/base.png
@@ -131,99 +131,108 @@ elements:
      variant: plain, ghost: true, plate: false}
 
   # ---- 模块标题：钉回本模块题字带 ----
-  # 贴片预算 ≤4：t_pol / t_upd / t_rm / t_side
-  - {type: text, id: t_env, text: "Task Dispatcher · schema/tools", size: 5.2, bold: true,
-     color: "#1A202C", at: [26.3, 0.45], anchor: middle, plate: false}
+  # 贴片预算 ≤5：t_env / t_pol / t_upd / t_rm / t_side
+  # Task Dispatcher：从画布顶缘收回 env 题字带（第 5 块显式贴片）
+  - {type: text, id: t_env, text: "Task Dispatcher · schema/tools", size: 5.0, bold: true,
+     color: "#1A202C", at: [26.3, 9.85], anchor: middle, plate: true}
   - {type: text, id: t_pol, text: "Agent Policy π_θ · LLM+tools", size: 5.0, bold: true,
-     color: "#1A202C", at: [26.3, 26.35], anchor: middle, plate: true}
-  - {type: text, id: t_roll, text: "G Rollouts · multi-turn tools", size: 5.4, bold: true,
-     color: "#1A202C", at: [100.0, 10.15], anchor: start, plate: false}
-  - {type: text, id: t_adv, text: "Advantage Â · group-relative", size: 5.4, bold: true,
-     color: "#1A202C", at: [156.8, 10.8], anchor: middle, plate: false}
-  # GRPO：题字带内显式 plate（白裸字对比不足）；at 贴顶使贴片落在浅色带
+     color: "#1A202C", at: [26.3, 25.85], anchor: middle, plate: true}
+  - {type: text, id: t_adv, text: "Advantage Â · group-relative", size: 5.2, bold: true,
+     color: "#1A202C", at: [156.8, 10.5], anchor: middle, plate: false}
   - {type: text, id: t_upd, text: "GRPO / PPO · Δθ", size: 5.0, bold: true,
-     color: "#1A202C", at: [156.8, 26.90], anchor: middle, plate: true}
+     color: "#1A202C", at: [156.8, 27.55], anchor: middle, plate: true}
   - {type: text, id: t_rm, text: "Reward Head · r(τ)", size: 5.0, bold: true,
-     color: "#1A202C", at: [65.3, 51.55], anchor: middle, plate: true}
-  # Replay：下移到 Side 模块内圆柱上方浅灰空条（花纹忙 → 第 4 块贴片）
+     color: "#1A202C", at: [65.3, 50.85], anchor: middle, plate: true}
   - {type: text, id: t_side, text: "Replay Buffer · π_ref", size: 5.0, bold: true,
-     color: "#1A202C", at: [156.8, 51.0], anchor: middle, plate: true}
-  # 面板题：带内只留右对齐 SIDE PATH
+     color: "#1A202C", at: [156.8, 50.55], anchor: middle, plate: true}
   - {type: text, id: t_p_rew, text: "REWARD MODEL", size: 5.6, bold: true, smallcaps: true,
      color: "#4A5568", at: [105.7, 45.85], anchor: middle, plate: false}
   - {type: text, id: t_p_aux, text: "SIDE PATH", size: 5.6, bold: true, smallcaps: true,
      color: "#4A5568", at: [178.5, 46.5], anchor: end, plate: false}
 
-  # ---- 实心卡：仅进浅灰空槽 ----
-  - {type: box, id: tool_s, rect: [5.34, 52.21, 13.13, 15.74], title: "Search",
+  # ---- 实心卡：压高至文字占比 ≥55%（两行+pad≈8.3 → h=9.2≈58%）；贴 reserved 槽顶 ----
+  - {type: box, id: tool_s, rect: [5.34, 52.20, 13.13, 9.20], title: "Search",
      body: "web/RAG", variant: plain, valign: middle, ghost: false,
      plate: false, title_size: 5.6, body_size: 5.4}
-  - {type: box, id: tool_c, rect: [19.63, 52.21, 13.13, 15.74], title: "Code",
+  - {type: box, id: tool_c, rect: [19.63, 52.20, 13.13, 9.20], title: "Code",
      body: "sandbox", variant: secondary, valign: middle, ghost: false,
      plate: false, title_size: 5.6, body_size: 5.4}
-  - {type: box, id: tool_m, rect: [34.04, 52.21, 13.13, 15.74], title: "Memory",
+  - {type: box, id: tool_m, rect: [34.04, 52.20, 13.13, 9.20], title: "Memory",
      body: "KV R/W", variant: muted, valign: middle, ghost: false,
      plate: false, title_size: 5.6, body_size: 5.4}
 
-  - {type: box, id: r_succ, rect: [76.67, 50.17, 24.51, 9.98], title: "Success",
+  - {type: box, id: r_succ, rect: [76.67, 50.55, 24.51, 8.80], title: "Success",
      body: "task hit", variant: plain, valign: middle, ghost: false,
      plate: false, title_size: 5.6, body_size: 5.4}
-  - {type: box, id: r_step, rect: [102.34, 50.17, 24.51, 9.98], title: "−λT",
+  - {type: box, id: r_step, rect: [102.34, 50.55, 24.51, 8.80], title: "−λT",
      body: "steps", variant: muted, valign: middle, ghost: false,
      plate: false, title_size: 5.6, body_size: 5.4}
-  - {type: box, id: r_fmt, rect: [76.67, 61.30, 50.18, 9.98], title: "Format Check",
+  - {type: box, id: r_fmt, rect: [76.67, 60.55, 50.18, 8.80], title: "Format Check",
      body: "schema / JSON", variant: secondary, valign: middle, ghost: false,
      plate: false, title_size: 5.6, body_size: 5.4}
 
-  # ---- Sampling 右侧空区：token 行 ----
-  - {type: tokens, id: tok_traj, rect: [91.0, 14.0, 35.5, 6.2], n: 7, direction: h,
+  # ---- Sampling 右侧空区：token 两行上下居中、标签间距均匀 ----
+  # 箭头 y≈11.2 下方净空 y≈13–40；块高≈19 → 起始约 16.5 使上下余白接近
+  - {type: text, id: t_roll, text: "G Rollouts · multi-turn tools", size: 5.2, bold: true,
+     color: "#1A202C", at: [91.0, 16.2], anchor: start, plate: false}
+  - {type: tokens, id: tok_traj, rect: [91.0, 18.2, 35.5, 5.8], n: 7, direction: h,
      variant: primary, gap: 0.4,
      colors: ["#E8EEF4", "#C5D4E3", "#E8EEF4", "#3D6B99", "#E8EEF4", "#C5D4E3", "#E8EEF4"]}
-  - {type: text, id: t_tok, text: "tau · tool-call tokens", size: 5.4,
-     color: "#3D6B99", at: [91.0, 20.9], anchor: start, plate: false}
-  - {type: tokens, id: tok_tool, rect: [91.0, 23.5, 35.5, 6.2], n: 6, direction: h,
+  - {type: text, id: t_tok, text: "tau · tool-call tokens", size: 5.2,
+     color: "#3D6B99", at: [91.0, 25.0], anchor: start, plate: false}
+  - {type: tokens, id: tok_tool, rect: [91.0, 27.4, 35.5, 5.8], n: 6, direction: h,
      variant: secondary, gap: 0.45,
      colors: ["#F0F0F0", "#D8D8D8", "#E8E8E8", "#B8B8B8", "#E8E8E8", "#F0F0F0"]}
-  - {type: text, id: t_g, text: "G∥ · T steps", size: 5.4,
-     color: "#4A5568", at: [91.0, 30.5], anchor: start, plate: false}
+  - {type: text, id: t_g, text: "G∥ · T steps", size: 5.2,
+     color: "#4A5568", at: [91.0, 34.4], anchor: start, plate: false}
 
-  # ---- 底部通栏：公式靠左（正文54.4mm + 左右约5mm）+ 图例靠右 ----
-  - {type: box, id: loss_box, rect: [3.14, 74.74, 61.4, 9.47], title: "Training objective",
+  # ---- 底栏：通栏白色页脚带（覆盖灰底条）+ 左公式 + 右图例，同中线、等外边距 ----
+  - {type: box, id: foot_band, rect: [0.0, 72.6, 184.0, 13.4], title: "",
+     variant: plain, ghost: false, plate: false, fill: "#FFFFFF",
+     stroke: "none", valign: middle}
+  - {type: box, id: loss_box, rect: [4.5, 74.2, 100.0, 10.0], title: "Training objective",
      body: "L = −Â log π_θ − β KL(π_θ ∥ π_ref)  ·  ↑ return · β·KL trust region",
      variant: plain, ghost: false, plate: false, valign: middle, align: left,
-     title_size: 5.4, body_size: 5.2, fill: "#FFFFFF"}
-  - {type: legend, id: lg, at: [146.8, 75.2], columns: 2, size: 5.2, style: card,
-     fill: "#FFFFFF", frame: true, items: [
-       {swatch: line, color: "#444444", label: "main / data"},
-       {swatch: dashed, color: "#3D6B99", label: "Δθ feedback"},
-       {swatch: dashed, color: "#888888", label: "KL / replay"},
+     title_size: 5.4, body_size: 5.2, fill: "#FFFFFF", stroke: "none"}
+  - {type: legend, id: lg, at: [145.5, 74.9], columns: 2, size: 5.2, style: card,
+     fill: "#FFFFFF", frame: false, items: [
+       {swatch: line, color: "#2A2E35", label: "main / data"},
+       {swatch: dashed, color: "#2F5A85", label: "Δθ feedback"},
+       {swatch: dashed, color: "#5A6472", label: "KL / replay"},
        {swatch: box, color: "#3D6B99", label: "critical path"},
      ]}
 
   # ---- 角标 ----
   - {type: badge, id: b1, at: [7.0, 10.6], text: "1", size: 2.6, color: "#4A5568"}
   - {type: badge, id: b2, at: [7.0, 27.0], text: "2", size: 2.6, color: "#3D6B99"}
-  - {type: badge, id: b3, at: [50.5, 12.0], text: "3", size: 2.6, color: "#4A5568"}
+  - {type: badge, id: b3, at: [50.5, 31.5], text: "3", size: 2.6, color: "#4A5568"}
   - {type: badge, id: b4, at: [54.0, 51.6], text: "4", size: 2.6, color: "#4A5568"}
-  - {type: badge, id: b5, at: [130.5, 10.5], text: "5", size: 2.6, color: "#3D6B99"}
+  - {type: badge, id: b5, at: [130.5, 11.2], text: "5", size: 2.6, color: "#3D6B99"}
   - {type: marker, id: m_fire1, at: [45.5, 27.2], icon: fire, size: 2.4}
   - {type: marker, id: m_fire2, at: [178.8, 30.2], icon: fire, size: 2.4}
   - {type: marker, id: m_snow, at: [176.5, 52.6], icon: snow, size: 2.2}
 
-  # ---- 正交箭头（走廊走线；端点在色块外缘）----
+  # ---- 正交箭头（端点锚模块/色块边框；能直则直，最多一 L）----
+  # task：Dispatcher → Policy
   - {type: arrow, from: env.bottom@0.72, to: policy.top@0.72, label: "task",
-     weight: heavy, semantic: data, route: vh, label_offset: 2.2}
-  - {type: arrow, from: policy.right@0.18, to: roll.left@0.18,
-     weight: heavy, semantic: data, route: hv}
+     weight: heavy, semantic: data, route: straight, label_offset: 2.0}
+  # badge-3：Policy → Rollout 水平直连（对齐 y≈31.5）
+  - {type: arrow, from: policy.right@0.265, to: roll.left@0.822,
+     weight: heavy, semantic: data, route: straight}
+  # badge-5：Rollout 网格 → Advantage 水平直连（对齐 y≈11.2；题字在箭头下方）
+  - {type: arrow, from: roll.right@0.077, to: adv.left@0.138,
+     weight: heavy, semantic: data, route: straight}
+  # Sampling → Reward Head
   - {type: arrow, from: roll.bottom@0.18, to: rm.top@0.40,
      weight: heavy, semantic: data, route: vh}
-  - {type: arrow, from: r_step.right@0.45, to: adv.left@0.72, label: "r",
-     weight: heavy, semantic: data, route: vh,
-     via: [[130.5, 54.7], [130.5, 20.0]], label_pos: auto}
-  # Â：竖直短箭；杆从 Advantage 下缘内侧起，穿过缝隙，尖停在 GRPO 顶外 0.5mm
+  # r 回报：走走廊；竖段 x=130.5；r 胶囊偏右落走廊净空
+  - {type: arrow, from: r_step.right@0.50, to: adv.left@0.72, label: "r",
+     weight: heavy, semantic: data, color: "#2A2E35", route: vh,
+     via: [[130.5, 54.95], [130.5, 20.0]], label_offset: 2.0}
+  # Â：竖直短箭；杆从 Advantage 下缘内侧起，尖停在 GRPO 顶外 ~0.5mm
   - {type: arrow, from: [173.0, 23.20], to: [173.0, 26.76], label: "Â",
-     weight: normal, semantic: data, route: vh, label_offset: 3.0}
-  # Δθ：右缘→上缘走廊→Policy（保持现路由）
+     weight: normal, semantic: data, route: straight, label_offset: 3.0}
+  # Δθ：右缘→上缘走廊→Policy（画布顶缘仅留此虚线）
   - {type: arrow, from: upd.right@0.20, to: policy.right@0.08, label: "Δθ",
      weight: heavy, semantic: feedback, route: vh,
      via: [[182.0, 29.8], [182.0, 1.8], [48.0, 1.8], [48.0, 26.9]],
@@ -231,12 +240,12 @@ elements:
 
   # 工具箭：尖端落在 Policy 下缘外 ~1.3mm（policy.bottom=49.66 → 51.00）
   - {type: arrow, from: tool_s.top@0.50, to: [11.9, 51.00],
-     weight: thin, semantic: control, route: vh}
+     weight: thin, semantic: control, route: straight}
   - {type: arrow, from: tool_c.top@0.50, to: [26.2, 51.00],
-     weight: thin, semantic: control, route: vh}
+     weight: thin, semantic: control, route: straight}
   - {type: arrow, from: tool_m.top@0.50, to: [40.6, 51.00],
-     weight: thin, semantic: control, route: vh}
+     weight: thin, semantic: control, route: straight}
 
-  # batch：点线路由不变；标签在竖段右侧 ≥1mm（加大 offset 避免压线）
+  # batch：点线 Side → GRPO；标签在竖段右侧
   - {type: arrow, from: side.top@0.12, to: upd.bottom@0.12, label: "batch",
-     weight: thin, semantic: optional, route: vh, label_offset: 3.2}
+     weight: thin, semantic: optional, route: straight, label_offset: 3.2}

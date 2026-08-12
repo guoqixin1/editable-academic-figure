@@ -18,13 +18,16 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+# fonts 须先于 cairosvg：ensure_lato_fontconfig 在 import 时写入 FONTCONFIG_FILE
+from .fonts import (FAMILY_SVG, PT_TO_MM, LINE_HEIGHT, SCRIPT_SCALE, SUB_SHIFT,
+                    SUP_SHIFT, ensure_lato_fontconfig, line_ascent_mm,
+                    measure_markup_mm, measure_mm, parse_markup, split_runs,
+                    svg_lato_family, text_block_height_mm, wrap_text)
+
 import cairosvg
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from .fonts import (FAMILY_SVG, PT_TO_MM, LINE_HEIGHT, SCRIPT_SCALE, SUB_SHIFT,
-                    SUP_SHIFT, line_ascent_mm, measure_markup_mm, measure_mm,
-                    parse_markup, split_runs, text_block_height_mm, wrap_text)
 from .routing import (RouteRequest, max_label_path_dist, pick_best_label, route_all)
 from .spec import (ArrowEl, AssetEl, BadgeEl, BoxEl, FigureSpec, GroupEl,
                    LegendEl, MarkerEl, NetworkEl, PanelEl, PanelLabelEl, Rect,
@@ -40,6 +43,52 @@ def _esc(s: str) -> str:
 def _wrap_el(el_id: str, svg: str) -> str:
     """给元素套 data-el 分组：studio 里点选/拖拽定位用，对静态导出无影响。"""
     return f'<g data-el="{_esc(el_id)}">{svg}</g>' if svg else svg
+
+
+def _theme_weight(th: Theme, role: str) -> int:
+    """role ∈ title|body|label → SVG font-weight 数值。"""
+    if role == "title":
+        return int(th.title_weight)
+    if role == "label":
+        return int(th.label_weight)
+    return int(th.body_weight)
+
+
+def _weight_is_bold(weight: int) -> bool:
+    """度量用：≥600 走 Bold 字文件（Liberation/Lato Semibold+）。"""
+    return weight >= 600
+
+
+def _smallcaps_ls(th: Theme, *, panel: bool = False) -> float:
+    """panel smallcaps 用主题字距；独立 text.smallcaps 按 0.35/0.45 比例缩放。"""
+    base = float(th.smallcaps_letter_spacing)
+    return base if panel else base * (0.35 / 0.45)
+
+
+def _latin_font_family(
+    th: Theme | None,
+    primary: str | None = None,
+    weight: int | None = None,
+) -> str:
+    """latin run 的 SVG font-family。非 Liberation 时追加 Liberation Sans 兜底。
+
+    覆盖结论（Lato Regular/Medium/Semibold/Bold 实测 cmap）：
+      - 有：π θ τ Δ β λ 及常见希腊字母
+      - 无：∥ (U+2225 PARALLEL TO) → 由 fonts.split_runs 归入 symbol → DejaVu Sans
+      - ‖/Ẑ 等 Liberation 黑名单字在 Lato 有字形，但 lint 仍按 Liberation 黑名单提示换字
+
+    cairosvg/cairo toy 字重限制（须按面名选字，不能只靠 font-weight 数值）：
+      - 「Lato」+ normal → 系统 FC 命中 Medium（非 Regular）
+      - Regular → LatoPFRegular（fontconfig 文件映射，见 fonts.ensure_lato_fontconfig）
+      - Semibold → 「Lato Semibold」；「Lato」+ weight≥550 → Bold
+    """
+    fam = primary or (th.font_family if th is not None else FAMILY_SVG["latin"])
+    fallback = FAMILY_SVG["latin"]
+    if fam == "Lato" and weight is not None:
+        fam = svg_lato_family(int(weight))
+    if fam == fallback:
+        return fam
+    return f"{fam}, {fallback}"
 
 
 @dataclass
@@ -58,6 +107,8 @@ class _TextSpan:
     rot_cy: float = 0.0
     smallcaps: bool = False
     letter_spacing: float = 0.0  # mm，字符间距（smallcaps 用）
+    font_family: str | None = None   # latin 主字体；None → Liberation Sans
+    font_weight: int | None = None   # SVG 数值字重；None → bold?700:400
 
     @property
     def width(self) -> float:
@@ -86,8 +137,10 @@ class _TextSpan:
 
     def to_svg(self) -> str:
         base_mm = self.pt * PT_TO_MM
-        style = (" font-weight=\"bold\"" if self.bold else "") + \
-                (" font-style=\"italic\"" if self.italic else "")
+        weight = self.font_weight if self.font_weight is not None else (700 if self.bold else 400)
+        style = f' font-weight="{weight}"'
+        if self.italic:
+            style += ' font-style="italic"'
         ls = f' letter-spacing="{self.letter_spacing:.4f}"' if self.letter_spacing else ""
         parts = [f'<text fill="{self.color}"{style}{ls}>']
         x = self.x
@@ -98,7 +151,14 @@ class _TextSpan:
             shift = SUB_SHIFT if mode == "sub" else (SUP_SHIFT if mode == "sup" else 0.0)
             y = self.baseline + shift * base_mm
             for run, cls in split_runs(seg):
-                fam = FAMILY_SVG[cls]
+                if cls == "latin":
+                    fam = _latin_font_family(
+                        None,
+                        self.font_family or FAMILY_SVG["latin"],
+                        weight,
+                    )
+                else:
+                    fam = FAMILY_SVG[cls]
                 parts.append(
                     f'<tspan x="{x:.3f}" y="{y:.3f}" font-size="{pt * PT_TO_MM:.4f}" '
                     f'font-family="{_esc(fam)}" xml:space="preserve">{_esc(run)}</tspan>')
@@ -111,6 +171,36 @@ class _TextSpan:
             svg = (f'<g transform="rotate({self.rotate:.2f} {self.rot_cx:.3f} {self.rot_cy:.3f})">'
                    + svg + "</g>")
         return svg
+
+
+def _span(
+    th: Theme,
+    role: str,
+    *,
+    x: float,
+    baseline: float,
+    text: str,
+    pt: float,
+    color: str,
+    italic: bool = False,
+    rotate: float = 0.0,
+    rot_cx: float = 0.0,
+    rot_cy: float = 0.0,
+    smallcaps: bool = False,
+    letter_spacing: float = 0.0,
+    diagnostic: bool = False,
+    weight: int | None = None,
+) -> _TextSpan:
+    """按主题角色发排一行文字（注入 font_family / font_weight）。"""
+    w = int(weight) if weight is not None else _theme_weight(th, role)
+    return _TextSpan(
+        x=x, baseline=baseline, text=text, pt=pt, color=color,
+        bold=_weight_is_bold(w), italic=italic,
+        rotate=rotate, rot_cx=rot_cx, rot_cy=rot_cy,
+        smallcaps=smallcaps, letter_spacing=letter_spacing,
+        diagnostic=diagnostic,
+        font_family=th.font_family, font_weight=w,
+    )
 
 
 class RenderResult:
@@ -316,8 +406,10 @@ def estimate_box_text_plate(
     content_x0 = r.x + th.box_pad_x
     title_pt = (el.title_size or th.size_title) * fs
     body_pt = (el.body_size or th.size_body) * fs
-    title_lines = wrap_text(el.title, title_pt, inner_w, bold=True) if el.title else []
-    body_lines = wrap_text(el.body, body_pt, inner_w) if el.body else []
+    title_bold = _weight_is_bold(th.title_weight)
+    body_bold = _weight_is_bold(th.body_weight)
+    title_lines = wrap_text(el.title, title_pt, inner_w, bold=title_bold) if el.title else []
+    body_lines = wrap_text(el.body, body_pt, inner_w, bold=body_bold) if el.body else []
     if not title_lines and not body_lines:
         return None
 
@@ -334,19 +426,23 @@ def estimate_box_text_plate(
         y = cy - text_h / 2
 
     spans: list[_TextSpan] = []
-    blocks = [b for b in ((title_lines, title_pt, True), (body_lines, body_pt, False)) if b[0]]
-    for bi, (lines, pt, bold) in enumerate(blocks):
+    blocks = [b for b in (
+        (title_lines, title_pt, "title"),
+        (body_lines, body_pt, "body"),
+    ) if b[0]]
+    for bi, (lines, pt, role) in enumerate(blocks):
         if bi > 0:
             y += 0.6
         lh = pt * PT_TO_MM * LINE_HEIGHT
+        bold = _weight_is_bold(_theme_weight(th, role))
         for ln in lines:
             asc = line_ascent_mm(ln.text or "x", pt, bold)
             if el.align == "left":
                 x = content_x0
             else:
                 x = content_x0 + inner_w / 2 - ln.width_mm / 2
-            spans.append(_TextSpan(
-                x=x, baseline=y + asc, text=ln.text, pt=pt, bold=bold, color="#000",
+            spans.append(_span(
+                th, role, x=x, baseline=y + asc, text=ln.text, pt=pt, color="#000",
             ))
             y += lh
 
@@ -380,8 +476,8 @@ def estimate_arrow_label_capsule(
     if geom.skip or len(geom.pts) < 2:
         return None
     pt_size = th.size_arrow_label * font_scale
-    _span, cap = _arrow_label_layout(
-        geom.pts, el.label, el.label_offset, pt_size, th.arrow_head_len, th.muted,
+    _lbl, cap = _arrow_label_layout(
+        geom.pts, el.label, el.label_offset, pt_size, th.arrow_head_len, th.muted, th,
     )
     # 与渲染期标签胶囊同源；auto/avoid 已在上方返回 None（无法静态定）
     return cap
@@ -545,6 +641,7 @@ def render(spec: FigureSpec, out_png: str | Path | None = None,
         out_png.parent.mkdir(parents=True, exist_ok=True)
         the_dpi = dpi or spec.dpi
         scale = the_dpi / 25.4  # px per mm
+        ensure_lato_fontconfig()  # 幂等；防其它入口未先 import fonts
         cairosvg.svg2png(bytestring=svg.encode(), write_to=str(out_png),
                          output_width=round(spec.width * scale),
                          output_height=round(spec.height * scale))
@@ -756,9 +853,11 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
     content_x0 = r.x + th.box_pad_x
     title_pt = (el.title_size or th.size_title) * fs
     body_pt = (el.body_size or th.size_body) * fs
+    title_bold = _weight_is_bold(th.title_weight)
+    body_bold = _weight_is_bold(th.body_weight)
 
-    title_lines = wrap_text(el.title, title_pt, inner_w, bold=True) if el.title else []
-    body_lines = wrap_text(el.body, body_pt, inner_w) if el.body else []
+    title_lines = wrap_text(el.title, title_pt, inner_w, bold=title_bold) if el.title else []
+    body_lines = wrap_text(el.body, body_pt, inner_w, bold=body_bold) if el.body else []
 
     # 幽灵模式：不画 icon/sketch（底稿已有形象）
     has_icon = (not ghost) and bool(el.icon) and el.icon_h > 0
@@ -812,19 +911,25 @@ def _render_box(el: BoxEl, spec: FigureSpec, th: Theme, fs: float, res: RenderRe
 
     text_out: list[str] = []
     text_spans_here: list[_TextSpan] = []
-    blocks = [b for b in ((title_lines, title_pt, True), (body_lines, body_pt, False)) if b[0]]
-    for bi, (lines, pt, bold) in enumerate(blocks):
+    blocks = [b for b in (
+        (title_lines, title_pt, "title"),
+        (body_lines, body_pt, "body"),
+    ) if b[0]]
+    for bi, (lines, pt, role) in enumerate(blocks):
         if bi > 0:
             y += 0.6  # title 与 body 间距（仅块间，与 content_h 估算一致）
         lh = pt * PT_TO_MM * LINE_HEIGHT
+        bold = _weight_is_bold(_theme_weight(th, role))
         for ln in lines:
             asc = line_ascent_mm(ln.text or "x", pt, bold)
             if el.align == "left":
                 x = content_x0
             else:
                 x = content_x0 + inner_w / 2 - ln.width_mm / 2
-            span = _TextSpan(x=x, baseline=y + asc, text=ln.text, pt=pt, bold=bold,
-                             color=el.text_color or v.text)
+            span = _span(
+                th, role, x=x, baseline=y + asc, text=ln.text, pt=pt,
+                color=el.text_color or v.text,
+            )
             res.text_spans.append(span)
             text_spans_here.append(span)
             text_out.append(span.to_svg())
@@ -878,9 +983,11 @@ def _render_asset(el: AssetEl, spec: FigureSpec, th: Theme, fs: float, res: Rend
     y = img_rect.bottom + 0.8
     lh = cap_pt * PT_TO_MM * LINE_HEIGHT
     for ln in cap_lines:
-        asc = line_ascent_mm(ln.text or "x", cap_pt)
-        span = _TextSpan(x=el.rect.cx - ln.width_mm / 2, baseline=y + asc,
-                         text=ln.text, pt=cap_pt, bold=False, color=th.muted)
+        asc = line_ascent_mm(ln.text or "x", cap_pt, _weight_is_bold(th.body_weight))
+        span = _span(
+            th, "body", x=el.rect.cx - ln.width_mm / 2, baseline=y + asc,
+            text=ln.text, pt=cap_pt, color=th.muted,
+        )
         res.text_spans.append(span)
         out.append(span.to_svg())
         y += lh
@@ -1207,8 +1314,9 @@ def _place_auto_arrow_labels(
 
     for el, g in need:
         pt_size = th.size_arrow_label * fs
-        w = measure_markup_mm(el.label, pt_size)
-        asc = line_ascent_mm(el.label, pt_size)
+        label_bold = _weight_is_bold(th.label_weight)
+        w = measure_markup_mm(el.label, pt_size, label_bold)
+        asc = line_ascent_mm(el.label, pt_size, label_bold)
         h = pt_size * PT_TO_MM * LINE_HEIGHT
         _, _, arrow_width = _resolve_arrow_paint(el, th)
         weight_mul = {"thin": 0.65, "normal": 1.0, "heavy": 1.55}.get(el.weight, 1.0)
@@ -1255,8 +1363,8 @@ def _place_auto_arrow_labels(
                 f"箭头 '{el.id}' 标签 “{el.label[:14]}” 距离上限内候选均冲突，"
                 f"已折中放置；请拉开箭头间距或删除标签",
             ))
-        span = _TextSpan(x=best.x, baseline=best.baseline, text=el.label,
-                         pt=pt_size, bold=False, color=th.muted)
+        span = _span(th, "label", x=best.x, baseline=best.baseline, text=el.label,
+                     pt=pt_size, color=th.muted)
         placed[el.id] = (span, best.cap)
         other_caps.append(best.cap)
     return placed
@@ -1473,6 +1581,7 @@ def _arrow_label_layout(
     pt_size: float,
     head_len: float,
     color: str,
+    th: Theme | None = None,
 ) -> tuple["_TextSpan", Rect]:
     """在折线上放置标签，避开箭头尖端/起点保护区（防止胶囊盖住尖端造成悬空错觉）。"""
     tip = pts[-1]
@@ -1492,9 +1601,15 @@ def _arrow_label_layout(
         scored.append((length + 0.4 * min(d_tip, 14.0) - penalty, i))
     scored.sort(reverse=True)
 
-    w = measure_markup_mm(label, pt_size)
-    asc = line_ascent_mm(label, pt_size)
+    label_bold = _weight_is_bold(th.label_weight) if th is not None else False
+    w = measure_markup_mm(label, pt_size, label_bold)
+    asc = line_ascent_mm(label, pt_size, label_bold)
     keep = max(head_len + 1.2, 2.8)
+
+    def _make(tx: float, ty: float) -> _TextSpan:
+        if th is not None:
+            return _span(th, "label", x=tx, baseline=ty, text=label, pt=pt_size, color=color)
+        return _TextSpan(x=tx, baseline=ty, text=label, pt=pt_size, bold=False, color=color)
 
     def _try(i: int, offset: float) -> tuple[_TextSpan, Rect] | None:
         a, b = pts[i], pts[i + 1]
@@ -1505,7 +1620,7 @@ def _arrow_label_layout(
         else:
             tx = mx + offset
             ty = my + asc / 2 - 0.2
-        span = _TextSpan(x=tx, baseline=ty, text=label, pt=pt_size, bold=False, color=color)
+        span = _make(tx, ty)
         bb = span.bbox()
         cap = Rect(bb.x - 0.7, bb.y - 0.25, bb.w + 1.4, bb.h + 0.5)
         # 尖端落入胶囊 → 拒绝（这正是 8 sents「悬空」的根因）
@@ -1533,7 +1648,7 @@ def _arrow_label_layout(
         tx, ty = mx - w / 2, my - label_offset
     else:
         tx, ty = mx + label_offset, my + asc / 2 - 0.2
-    span = _TextSpan(x=tx, baseline=ty, text=label, pt=pt_size, bold=False, color=color)
+    span = _make(tx, ty)
     bb = span.bbox()
     return span, Rect(bb.x - 0.7, bb.y - 0.25, bb.w + 1.4, bb.h + 0.5)
 
@@ -1663,15 +1778,27 @@ def _resolve_arrow_paint(el: ArrowEl, th: Theme) -> tuple[str, str, float | None
     style = el.style
     color = el.color
     width = el.width
+    from_semantic_color = False
+    from_semantic_width = False
     if el.semantic and th.arrow_styles:
         preset = th.arrow_styles.get(el.semantic) or {}
         if not el.style_explicit and preset.get("style"):
             style = str(preset["style"])
         if not el.color_explicit and preset.get("color"):
             color = str(preset["color"])
+            from_semantic_color = True
         if not el.width_explicit and preset.get("width") is not None:
             width = float(preset["width"])
-    return style, (color or th.arrow), width
+            from_semantic_width = True
+    if color is None:
+        if style in ("dashed", "dotted") and th.arrow_aux and not from_semantic_color:
+            color = th.arrow_aux
+        else:
+            color = th.arrow
+    if width is None and style in ("dashed", "dotted") and th.lw_arrow_aux is not None \
+            and not from_semantic_width and not el.width_explicit:
+        width = th.lw_arrow_aux
+    return style, color, width
 
 
 def _render_arrow(
@@ -1715,9 +1842,9 @@ def _render_arrow(
         return b[0] - dx / L * d, b[1] - dy / L * d
 
     if style == "dashed":
-        dash = ' stroke-dasharray="1.6,1.1"'
+        dash = f' stroke-dasharray="{th.arrow_dasharray}"'
     elif style == "dotted":
-        dash = ' stroke-dasharray="0.35,0.95"'
+        dash = f' stroke-dasharray="{th.arrow_dotarray}"'
     else:
         dash = ""
 
@@ -1793,7 +1920,7 @@ def _render_arrow(
             span, cap = precomputed_label
         else:
             span, cap = _arrow_label_layout(
-                pts, el.label, el.label_offset, pt_size, head_len, th.muted)
+                pts, el.label, el.label_offset, pt_size, head_len, th.muted, th)
         if el.label_bg:
             out.append(
                 f'<rect x="{cap.x:.3f}" y="{cap.y:.3f}" width="{cap.w:.3f}" '
@@ -1859,13 +1986,14 @@ def _render_block_arrow(el: ArrowEl, p1: tuple[float, float], p2: tuple[float, f
            f'stroke-width="{th.lw_box}" stroke-linejoin="round"/>']
     if el.label:
         pt_size = th.size_arrow_label * fs
-        w = measure_markup_mm(el.label, pt_size)
+        label_bold = _weight_is_bold(th.label_weight)
+        w = measure_markup_mm(el.label, pt_size, label_bold)
         mx, my = (x1 + x2) / 2, (y1 + y2) / 2
         if abs(x2 - x1) >= abs(y2 - y1):
             tx, ty = mx - w / 2, my - sw - el.label_offset
         else:
-            tx, ty = mx + hw + el.label_offset, my + line_ascent_mm(el.label, pt_size) / 2 - 0.2
-        span = _TextSpan(x=tx, baseline=ty, text=el.label, pt=pt_size, bold=False, color=th.muted)
+            tx, ty = mx + hw + el.label_offset, my + line_ascent_mm(el.label, pt_size, label_bold) / 2 - 0.2
+        span = _span(th, "label", x=tx, baseline=ty, text=el.label, pt=pt_size, color=th.muted)
         res.text_spans.append(span)
         out.append(span.to_svg())
     return "".join(out)
@@ -1910,8 +2038,10 @@ def _render_group(el: GroupEl, spec: FigureSpec, th: Theme, fs: float, res: Rend
 
     if el.label:
         pt = (el.label_size or th.size_group_label) * fs
-        w = measure_markup_mm(el.label, pt, bold=True)
-        asc = line_ascent_mm(el.label, pt, bold=True)
+        tw = _theme_weight(th, "label")
+        bold = _weight_is_bold(tw)
+        w = measure_markup_mm(el.label, pt, bold=bold)
+        asc = line_ascent_mm(el.label, pt, bold=bold)
         if el.label_pos == "inside-top":
             lx, baseline = r.x + 2.5, r.y + 1.6 + asc
         elif el.label_pos == "inside-bottom":
@@ -1919,8 +2049,8 @@ def _render_group(el: GroupEl, spec: FigureSpec, th: Theme, fs: float, res: Rend
         else:  # top（框外上方）
             lx, baseline = r.x + 3.0, r.y - 1.2
         label_color = el.color or th.muted
-        span = _TextSpan(x=lx, baseline=baseline, text=el.label, pt=pt, bold=True,
-                         color=label_color)
+        span = _span(th, "label", x=lx, baseline=baseline, text=el.label, pt=pt,
+                     color=label_color)
         res.text_spans.append(span)
         out.append(span.to_svg())
     return "".join(out)
@@ -1933,12 +2063,14 @@ def _render_text(el: TextEl, th: Theme, fs: float, res: RenderResult,
     x, y = el.at
     out = []
     raw = el.text.upper() if el.smallcaps else el.text
-    ls = 0.35 if el.smallcaps else 0.0
+    ls = _smallcaps_ls(th, panel=False) if el.smallcaps else 0.0
+    role = "title" if el.bold else "body"
+    use_bold = el.bold or _weight_is_bold(_theme_weight(th, role))
     # smallcaps 时用略小字号
     if el.smallcaps:
         pt = pt * 0.92
-    lines = wrap_text(raw, pt, el.max_w, el.bold) if el.max_w else [
-        ln for ln in (type("L", (), {"text": t, "width_mm": measure_markup_mm(t, pt, el.bold)
+    lines = wrap_text(raw, pt, el.max_w, use_bold) if el.max_w else [
+        ln for ln in (type("L", (), {"text": t, "width_mm": measure_markup_mm(t, pt, use_bold)
                                      + (max(len(t) - 1, 0) * ls if ls else 0)})()
                       for t in raw.split("\n"))
     ]
@@ -1954,11 +2086,12 @@ def _render_text(el: TextEl, th: Theme, fs: float, res: RenderResult,
             lx = x - tw
         else:
             lx = x - tw / 2
-        asc = line_ascent_mm(ln.text or "x", pt, el.bold)
-        span = _TextSpan(x=lx, baseline=cy + asc, text=ln.text, pt=pt, bold=el.bold,
-                         color=color, italic=el.italic,
-                         rotate=el.rotate, rot_cx=x, rot_cy=y,
-                         smallcaps=el.smallcaps, letter_spacing=ls)
+        asc = line_ascent_mm(ln.text or "x", pt, use_bold)
+        span = _span(
+            th, role, x=lx, baseline=cy + asc, text=ln.text, pt=pt, color=color,
+            italic=el.italic, rotate=el.rotate, rot_cx=x, rot_cy=y,
+            smallcaps=el.smallcaps, letter_spacing=ls,
+        )
         res.text_spans.append(span)
         text_spans_here.append(span)
         text_out.append(span.to_svg())
@@ -1991,8 +2124,10 @@ def _render_panel_label(el: PanelLabelEl, th: Theme, fs: float, res: RenderResul
         text = text.strip().strip("()").rstrip(").").upper()
         pt = 9.0 * fs
     x, y = el.at
-    asc = line_ascent_mm(text, pt, True)
-    span = _TextSpan(x=x, baseline=y + asc, text=text, pt=pt, bold=True, color=th.ink)
+    tw = _theme_weight(th, "title")
+    bold = _weight_is_bold(tw)
+    asc = line_ascent_mm(text, pt, bold)
+    span = _span(th, "title", x=x, baseline=y + asc, text=text, pt=pt, color=th.ink)
     res.text_spans.append(span)
     return span.to_svg()
 
@@ -2012,10 +2147,11 @@ def _panel_title_band_rect(el: PanelEl, th: Theme, fs: float) -> Rect | None:
     if not el.title:
         return None
     r = el.rect
+    title_bold = _weight_is_bold(th.title_weight)
     if el.header_style == "smallcaps":
         label = el.title.upper()
         pt = (el.title_size or th.size_caption) * fs * 0.95
-        asc = line_ascent_mm(label, pt, bold=True)
+        asc = line_ascent_mm(label, pt, bold=title_bold)
         # 与绘制一致：顶 pad + 字高 + 线下方余量
         band_h = min(r.h, 2.2 + asc + 1.4 + 1.0)
         return Rect(r.x, r.y, r.w, band_h)
@@ -2042,27 +2178,33 @@ def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult,
     if band is not None:
         res.panel_title_bands.append((el.id, band))
 
+    title_bold = _weight_is_bold(th.title_weight)
+
     if ghost:
         # base 模式默认：只画标题文字，不画底色/边框；文字落底稿上则垫板
         if el.title:
             if el.header_style == "smallcaps":
                 label = el.title.upper()
                 pt = (el.title_size or th.size_caption) * fs * 0.95
-                ls = 0.45
-                w = measure_markup_mm(label, pt, bold=True) + max(len(label) - 1, 0) * ls
-                asc = line_ascent_mm(label, pt, bold=True)
+                ls = _smallcaps_ls(th, panel=True)
+                w = measure_markup_mm(label, pt, bold=title_bold) + max(len(label) - 1, 0) * ls
+                asc = line_ascent_mm(label, pt, bold=title_bold)
                 lx = r.x + 2.5
                 baseline = r.y + 2.2 + asc
-                span = _TextSpan(x=lx, baseline=baseline, text=label, pt=pt, bold=True,
-                                 color=header_fill, letter_spacing=ls, smallcaps=True)
+                span = _span(
+                    th, "title", x=lx, baseline=baseline, text=label, pt=pt,
+                    color=header_fill, letter_spacing=ls, smallcaps=True,
+                )
             else:
                 pt = (el.title_size or th.size_title) * fs
-                w = measure_markup_mm(el.title, pt, bold=True)
-                asc = line_ascent_mm(el.title, pt, bold=True)
+                w = measure_markup_mm(el.title, pt, bold=title_bold)
+                asc = line_ascent_mm(el.title, pt, bold=title_bold)
                 hh = min(el.header_h, r.h * 0.45)
                 baseline = r.y + hh / 2 + asc / 2 - 0.3
-                span = _TextSpan(x=r.cx - w / 2, baseline=baseline, text=el.title,
-                                 pt=pt, bold=True, color=th.ink)
+                span = _span(
+                    th, "title", x=r.cx - w / 2, baseline=baseline,
+                    text=el.title, pt=pt, color=th.ink,
+                )
             res.text_spans.append(span)
             plate = _union_span_plate([span], th)
             if plate is not None:
@@ -2085,14 +2227,16 @@ def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult,
         if el.title:
             label = el.title.upper()
             pt = (el.title_size or th.size_caption) * fs * 0.95
-            ls = 0.45
-            w = measure_markup_mm(label, pt, bold=True) + max(len(label) - 1, 0) * ls
-            asc = line_ascent_mm(label, pt, bold=True)
+            ls = _smallcaps_ls(th, panel=True)
+            w = measure_markup_mm(label, pt, bold=title_bold) + max(len(label) - 1, 0) * ls
+            asc = line_ascent_mm(label, pt, bold=title_bold)
             # 标签靠左上，下方细灰线
             lx = r.x + 2.5
             baseline = r.y + 2.2 + asc
-            span = _TextSpan(x=lx, baseline=baseline, text=label, pt=pt, bold=True,
-                             color=header_fill, letter_spacing=ls, smallcaps=True)
+            span = _span(
+                th, "title", x=lx, baseline=baseline, text=label, pt=pt,
+                color=header_fill, letter_spacing=ls, smallcaps=True,
+            )
             res.text_spans.append(span)
             out.append(span.to_svg())
             ly = r.y + 2.2 + asc + 1.4
@@ -2115,11 +2259,13 @@ def _render_panel(el: PanelEl, th: Theme, fs: float, res: RenderResult,
     if el.title:
         pt = (el.title_size or th.size_title) * fs
         color = "#FFFFFF" if _luminance(header_fill) < 0.62 else th.ink
-        w = measure_markup_mm(el.title, pt, bold=True)
-        asc = line_ascent_mm(el.title, pt, bold=True)
+        w = measure_markup_mm(el.title, pt, bold=title_bold)
+        asc = line_ascent_mm(el.title, pt, bold=title_bold)
         baseline = r.y + hh / 2 + asc / 2 - 0.3
-        span = _TextSpan(x=r.cx - w / 2, baseline=baseline, text=el.title,
-                         pt=pt, bold=True, color=color)
+        span = _span(
+            th, "title", x=r.cx - w / 2, baseline=baseline,
+            text=el.title, pt=pt, color=color,
+        )
         res.text_spans.append(span)
         out.append(span.to_svg())
     return "".join(out)
@@ -2158,16 +2304,21 @@ def _render_tokens(el: TokensEl, th: Theme, fs: float, res: RenderResult) -> str
 
     if el.label:
         pt = th.size_caption * fs
-        w = measure_markup_mm(el.label, pt, bold=True)
-        asc = line_ascent_mm(el.label, pt, bold=True)
+        bold = _weight_is_bold(th.label_weight)
+        w = measure_markup_mm(el.label, pt, bold=bold)
+        asc = line_ascent_mm(el.label, pt, bold=bold)
         if el.direction == "h":
             # 条带左侧
-            span = _TextSpan(x=r.x - w - 1.6, baseline=r.cy + asc / 2 - 0.3,
-                             text=el.label, pt=pt, bold=True, color=th.ink)
+            span = _span(
+                th, "label", x=r.x - w - 1.6, baseline=r.cy + asc / 2 - 0.3,
+                text=el.label, pt=pt, color=th.ink,
+            )
         else:
             # 条带上方
-            span = _TextSpan(x=r.cx - w / 2, baseline=r.y - 1.2,
-                             text=el.label, pt=pt, bold=True, color=th.ink)
+            span = _span(
+                th, "label", x=r.cx - w / 2, baseline=r.y - 1.2,
+                text=el.label, pt=pt, color=th.ink,
+            )
         res.text_spans.append(span)
         out.append(span.to_svg())
     return "".join(out)
@@ -2332,11 +2483,14 @@ def _render_badge(el: BadgeEl, th: Theme, fs: float, res: RenderResult) -> str:
     x, y = el.at
     rad = el.size / 2
     pt = el.size * 0.52 / PT_TO_MM
-    w = measure_mm(el.text, pt, bold=True)
-    asc = line_ascent_mm(el.text, pt, bold=True)
+    bold = _weight_is_bold(th.label_weight)
+    w = measure_mm(el.text, pt, bold=bold)
+    asc = line_ascent_mm(el.text, pt, bold=bold)
     # 编号是图形的一部分，不参与字号体检
-    span = _TextSpan(x=x - w / 2, baseline=y + asc * 0.38, text=el.text, pt=pt,
-                     bold=True, color=el.text_color, diagnostic=True)
+    span = _span(
+        th, "label", x=x - w / 2, baseline=y + asc * 0.38, text=el.text, pt=pt,
+        color=el.text_color, diagnostic=True,
+    )
     res.text_spans.append(span)
     return (f'<circle cx="{x:.3f}" cy="{y:.3f}" r="{rad:.3f}" fill="{fill}"/>'
             + span.to_svg())
@@ -2389,9 +2543,12 @@ def _render_sketch(el: SketchEl, th: Theme, fs: float, res: RenderResult) -> str
     out = [_draw_sketch(el.kind, el.rect, color, stroke, seed, th)]
     if el.label:
         pt = max(th.size_caption * fs * 0.95, 5.5)
-        w = measure_markup_mm(el.label, pt)
-        span = _TextSpan(x=el.rect.cx - w / 2, baseline=el.rect.bottom - 0.4,
-                         text=el.label, pt=pt, bold=False, color=th.muted)
+        bold = _weight_is_bold(th.label_weight)
+        w = measure_markup_mm(el.label, pt, bold)
+        span = _span(
+            th, "label", x=el.rect.cx - w / 2, baseline=el.rect.bottom - 0.4,
+            text=el.label, pt=pt, color=th.muted,
+        )
         res.text_spans.append(span)
         out.append(span.to_svg())
     return "".join(out)
@@ -2767,9 +2924,11 @@ def _render_legend(el: LegendEl, th: Theme, fs: float, res: RenderResult) -> str
                        f'fill="{it.color}"/>')
         # label
         tx = cx + sw + text_gap
-        asc = line_ascent_mm(it.label or "x", pt)
-        span = _TextSpan(x=tx, baseline=cy + row_h / 2 + asc / 2 - 0.25,
-                         text=it.label, pt=pt, bold=False, color=th.ink)
+        asc = line_ascent_mm(it.label or "x", pt, _weight_is_bold(th.label_weight))
+        span = _span(
+            th, "label", x=tx, baseline=cy + row_h / 2 + asc / 2 - 0.25,
+            text=it.label, pt=pt, color=th.ink,
+        )
         res.text_spans.append(span)
         out.append(span.to_svg())
 

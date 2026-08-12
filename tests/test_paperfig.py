@@ -2128,7 +2128,12 @@ def test_lineart_theme_smoke(tmp_path):
     assert th.lint_min_font == 5.5
     assert th.variants["primary"].stroke.upper() == "#3D6B99"
     assert th.variants["plain"].stroke.upper() == "#4A5568"
-    assert th.arrow.upper() == "#444444"
+    assert th.arrow.upper() == "#2A2E35"
+    assert th.font_family == "Lato"
+    assert th.title_weight == 600
+    assert th.body_weight == 400
+    assert th.label_weight == 500
+    assert abs(th.smallcaps_letter_spacing - 0.315) < 1e-6
     assert th.ink.upper() == "#1A202C"
     assert th.default_shadow is False
     spec = load_spec(_write(tmp_path, """
@@ -2144,6 +2149,69 @@ elements:
     assert res.svg
     assert "#3D6B99" in res.svg
     assert "Enc" in res.svg
+
+
+def test_theme_font_fields_lineart_and_legacy(tmp_path):
+    """lineart：SVG 出现 Lato 面名 + weight 600；旧主题仍 Liberation Sans。"""
+    spec_la = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 36}
+theme: lineart
+elements:
+  - {type: box, id: a, rect: [8, 8, 36, 20], title: "Agent Policy", body: "pi_theta"}
+  - {type: panel, id: p, rect: [52, 6, 40, 24], title: "Online", header_style: smallcaps}
+"""))
+    res_la = render(spec_la, dpi=72)
+    # title 600 → Lato Semibold；body 400 → LatoPFRegular（cairo Regular 文件映射）
+    assert 'font-family="Lato Semibold, Liberation Sans"' in res_la.svg
+    assert 'font-family="LatoPFRegular, Liberation Sans"' in res_la.svg
+    assert 'font-weight="600"' in res_la.svg
+    assert 'letter-spacing="0.3150"' in res_la.svg
+
+    for preset in ("neurips", "editorial", "isosystem", "topconf", "airy", "sci"):
+        th = load_theme(preset)
+        assert th.font_family == "Liberation Sans"
+        assert th.title_weight == 700
+        assert th.body_weight == 400
+    spec_old = load_spec(_write(tmp_path, """
+figure: {width: 80, height: 30}
+theme: neurips
+elements:
+  - {type: box, id: a, rect: [5, 5, 30, 18], title: Enc}
+"""))
+    res_old = render(spec_old, dpi=72)
+    assert 'font-family="Liberation Sans"' in res_old.svg
+    assert "Lato" not in res_old.svg
+    assert 'font-weight="700"' in res_old.svg
+
+
+def test_lineart_arrow_contrast_colors(tmp_path):
+    """lineart 主实线 / 辅虚线 / feedback 钢蓝新色值。"""
+    th = load_theme("lineart")
+    assert th.arrow.upper() == "#2A2E35"
+    assert abs(th.lw_arrow - 0.50) < 1e-6
+    assert th.arrow_aux.upper() == "#5A6472"
+    assert abs(th.lw_arrow_aux - 0.45) < 1e-6
+    assert th.arrow_styles["data"]["color"].upper() == "#2A2E35"
+    assert th.arrow_styles["feedback"]["color"].upper() == "#2F5A85"
+    assert th.arrow_styles["optional"]["color"].upper() == "#5A6472"
+    assert "2.6" in th.arrow_dasharray
+    spec = load_spec(_write(tmp_path, """
+figure: {width: 100, height: 40}
+theme: lineart
+elements:
+  - {type: box, id: a, rect: [5, 10, 25, 18], title: A}
+  - {type: box, id: b, rect: [40, 10, 25, 18], title: B}
+  - {type: box, id: c, rect: [75, 10, 20, 18], title: C}
+  - {type: arrow, from: a, to: b, label: "z"}
+  - {type: arrow, from: b, to: c, style: dashed, label: "aux"}
+  - {type: arrow, from: a.bottom, to: c.bottom, semantic: feedback, label: "dtheta"}
+"""))
+    res = render(spec, dpi=72)
+    assert "#2A2E35" in res.svg
+    assert "#5A6472" in res.svg
+    assert "#2F5A85" in res.svg
+    assert 'stroke-dasharray="2.6,1.3"' in res.svg
+    assert 'font-weight="500"' in res.svg  # arrow label = label_weight
 
 
 def test_glyph_missing_hit_and_miss(tmp_path):

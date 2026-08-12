@@ -90,11 +90,106 @@ def _resolve_font(cands):
 _FONT_FILES = {k: _resolve_font(v) for k, v in _FONT_CANDIDATES.items()}
 
 # SVG 中使用的 font-family（fontconfig 名称）
+# latin 可由 theme.font_family 覆盖（如 Lato）；覆盖时 SVG 写面名 + Liberation Sans 兜底。
+# Lato cmap 实测有 π/θ/τ/Δ/β/λ；∥(U+2225) 无 → 仍走下方 symbol=DejaVu。
+#
+# cairosvg 用 cairo toy API：仅 Regular/Bold 两档字重，且只取 font-family 列表首项。
+# 系统 Lato 的 FC 注册导致「Lato + normal」命中 Medium 而非 Regular；Semibold 须用
+# 独立族名「Lato Semibold」。故 Regular 经 fontconfig 别名 LatoPFRegular → 文件映射。
 FAMILY_SVG = {
     "latin": "Liberation Sans",
     "cjk": "Noto Sans CJK SC",
     "symbol": "DejaVu Sans",
 }
+
+# Lato 面名（与 ensure_lato_fontconfig / svg_lato_family 对齐）
+LATO_FACE_REGULAR = "LatoPFRegular"   # → Lato-Regular.ttf（见下方 fonts.conf）
+LATO_FACE_MEDIUM = "Lato"             # cairo normal → Medium（系统 FC 行为）
+LATO_FACE_SEMIBOLD = "Lato Semibold"
+LATO_FACE_BOLD = "Lato"               # 搭配 font-weight bold / ≥550
+
+_LATO_REGULAR_CANDIDATES = [
+    "/usr/share/fonts/truetype/lato/Lato-Regular.ttf",
+    _os.path.expanduser("~/.local/share/fonts/Lato-Regular.ttf"),
+]
+
+_FC_BOOTSTRAPPED = False
+
+
+def _lato_regular_path() -> str | None:
+    for p in _LATO_REGULAR_CANDIDATES:
+        if _os.path.exists(p):
+            return p
+    return None
+
+
+def ensure_lato_fontconfig() -> None:
+    """注入 LatoPFRegular → Regular.ttf 映射，供 cairosvg 选中真正的 Regular。
+
+    须在首次 cairo/fontconfig 初始化之前调用（paperfig 在 import cairosvg 前触发）。
+    """
+    global _FC_BOOTSTRAPPED
+    if _FC_BOOTSTRAPPED:
+        return
+    reg = _lato_regular_path()
+    if not reg:
+        _FC_BOOTSTRAPPED = True
+        return
+    conf_dir = _os.path.join(_os.path.expanduser("~"), ".cache", "paperfig")
+    _os.makedirs(conf_dir, exist_ok=True)
+    conf_path = _os.path.join(conf_dir, "fonts.conf")
+    snippet = f"""<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>
+  <!-- paperfig: cairo toy 无法按 CSS weight 选 Lato Regular；文件映射别名 -->
+  <match target="pattern">
+    <test name="family"><string>{LATO_FACE_REGULAR}</string></test>
+    <edit name="family" mode="assign" binding="strong"><string>Lato</string></edit>
+    <edit name="style" mode="assign" binding="strong"><string>Regular</string></edit>
+    <edit name="weight" mode="assign" binding="strong"><const>regular</const></edit>
+    <edit name="file" mode="assign" binding="strong"><string>{reg}</string></edit>
+  </match>
+</fontconfig>
+"""
+    prev = _os.environ.get("FONTCONFIG_FILE")
+    # 若用户已设 FONTCONFIG_FILE，包一层 include，避免覆盖其配置
+    if prev and _os.path.abspath(prev) != _os.path.abspath(conf_path):
+        snippet = f"""<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <include ignore_missing="yes">{prev}</include>
+  <match target="pattern">
+    <test name="family"><string>{LATO_FACE_REGULAR}</string></test>
+    <edit name="family" mode="assign" binding="strong"><string>Lato</string></edit>
+    <edit name="style" mode="assign" binding="strong"><string>Regular</string></edit>
+    <edit name="weight" mode="assign" binding="strong"><const>regular</const></edit>
+    <edit name="file" mode="assign" binding="strong"><string>{reg}</string></edit>
+  </match>
+</fontconfig>
+"""
+    with open(conf_path, "w", encoding="utf-8") as f:
+        f.write(snippet)
+    _os.environ["FONTCONFIG_FILE"] = conf_path
+    _FC_BOOTSTRAPPED = True
+
+
+def svg_lato_family(weight: int) -> str:
+    """按字重选择 cairosvg 能真正命中的 Lato 族名（仅首项生效）。"""
+    if weight >= 700:
+        return LATO_FACE_BOLD
+    if weight >= 600:
+        return LATO_FACE_SEMIBOLD
+    if weight >= 500:
+        return LATO_FACE_MEDIUM
+    # Regular：无别名时退回 Lato（会变成 Medium，总好过缺字）
+    if _lato_regular_path():
+        return LATO_FACE_REGULAR
+    return LATO_FACE_MEDIUM
+
+
+# 模块导入即注入，保证早于 cairosvg/cairo 初始化
+ensure_lato_fontconfig()
 
 # cairo 与 PIL 排版存在细微差异，换行宽度预留 2% 安全余量
 _SAFETY = 1.02

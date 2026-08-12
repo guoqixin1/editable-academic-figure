@@ -127,7 +127,7 @@ _LINEART_PALETTE = {
     "fill": "#F7F8FA",
     "section_bg": "#F7F8FA",
     "border": "#4A5568",
-    "arrow": "#444444",
+    "arrow": "#2A2E35",        # 主实线；辅虚线见 arrow_aux / arrow_styles
     "canvas": "#FFFFFF",
 }
 
@@ -384,6 +384,23 @@ class Theme:
     plate_pad: float = 1.2       # mm，文字包围盒外扩
     plate_radius: float = 1.2    # mm
 
+    # 字体体系（SVG font-family / font-weight；度量仍走 fonts.py 的 Liberation/DejaVu）
+    # Lato 实测覆盖 π/θ/τ/Δ/β/λ；∥(U+2225) 不在 Lato → latin 以外的 symbol run 仍用 DejaVu；
+    # cairo toy：按字重映射面名（Regular→LatoPFRegular，500→Lato/Medium，600→Lato Semibold），
+    # 并追加 Liberation Sans 兜底（cairosvg 只取首项；其它 SVG 查看器可读列表）。
+    font_family: str = "Liberation Sans"
+    title_weight: int = 700      # box/panel 标题、panel_label
+    body_weight: int = 400       # body / 普通 text
+    label_weight: int = 700      # 箭头标签、badge、legend、group 标签
+    # panel smallcaps 字距（mm）；text.smallcaps 按 0.35/0.45 比例缩放
+    smallcaps_letter_spacing: float = 0.45
+
+    # 箭头虚线样式（dashed/dotted 无显式 color 时用 arrow_aux）
+    arrow_aux: str | None = None
+    lw_arrow_aux: float | None = None   # None=沿用 lw_arrow
+    arrow_dasharray: str = "1.6,1.1"
+    arrow_dotarray: str = "0.35,0.95"
+
 
 _PRESETS = {
     "sci": _SCI_VARIANTS,
@@ -540,7 +557,7 @@ _PRESET_DEFAULTS: dict[str, dict] = {
         # 克制工程线稿：近直角、灰阶细边、单一钢蓝强调；无糖果色/无强制 smallcaps
         "ink": "#1A202C",
         "muted": "#4A5568",
-        "arrow": "#444444",
+        "arrow": "#2A2E35",
         "group_stroke": "#4A5568",
         "group_fill": "#F7F8FA",
         "size_panel_label": 8.5,
@@ -550,7 +567,7 @@ _PRESET_DEFAULTS: dict[str, dict] = {
         "size_arrow_label": 5.8,
         "size_group_label": 6.8,
         "lw_box": 0.35,
-        "lw_arrow": 0.40,
+        "lw_arrow": 0.50,
         "lw_group": 0.22,
         "corner_radius": 0.8,   # box/panel/legend 近直角
         "box_pad_x": 2.0,
@@ -558,12 +575,22 @@ _PRESET_DEFAULTS: dict[str, dict] = {
         "arrow_head_len": 1.7,
         "arrow_head_w": 1.3,
         "default_shadow": False,  # 需要时极浅（全局 blur 已 ≤0.3mm y / 低透明）
+        # Lato：标题 Semibold(600)/正文 Regular(400)/标签 Medium(500)
+        "font_family": "Lato",
+        "title_weight": 600,
+        "body_weight": 400,
+        "label_weight": 500,
+        "smallcaps_letter_spacing": 0.315,  # 0.45×0.7，收紧约 30%
+        "arrow_aux": "#5A6472",
+        "lw_arrow_aux": 0.45,
+        "arrow_dasharray": "2.6,1.3",
+        "arrow_dotarray": "0.55,1.1",
         "arrow_styles": {
-            "data": {"style": "solid", "color": "#444444", "width": 0.40},
-            "control": {"style": "solid", "color": "#888888", "width": 0.28},
-            "feedback": {"style": "dashed", "color": "#3D6B99", "width": 0.32},
-            "optional": {"style": "dotted", "color": "#888888", "width": 0.22},
-            "error": {"style": "dashed", "color": "#4A5568", "width": 0.32},
+            "data": {"style": "solid", "color": "#2A2E35", "width": 0.50},
+            "control": {"style": "solid", "color": "#5A6472", "width": 0.45},
+            "feedback": {"style": "dashed", "color": "#2F5A85", "width": 0.45},
+            "optional": {"style": "dotted", "color": "#5A6472", "width": 0.45},
+            "error": {"style": "dashed", "color": "#4A5568", "width": 0.45},
         },
         "panel_case": "ml",
         "default_legend_style": "inline",
@@ -625,6 +652,8 @@ def load_theme(cfg: dict | str | None) -> Theme:
       - preset: topconf | airy | neurips | editorial | isosystem | lineart（保留 sci/warm/mono）
       - palette: {primary, secondary, ...} 语义色板覆盖
       - arrow_styles / panel_case / default_legend_style / canvas / grid_bg
+      - font_family / title_weight / body_weight / label_weight / smallcaps_letter_spacing
+      - arrow_aux / lw_arrow_aux / arrow_dasharray / arrow_dotarray
     """
     if isinstance(cfg, str):
         cfg = {"preset": cfg}

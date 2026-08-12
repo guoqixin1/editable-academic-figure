@@ -1,6 +1,7 @@
-# Medical imaging CAD pipeline · hybrid v6 (lineart + journal-schematic)
-# v6：theme=lineart；强化模块顶带净空；底部条带填实短 token；箭头落点靠边框
+# Medical imaging CAD pipeline · hybrid v6.3 (lineart + journal-schematic)
+# v6.3：删画布内大标题；压底部条带；feedback 走模块-卡片走廊；箭头落浅缝；metrics 边框统一
 # 主管线幽灵盒仅标题（无 body），避免贴片下探压住底稿插画
+# 底图不动（base/base.png）
 figure: {width: 236, dpi: 600}
 theme:
   preset: lineart
@@ -88,73 +89,77 @@ elements:
   - {type: box, id: doctor, title: "PACS review",
      variant: secondary, valign: top, title_size: 5.8}
 
-  # 临床栏 / I/O：实体矢量面板 — 短 token 填实，禁止空芯片 sketch
+  # 临床栏 / I/O：实体矢量面板 — 短 token 填实；卡高贴文字（内容占比≥55%）；valign middle 减底空
   - {type: box, id: findings, title: "Findings",
      body: "mass · edema · WMH · atrophy · calcif",
-     variant: muted, valign: top, title_size: 5.8, body_size: 5.5, ghost: false}
+     variant: muted, valign: middle, title_size: 5.8, body_size: 5.5, ghost: false}
   - {type: box, id: out_note, title: "Structured Output",
      body: "C71.9 · G93.1 · I63.9 · confidence",
-     variant: muted, valign: top, title_size: 5.8, body_size: 5.5, ghost: false}
+     variant: muted, valign: middle, title_size: 5.8, body_size: 5.5, ghost: false}
   - {type: box, id: metrics, title: "QA Metrics",
      body: "Dice · AUC · ECE · calib.",
-     variant: primary, valign: top, title_size: 5.8, body_size: 5.5, ghost: false}
+     variant: muted, valign: middle, title_size: 5.8, body_size: 5.5, ghost: false}
 
   - {type: box, id: io_acq, title: "In/Out · Acq",
      body: "DICOM · FOV · H×W×C · meta",
-     variant: muted, valign: top, title_size: 5.5, body_size: 5.5, ghost: false}
+     variant: muted, valign: middle, title_size: 5.5, body_size: 5.5, ghost: false}
   - {type: box, id: io_seg, title: "In/Out · Seg",
      body: "N4 · resample · z-norm · crop",
-     variant: secondary, valign: top, title_size: 5.5, body_size: 5.5, ghost: false}
+     variant: secondary, valign: middle, title_size: 5.5, body_size: 5.5, ghost: false}
   - {type: box, id: io_feat, title: "In/Out · Feat",
      body: "morph · texture · CNN emb",
-     variant: secondary, valign: top, title_size: 5.5, body_size: 5.5, ghost: false}
+     variant: secondary, valign: middle, title_size: 5.5, body_size: 5.5, ghost: false}
   - {type: box, id: io_dx, title: "In/Out · Dx",
      body: "C71.9 · G93.1 · I63.9 · logits",
-     variant: primary, valign: top, title_size: 5.5, body_size: 5.5, ghost: false}
+     variant: muted, valign: middle, title_size: 5.5, body_size: 5.5, ghost: false}
 
-  # 底栏：灰阶+钢蓝图例；trainable 靠火焰角标传达
+  # 底栏：灰阶+钢蓝图例；trainable 靠火焰角标传达（无孤立 loop 浮带）
   - {type: legend, id: lg, columns: 3, size: 5.6, style: inline, items: [
       {swatch: box, color: "#3D6B99", label: "trainable stage"},
       {swatch: box, color: "#4A5568", label: "pipeline / I/O"},
-      {swatch: dashed, color: "#3D6B99", label: "clinician feedback"},
+      {swatch: dashed, color: "#2F5A85", label: "clinician feedback"},
     ]}
-  - {type: box, id: loop_note, title: "Closed loop · PACS → QA · Dx feedback",
-     variant: muted, ghost: false, valign: middle,
-     title_size: 5.6}
 
-  # badges：灰阶编号；trainable 步骤用钢蓝
-  - {type: badge, id: bd1, at: [6.4, 13.6], text: "1", size: 2.8, color: "#4A5568"}
-  - {type: badge, id: bd2, at: [38.4, 13.6], text: "2", size: 2.8, color: "#4A5568"}
-  - {type: badge, id: bd3, at: [72.9, 13.6], text: "3", size: 2.8, color: "#3D6B99"}
-  - {type: badge, id: bd4, at: [110.2, 13.6], text: "4", size: 2.8, color: "#4A5568"}
-  - {type: badge, id: bd5, at: [144.7, 13.6], text: "5", size: 2.8, color: "#3D6B99"}
-  - {type: badge, id: bd6, at: [179.3, 13.6], text: "6", size: 2.6, color: "#4A5568"}
-  - {type: marker, id: m_fire_seg, at: [94.5, 16.2], icon: fire, size: 2.6, color: "#3D6B99"}
-  - {type: marker, id: m_fire_clf, at: [164.2, 16.2], icon: fire, size: 2.6, color: "#3D6B99"}
+  # badges / fire：按 resolve 模块顶边重锚（模块行 y=4）
+  - {type: badge, id: bd1, at: [6.4, 4.6], text: "1", size: 2.8, color: "#4A5568"}
+  - {type: badge, id: bd2, at: [38.4, 4.6], text: "2", size: 2.8, color: "#4A5568"}
+  - {type: badge, id: bd3, at: [72.9, 4.6], text: "3", size: 2.8, color: "#3D6B99"}
+  - {type: badge, id: bd4, at: [110.2, 4.6], text: "4", size: 2.8, color: "#4A5568"}
+  - {type: badge, id: bd5, at: [144.7, 4.6], text: "5", size: 2.8, color: "#3D6B99"}
+  - {type: badge, id: bd6, at: [179.3, 4.6], text: "6", size: 2.6, color: "#4A5568"}
+  - {type: marker, id: m_fire_seg, at: [94.7, 6.5], icon: fire, size: 2.6, color: "#3D6B99"}
+  - {type: marker, id: m_fire_clf, at: [163.8, 6.5], icon: fire, size: 2.6, color: "#3D6B99"}
 
-  # 顶行箭头：y 上移到 27.80（躲开 Diagnosis 溢墨最重的 y≈30 带）；终点停在浅缝
-  - {type: arrow, from: [29.96, 27.80], to: [35.56, 27.80], label: "FOV",
-     weight: heavy, semantic: data, route: straight, label_offset: 3.0}
-  - {type: arrow, from: [64.54, 27.80], to: [70.14, 27.80],
+  # 主管线 6 箭：PIL 量底图白缝外缘 @ y=14；终点=实画左边-clear，起点=实画右边+clear
+  # FOV 标签改独立 text（箭缝窄，arrow label 会压 ghost mic）
+  - {type: text, id: lab_fov, at: [30.6, 15.7], text: "FOV", size: 5.5, anchor: middle,
+     color: "#2A2E35", plate: false}
+  - {type: arrow, from: [29.15, 14.0], to: [32.05, 14.0],
      weight: heavy, semantic: data, route: straight}
-  - {type: arrow, from: [101.75, 27.80], to: [107.35, 27.80],
+  - {type: arrow, from: [67.55, 14.0], to: [68.1, 14.0],
+     weight: thin, semantic: data, route: straight}
+  - {type: arrow, from: [105.5, 14.0], to: [108.35, 14.0],
      weight: heavy, semantic: data, route: straight}
-  - {type: arrow, from: [136.33, 27.80], to: [139.40, 27.80], label: "R^d",
-     weight: heavy, semantic: data, route: straight, label_offset: 3.0}
-  - {type: arrow, from: [170.91, 27.80], to: [175.50, 27.80], label: "logits",
-     weight: heavy, semantic: data, route: straight, label_offset: 3.0}
-  - {type: arrow, from: [201.55, 27.80], to: [205.50, 27.80],
+  - {type: arrow, from: [139.05, 14.0], to: [142.9, 14.0], label: "R^d",
+     weight: heavy, semantic: data, route: straight, label_offset: 2.8}
+  - {type: arrow, from: [172.25, 14.0], to: [173.55, 14.0], label: "logits",
+     weight: heavy, semantic: data, route: straight, label_offset: 2.8}
+  - {type: arrow, from: [206.05, 14.0], to: [208.15, 14.0],
      weight: normal, semantic: data, route: straight}
 
-  # PACS→QA：从模块下边框最左角出发（躲开支架插画）
-  - {type: arrow, from: [208.46, 37.0], to: metrics.top@0.90,
+  # PACS→QA：PACS 下边框左角 → metrics 顶
+  - {type: arrow, from: [208.46, 28.0], to: metrics.top@0.90,
      weight: thin, semantic: data, route: vh}
-  # Findings→ICD（随 findings 行 gap 收紧后重测）
-  - {type: arrow, from: [80.15, 53.50], to: [82.10, 53.50],
+  # Findings→Structured Output（卡中线 y=34.5+4.5）
+  - {type: arrow, from: [79.80, 39.0], to: [82.10, 39.0],
      weight: normal, semantic: data, route: straight}
-  # clinician feedback：起点 out_note 顶边；终点 Diagnosis 左下外侧浅底
-  - {type: arrow, from: out_note.top@0.40, to: [140.30, 37.50],
-     weight: thin, semantic: feedback, route: vh}
+  # clinician feedback：Diagnosis 实画下边=30.55；尖=31.35；水平段在 clf 下走廊
+  # label_offset 负值=向模块侧；贴片须落在 (30.95, 34.10) 走廊带
+  - {type: arrow, from: [168.0, 34.35], to: [148.8, 31.35],
+     via: [[168.0, 32.6], [148.8, 32.6]],
+     weight: thin, semantic: feedback,
+     label: "clinician feedback", label_offset: -0.35}
+
 
 layout:
   kind: col
@@ -162,17 +167,14 @@ layout:
   pad: [1.5, 2.0, 0.6, 2.0]
   align: stretch
   children:
+    # 无画布内大标题：正式标题放 caption；模块行上移
     - id: p_pipe
       type: panel
       kind: col
-      gap: 11.0
-      pad: [11.5, 2.4, 1.0, 2.4]
+      gap: 6.5
+      pad: [2.5, 2.4, 0.4, 2.4]
       align: stretch
-      title: "Medical Imaging CAD Pipeline"
-      header_style: smallcaps
       fill: "#F7F8FA"
-      title_size: 6.6
-      header_h: 5.0
       children:
         - kind: row
           gap: 7.0
@@ -186,33 +188,31 @@ layout:
             - {ref: report, flex: 0.9, h: 24}
             - {ref: doctor, flex: 0.9, h: 24}
 
-        # 左缩进 2.5mm 清模块圆角叠角；In/Out 压缩高度，图例上移
+        # 左缩进 2.5mm；卡高压缩；图例紧贴；无 loop 浮带
         - kind: col
-          gap: 2.8
+          gap: 1.4
           pad: [0, 0, 0, 2.5]
           align: stretch
           children:
-            # gap 6→3：消除 Structured Output / QA 之间像空壳卡的宽白缝（无第四张矢量卡）
             - kind: row
               gap: 3.0
               align: stretch
               children:
-                - {ref: findings, flex: 1, h: 10}
-                - {ref: out_note, flex: 1, h: 10}
-                - {ref: metrics, flex: 1, h: 10}
+                - {ref: findings, flex: 1, h: 9.0}
+                - {ref: out_note, flex: 1, h: 9.0}
+                - {ref: metrics, flex: 1, h: 9.0}
 
             - kind: row
               gap: 2.5
               align: stretch
               children:
-                - {ref: io_acq, flex: 1, h: 9}
-                - {ref: io_seg, flex: 1, h: 9}
-                - {ref: io_feat, flex: 1, h: 9}
-                - {ref: io_dx, flex: 1, h: 9}
+                - {ref: io_acq, flex: 1, h: 8.5}
+                - {ref: io_seg, flex: 1, h: 8.5}
+                - {ref: io_feat, flex: 1, h: 8.5}
+                - {ref: io_dx, flex: 1, h: 8.5}
 
             - kind: row
-              gap: 3.0
+              gap: 0
               align: stretch
               children:
-                - {ref: lg, flex: 1.35, h: 6.0}
-                - {ref: loop_note, flex: 1.0, h: 6.0}
+                - {ref: lg, flex: 1, h: 4.8}
